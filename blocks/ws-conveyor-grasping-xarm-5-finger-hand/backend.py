@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 8 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 9 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects. Shown in
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -1882,8 +1882,9 @@ class Pose3D:
                 self.fq.append(int(mjm.jnt_qposadr[mjm.body_jntadr[b]]))
         self.fq_t = env.t.as_tensor(self.fq, device=env.dev)
         self.nobj = len(env.info)
-        self.shown = None
         self.err = 0.0
+        self.scene = cell_objects(mjm)      # (sent again every few seconds: a view opened later still gets the cell)
+        self.n_sent = 0
 
     def snap(self, i=0):
         """what the 3D view needs of cell i, now (kept to be turned into joint items later, off the learning's way)"""
@@ -1898,17 +1899,14 @@ class Pose3D:
         self.err = e
         arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq]
         r, p, y = rpy_of(quat_R(oq))
-        objs = [None] * (6 * self.nobj)
-        if self.shown is None:
-            for k in range(self.nobj):
-                objs[6 * k:6 * k + 6] = [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0]
-        elif self.shown != o:
-            objs[6 * self.shown:6 * self.shown + 6] = [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0]
+        objs = [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0] * self.nobj      # (every item complete: the objects not in play under the floor)
         objs[6 * o:6 * o + 6] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000, 1), round(y, 4), round(p, 4), round(r, 4)]
-        self.shown = o
         return ({"robot": ARM, "units": "rad", "q": arm}, {"robot": OBJS, "units": "rad", "q": objs})
 
     def send(self, ctx, sn):
+        if self.n_sent % 40 == 0:
+            ctx.telemetry("scene", self.scene)
+        self.n_sent += 1
         a, o = self.items(sn)
         ctx.telemetry("joints", a)
         ctx.telemetry("joints", o)
