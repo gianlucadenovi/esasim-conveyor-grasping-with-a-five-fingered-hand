@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 13 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 14 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -54,10 +54,13 @@ import numpy as np
 
 BELT_Y, BELT_W, BELT_TOP = 0.42, 0.30, 0.0       # belt centre line (y), width, top surface height
 RAIL_HW, RAIL_HH = 0.037, 0.0185                # the side rails' half width and half height (the conveyor model's: 7.4 cm wide, 3.7 cm above the belt)
-BELT_LEN = 6.4                                   # long enough to run a whole episode without being reset
-BELT_X0 = 0.2                                    # belt centre (x) at the start of an episode
-SPAWN_X = (0.55, 0.72)                           # where objects are put on the belt
-EXIT_X = -0.70                                   # an object past here has gone by
+BELT_X0 = 0.2                                    # belt centre (x): the conveyor runs from BELT_START_X to BELT_END_X
+BELT_HALF_LEN = 1.25
+BELT_START_X, BELT_END_X = BELT_X0 + BELT_HALF_LEN, BELT_X0 - BELT_HALF_LEN
+SPAWN_X = (0.35, 1.0)                            # (training) where objects are put on the belt, upstream of the robot
+TEST_SPAWN_X = 1.30                              # (the test) dropped near the start of the belt: it travels the whole way
+EXIT_X = BELT_END_X - 0.10                       # past here an object has gone off the end of the belt (and falls)
+BELT_V = (0.05, 0.10)                            # the belt's speed (m/s) in training
 BIN_C = np.array([-0.40, 0.10, 0.0])             # bin floor centre
 BIN_HALF = (0.12, 0.09)                          # inner half sizes
 BIN_WALL, BIN_H = 0.010, 0.10
@@ -76,24 +79,28 @@ ARM_TORQUE = (50.0, 50.0, 32.0, 32.0, 32.0, 20.0)                # N m: what eac
 ARM_R = (0.062, 0.056, 0.052, 0.046, 0.044, 0.038)               # the links' collision capsules (m)
 R_FH = np.array([[0.0, 0.0, 1.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]])   # the hand in the flange's frame
 P_FH = np.array([-0.002, 0.0, 0.118])
-GRASP_PT = (0.048, 0.010, -0.058)                # between the thumb and the fingertips, in the hand's frame
-THUMB_OPEN, THUMB_CLOSED = -2.0, 0.45            # the thumb's base joint: swung back, and opposing the fingers
+GRASP_PT = (0.072, 0.022, -0.060)                # between the thumb and the fingertips, in the hand's frame
+THUMB_OPEN, THUMB_CLOSED = 0.0, 0.71            # the thumb's opposition (rad): beside the palm, and turned under it facing the fingers
 
-# the hand (metres, in its own frame: palm centre at the origin, fingers along +x, palm facing -z, thumb on +y)
-PALM_HALF = (0.046, 0.042, 0.012)
-FINGERS = [  # name, base y, phalanx lengths, radius
-    ("index", 0.028, (0.044, 0.026, 0.021), 0.0085),
-    ("middle", 0.0095, (0.047, 0.029, 0.022), 0.0088),
-    ("ring", -0.009, (0.044, 0.027, 0.021), 0.0085),
-    ("little", -0.027, (0.036, 0.021, 0.018), 0.0078),
+# the hand (metres, in its own frame: palm centre at the origin, fingers along +x, palm facing -z, thumb on +y), sized and
+# jointed as an adult's: fingers flex at the knuckle (MCP) 0-90 deg (10 deg back), the middle joint (PIP) 0-100 deg and
+# the end joint (DIP) 0-70 deg, together as tendons move them; the thumb turns under the palm at its base (CMC, 0-40 deg
+# of opposition), and flexes at its knuckle (MCP, 0-55 deg) and its end joint (IP, 0-80 deg)
+PALM_HALF = (0.046, 0.042, 0.013)
+FINGERS = [  # name, base y, phalanx lengths, radius, splay (rad: the fingers fan out a little)
+    ("index", 0.028, (0.043, 0.025, 0.020), 0.0085, 0.06),
+    ("middle", 0.0095, (0.047, 0.028, 0.021), 0.0088, 0.0),
+    ("ring", -0.009, (0.044, 0.027, 0.020), 0.0085, -0.05),
+    ("little", -0.027, (0.035, 0.020, 0.018), 0.0078, -0.12),
 ]
-THUMB = {"base": (-0.030, 0.012, -0.014), "len": (0.040, 0.032, 0.026), "r": 0.0098}
-THUMB_U = np.array([0.30, -0.08, -0.95]); THUMB_U = THUMB_U / np.linalg.norm(THUMB_U)      # the thumb's direction (open-ish)
-THUMB_A = np.cross(THUMB_U, [1.0, 0.0, 0.25]); THUMB_A = THUMB_A / np.linalg.norm(THUMB_A)   # its flexion axis: curls it forward
+THUMB = {"base": (-0.024, 0.036, -0.010), "len": (0.048, 0.033, 0.028), "r": 0.0105}
+THUMB_U = np.array([0.62, 0.72, -0.30]); THUMB_U = THUMB_U / np.linalg.norm(THUMB_U)      # the thumb's direction, open (beside the palm)
+THUMB_OPP = np.array([-0.403, -0.034, -0.915]); THUMB_OPP = THUMB_OPP / np.linalg.norm(THUMB_OPP)   # the axis it turns about to oppose
+THUMB_FLEX = np.array([0.0, 0.0, 1.0])            # (set below) its knuckle's and end joint's axis: curls the tip across the palm
 # what the policy moves: where the hand should be (the arm's six servos take it there) and 6 finger motors: each finger's curl (its three
-# joints together, as tendons do) and the thumb's opposition (swinging it under the palm); the thumb's curl is the 5th
-CURL_SPLIT = (0.45, 0.33, 0.22)                  # how a finger's curl shares out over its three joints
-CURL_MAX = (1.45, 1.55, 1.2)                     # their limits (rad)
+# joints together, as tendons do) and the thumb's opposition; the thumb's curl is the 5th
+CURL_MAX = (1.57, 1.75, 1.22)                    # MCP, PIP, DIP at a full fist (rad)
+THUMB_MAX = (0.95, 1.40)                         # the thumb's MCP and IP at full flexion (rad)
 TOUCH_NAMES = ["thumb_tip", "index_tip", "middle_tip", "ring_tip", "little_tip", "palm_1", "palm_2", "palm_3", "palm_4"]
 N_SLOT = {"box": 3, "cylinder": 3, "sphere": 2, "capsule": 3, "ellipsoid": 1}
 SLOT_ORDER = [t for t in ("box", "cylinder", "sphere", "capsule", "ellipsoid") for _ in range(N_SLOT[t])]
@@ -226,6 +233,16 @@ def arm_close_xml():
     return "</body>" + "</body>" * len(XARM6)
 
 
+def thumb_flex_axis():
+    """the thumb's flexion axis (MCP and IP): across the thumb, so that flexing moves its tip towards the palm's middle
+    and its palm side (-z, -y) as a thumb does"""
+    want = np.array([0.0, -0.5, -0.75])                 # where flexion takes the tip, with the thumb beside the palm
+    d = want - (want @ THUMB_U) * THUMB_U
+    d = d / np.linalg.norm(d)
+    a = np.cross(THUMB_U, d)                            # (a rotation about a moves THUMB_U towards d)
+    return a / np.linalg.norm(a)
+
+
 def hand_xml():
     """the xArm, and on its flange the five-fingered hand: its fingers are real joints with real contacts"""
     px, py, pz = PALM_HALF
@@ -237,10 +254,10 @@ def hand_xml():
     for k, (cx, cy) in enumerate([(0.022, 0.020), (0.022, -0.020), (-0.022, 0.020), (-0.022, -0.020)]):
         s.append('<site name="palm_%d" type="box" size="0.023 0.021 0.007" pos="%s" rgba="0 0 0 0"/>' % (k + 1, _f((cx, cy, -pz))))
     # the four fingers: proximal, middle and distal phalanges, flexing about the hand's y axis (towards -z)
-    for name, y0, lens, r in FINGERS:
+    for name, y0, lens, r, splay in FINGERS:
         L1, L2, L3 = lens
-        s.append('<body name="%s_1" pos="%s">' % (name, _f((px, y0, -0.002))))
-        s.append('<joint name="%s_j1" type="hinge" axis="0 1 0" range="-0.15 %g" damping="0.02" armature="0.002"/>' % (name, CURL_MAX[0]))
+        s.append('<body name="%s_1" pos="%s" euler="0 0 %g">' % (name, _f((px, y0, -0.002)), splay))
+        s.append('<joint name="%s_j1" type="hinge" axis="0 1 0" range="-0.17 %g" damping="0.02" armature="0.002"/>' % (name, CURL_MAX[0]))
         s.append('<geom type="capsule" fromto="0 0 0 %g 0 0" size="%g" mass="0.012" rgba="0.70 0.72 0.76 1" %s/>' % (L1, r, hg))
         s.append('<body name="%s_2" pos="%g 0 0"><joint name="%s_j2" type="hinge" axis="0 1 0" range="0 %g" damping="0.015" armature="0.002"/>' % (name, L1, name, CURL_MAX[1]))
         s.append('<geom type="capsule" fromto="0 0 0 %g 0 0" size="%g" mass="0.008" rgba="0.74 0.76 0.80 1" %s/>' % (L2, r * 0.95, hg))
@@ -248,17 +265,16 @@ def hand_xml():
         s.append('<geom type="capsule" fromto="0 0 0 %g 0 0" size="%g" mass="0.006" rgba="0.30 0.32 0.36 1" %s/>' % (L3, r * 0.9, hg))
         s.append('<site name="%s_tip" pos="%g 0 -0.002" size="%g" rgba="0 0 0 0"/>' % (name, L3 * 0.75, r * 1.45))
         s.append('</body></body></body>')
-    # the thumb, opposing the fingers: its base under the wrist end of the palm, pointing down and forward; its three
-    # joints flex in one plane, curling its tip forward towards the fingertips (the first one, at the base, also swings it
-    # back and out of the way to open the hand)
+    # the thumb: its metacarpal from the base of the palm on the thumb side (CMC), turning under the palm to oppose the
+    # fingers; then its proximal and distal phalanges, flexing about one axis (MCP and IP) to curl the tip across the palm
     tb, (T1, T2, T3), tr = THUMB["base"], THUMB["len"], THUMB["r"]
-    u, a = THUMB_U, THUMB_A
+    u, o, a = THUMB_U, THUMB_OPP, thumb_flex_axis()
     s.append('<body name="thumb_0" pos="%s">' % _f(tb))
-    s.append('<joint name="thumb_rot" type="hinge" axis="%s" range="-2.1 0.9" damping="0.02" armature="0.002"/>' % _f(a))
-    s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.014" rgba="0.70 0.72 0.76 1" %s/>' % (_f(u * T1), tr, hg))
-    s.append('<body name="thumb_1" pos="%s"><joint name="thumb_j1" type="hinge" axis="%s" range="-0.1 1.2" damping="0.015" armature="0.002"/>' % (_f(u * T1), _f(a)))
+    s.append('<joint name="thumb_rot" type="hinge" axis="%s" range="-0.1 0.8" damping="0.02" armature="0.002"/>' % _f(o))
+    s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.016" rgba="0.70 0.72 0.76 1" %s/>' % (_f(u * T1), tr * 1.15, hg))
+    s.append('<body name="thumb_1" pos="%s"><joint name="thumb_j1" type="hinge" axis="%s" range="-0.1 %g" damping="0.015" armature="0.002"/>' % (_f(u * T1), _f(a), THUMB_MAX[0]))
     s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.009" rgba="0.74 0.76 0.80 1" %s/>' % (_f(u * T2), tr * 0.95, hg))
-    s.append('<body name="thumb_2" pos="%s"><joint name="thumb_j2" type="hinge" axis="%s" range="0 1.3" damping="0.01" armature="0.002"/>' % (_f(u * T2), _f(a)))
+    s.append('<body name="thumb_2" pos="%s"><joint name="thumb_j2" type="hinge" axis="%s" range="-0.15 %g" damping="0.01" armature="0.002"/>' % (_f(u * T2), _f(a), THUMB_MAX[1]))
     s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.007" rgba="0.30 0.32 0.36 1" %s/>' % (_f(u * T3), tr * 0.9, hg))
     s.append('<site name="thumb_tip" pos="%s" size="%g" rgba="0 0 0 0"/>' % (_f(u * T3 * 0.75), tr * 1.45))
     s.append('</body></body></body>')
@@ -277,7 +293,7 @@ def actuators_xml():
         a.append('<position name="a_%s" joint="%s" kp="%g" kv="%g" forcerange="-%g %g" ctrlrange="%g %g"/>'
                  % (j, j, 1500 if i < 3 else 500, 60 if i < 3 else 15, ARM_TORQUE[i], ARM_TORQUE[i], math.radians(lo), math.radians(hi)))
     for j in FINGER_JOINTS:
-        a.append('<position name="a_%s" joint="%s" kp="1.6" kv="0.03" forcerange="-0.9 0.9" ctrlrange="%s"/>' % (j, j, "-2.1 0.9" if j == "thumb_rot" else "-0.2 1.8"))
+        a.append('<position name="a_%s" joint="%s" kp="1.6" kv="0.03" forcerange="-0.9 0.9" ctrlrange="%s"/>' % (j, j, "-0.1 0.8" if j == "thumb_rot" else "-0.2 1.8"))
     a.append('<velocity name="a_belt" joint="belt" kv="400" ctrlrange="-1 1"/>')
     return "\n".join(a)
 
@@ -307,12 +323,13 @@ def scene_xml(obj_parts=None, rgba=None):
          '<worldbody>',
          '<light pos="0.2 0.3 1.6" dir="0 0 -1" diffuse="0.9 0.9 0.9" castshadow="false"/>',
          '<light pos="-0.6 -0.4 1.2" dir="0.4 0.4 -1" diffuse="0.35 0.35 0.35" castshadow="false"/>',
-         '<geom name="floor" type="plane" size="3 3 0.1" pos="0 0 -0.75" rgba="0.55 0.56 0.58 1" contype="0" conaffinity="0"/>',
+         '<geom name="floor" type="plane" size="3 3 0.1" pos="0 0 -0.75" rgba="0.55 0.56 0.58 1" contype="1" conaffinity="1"/>',
          '<geom name="pedestal" type="box" size="0.09 0.09 0.375" pos="0 0 -0.375" rgba="0.3 0.3 0.33 1" contype="1" conaffinity="2"/>',
          '<geom name="belt_frame" type="box" size="%s" pos="%s" rgba="0.35 0.37 0.40 1" contype="1" conaffinity="2"/>' % (_f((1.25, BELT_W / 2 + 0.074, 0.36)), _f((0.2, BELT_Y, -0.39))),
-         # the belt: a long slab on a slide, driven at the belt speed; objects ride on it by friction
+         # the belt: a slab as long as the conveyor, moving at the belt's speed (the task puts it back in its place every
+         # step, keeping its speed): what lies on it is carried by friction, and what goes past its end falls to the floor
          '<body name="belt" pos="%s"><joint name="belt" type="slide" axis="1 0 0" damping="5"/>' % _f((BELT_X0, BELT_Y, 0)),
-         '<geom name="belt" type="box" size="%s" pos="0 0 -0.012" mass="40" material="belt" contype="1" conaffinity="2" condim="3" friction="1.0 0.01 0.001"/>' % _f((BELT_LEN / 2, BELT_W / 2, 0.012)),
+         '<geom name="belt" type="box" size="%s" pos="0 0 -0.012" mass="40" material="belt" contype="1" conaffinity="2" condim="3" friction="1.0 0.01 0.001"/>' % _f((BELT_HALF_LEN, BELT_W / 2, 0.012)),
          '</body>',
          # side rails, so round things stay on the belt
          '<geom name="rail_l" type="box" size="%s" pos="%s" rgba="0.55 0.58 0.62 1" contype="1" conaffinity="2" friction="0.3"/>' % (_f((1.25, RAIL_HW, RAIL_HH)), _f((0.2, BELT_Y + BELT_W / 2 + RAIL_HW, RAIL_HH))),
@@ -570,6 +587,11 @@ class WarpSim:
         if self.cuda:
             wp.synchronize_device(self.dev)
 
+    def hold_belt(self, qa, da, v):
+        """the belt slab back at its place, moving at speed v (per world)"""
+        self.qpos[:, qa] = 0
+        self.qvel[:, da] = v.to(self.qvel.dtype)
+
     def set_rows(self, idx, qpos, qvel, ctrl):
         self.qpos[idx] = qpos.to(self.qpos.dtype)
         self.qvel[idx] = qvel.to(self.qvel.dtype)
@@ -651,10 +673,17 @@ class CpuSim:
                 self.obj[i] = int(o)
                 self.datas[i] = self.mj.MjData(self.models[int(o)])
 
+    def hold_belt(self, qa, da, v):
+        self._hold = (int(qa), int(da), v.double().cpu().numpy().copy())
+
     def _work(self, part):
         mj = self.mj
+        hold = getattr(self, "_hold", None)
         for i in part:
             m, d = self.models[self.obj[i]], self.datas[i]
+            if hold is not None:
+                d.qpos[hold[0]] = 0.0
+                d.qvel[hold[1]] = hold[2][i]
             d.ctrl[:] = self.ctrl_np[i]
             d.xfrc_applied[:] = self.xfrc_np[i]
             for _ in range(N_SUB):
@@ -778,7 +807,7 @@ OBS_DIM = 79
 PRIV_DIM = 112
 CAM_EVERY = 4                      # a camera frame every 4 control steps (6 per second)
 STAGES = ("reach", "grasp", "place")
-EP_SECONDS = {"reach": 9.0, "grasp": 12.0, "place": 16.0}
+EP_SECONDS = {"reach": 12.0, "grasp": 15.0, "place": 20.0}
 LIFT_OK, HOLD_STEPS = 0.08, 25     # a grasp: lifted 8 cm and held for 1 s (pushed about in the last half)
 WORK_LO = np.array([-0.62, -0.08, 0.005])   # where the grasp point may go (the arm's reach around the cell)
 WORK_HI = np.array([0.62, 0.62, 0.45])
@@ -1079,6 +1108,7 @@ class GraspEnv:
         self.test_ids = torch.tensor([i for i, x in enumerate(info) if x["test"]], device=dev)
         self.pool = self.test_ids if test_objects else self.train_ids
         self.rgba_lib = torch.as_tensor(arrays["geom_rgba"], device=dev)    # (nobj, nslot, 4)
+        self.belt_travel = torch.zeros(n, device=dev)     # how far the belt has run (for its slats in the 3D view)
         self.rgba = torch.as_tensor(np.array(tmpl.geom_rgba), dtype=torch.float32, device=dev)[None].repeat(n, 1, 1)
         J = lambda nm: mjm.joint(nm).qposadr[0]      # noqa: E731
         Dv = lambda nm: mjm.joint(nm).dofadr[0]      # noqa: E731
@@ -1180,7 +1210,7 @@ class GraspEnv:
         qpos[:, self.qo:self.qo + 3] = torch.stack([x0, y0, z0], -1)
         qpos[:, self.qo + 3:self.qo + 7] = q
         # the belt's speed
-        v = (0.03 + 0.05 * torch.rand(k, generator=g, device=dev)) if speed is None else torch.full((k,), float(speed), device=dev)
+        v = (S.BELT_V[0] + (S.BELT_V[1] - S.BELT_V[0]) * torch.rand(k, generator=g, device=dev)) if speed is None else torch.full((k,), float(speed), device=dev)
         self.belt_v[idx] = v
         qvel = torch.zeros(k, self.mjm.nv, device=dev)
         qvel[:, self.db] = -v
@@ -1267,8 +1297,8 @@ class GraspEnv:
             ctrl[:, 0:6] = self.q_cmd[idx]
         cm = torch.as_tensor(S.CURL_MAX, dtype=torch.float32, device=self.dev)
         ctrl[:, 6] = S.THUMB_OPEN + opp * (S.THUMB_CLOSED - S.THUMB_OPEN)
-        ctrl[:, 7] = curl[:, 0] * 1.0
-        ctrl[:, 8] = curl[:, 0] * 1.1
+        ctrl[:, 7] = curl[:, 0] * S.THUMB_MAX[0]
+        ctrl[:, 8] = curl[:, 0] * S.THUMB_MAX[1]
         for f in range(4):
             ctrl[:, 9 + 3 * f:12 + 3 * f] = curl[:, 1 + f:2 + f] * cm
         return ctrl
@@ -1349,6 +1379,8 @@ class GraspEnv:
         sim.ctrl[:] = ctrl.to(sim.ctrl.dtype)
         # the grasp test: once it holds the object up, it is pushed about (1.2 N, a new way every 0.2 s)
         sim.xfrc[:, self.ob] = 0
+        sim.hold_belt(self.qb, self.db, -self.belt_v)          # (the belt slab back in its place, at the belt's speed)
+        self.belt_travel = self.belt_travel + self.belt_v * CTRL_DT
         if self.stage in ("grasp", "place"):
             push = (self.hold_cnt >= HOLD_STEPS // 2) & (self.hold_cnt < HOLD_STEPS)
             if bool(push.any()):
@@ -1571,7 +1603,7 @@ class Demo:
         tgt[:, 2] = torch.where(phase == 0, T[:, 2] + 0.07, T[:, 2])
         lift = torch.stack([env.tgt_p[:, 0], env.tgt_p[:, 1], torch.full((n,), 0.20, device=dev)], -1)
         drop = torch.as_tensor(DROP, dtype=torch.float32, device=dev).expand(n, 3)
-        tgt = torch.where((phase == 2)[:, None], env.tgt_p, tgt)
+        # (closing: the hand keeps going with the object as the belt carries it)
         tgt = torch.where((phase == 3)[:, None], lift, tgt)
         # carrying: round the arm's base at a steady distance from it (an arc, as a robot programmer would), not in
         # a straight line that cuts close past the base where the arm would have to fold up
@@ -2326,7 +2358,7 @@ class Pose3D:
         return (sim.qpos[i, env.qh].float().cpu().numpy().astype(float), None,
                 sim.qpos[i, self.fq_t].float().cpu().numpy().astype(float), int(env.obj[i]),
                 sim.xpos[i, env.ob].float().cpu().numpy().astype(float), sim.xquat[i, env.ob].float().cpu().numpy().astype(float),
-                float(sim.qpos[i, env.qb]))
+                -float(env.belt_travel[i]))
 
     def items(self, sn):
         q, _, fq, o, op, oq, belt = sn            # (the arm's angles are the simulated arm's own)
@@ -3174,7 +3206,7 @@ def test_run(ctx):
     pol = pols[0]
     st = pol["st"]
     env.stage = pol["stage"]
-    env.max_steps = int(16.0 / CTRL_DT)
+    env.max_steps = int(60.0 / CTRL_DT)       # (the object travels the whole belt: the episode ends when it is picked or falls off)
     ac = make_ac(torch, st["obs_dim"], st["priv_dim"], st["act_dim"]).to(dev)
     ac.load_state_dict(st["ac"])
     ac.eval()
@@ -3198,7 +3230,7 @@ def test_run(ctx):
     idle_since = time.time()
     keys = {o["key"]: k for k, o in enumerate(env.info)}
     labels = {o["label"].lower(): k for k, o in enumerate(env.info)}
-    pick = {"object": None, "pose": 0, "yaw": 30.0, "speed": 0.05}
+    pick = {"object": None, "pose": 0, "yaw": 30.0, "speed": 0.10}
 
     def obj_index(v):
         v = str(v or "").strip()
@@ -3255,7 +3287,7 @@ def test_run(ctx):
         trial += 1
         idx = torch.zeros(1, dtype=torch.long, device=dev)
         yaw = None if req["yaw"] is None else math.radians(req["yaw"])
-        env.reset(idx, obj=torch.tensor([req["obj"]], device=dev), mode=req["pose"], yaw=yaw, speed=req["speed"], drop=drop)
+        env.reset(idx, obj=torch.tensor([req["obj"]], device=dev), mode=req["pose"], yaw=yaw, speed=req["speed"], drop=drop, x0=S.TEST_SPAWN_X)
         sim.refresh()
         o = env.info[req["obj"]]
         pose_txt = ["upright", "on its side", "tumbled"][req["pose"]]
@@ -3303,7 +3335,13 @@ def test_run(ctx):
                 if bool(info["success"][0]):
                     result = "in the bin" if env.stage == "place" else "grasped and held"
                 elif bool(info["fail"][0]):
-                    result = "dropped" if grasped else "missed it"
+                    result = "dropped" if grasped else "missed it: it went off the end of the belt"
+                    for k2 in range(45):       # (it falls to the floor, in the view)
+                        env.step(torch.zeros(1, ACT_DIM, device=dev))
+                        if k2 % 2 == 1:
+                            pose.send(ctx, pose.snap(0))
+                        if pace > 0:
+                            time.sleep(CTRL_DT / pace)
                 break
             if read_controls() == "finish":
                 stop = "asked"
