@@ -5,7 +5,7 @@
     },
     "name": "0 · Make the 3D models (one-off)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 8,
+    "published_version": 9,
     "updated": "2026-11-19 15:44:41",
     "graph": {
         "nodes": [
