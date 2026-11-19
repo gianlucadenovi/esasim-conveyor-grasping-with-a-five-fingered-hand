@@ -6,7 +6,7 @@
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
     "published_version": 1,
-    "updated": "2026-11-19 13:55:09",
+    "updated": "2026-11-19 13:57:26",
     "graph": {
         "nodes": [
             {
@@ -56,9 +56,9 @@
                 "x": 280,
                 "y": -60,
                 "params": {
-                    "interval": 0.25,
+                    "interval": 0.5,
                     "channels": "robot,events",
-                    "keep": 600
+                    "keep": 120
                 },
                 "title": "Live cell"
             },
