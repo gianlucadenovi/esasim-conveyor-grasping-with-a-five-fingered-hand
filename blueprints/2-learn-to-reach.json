@@ -1,0 +1,15 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 85
+    },
+    "name": "2 · Learn to reach",
+    "description": "The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.",
+    "published_version": 0,
+    "updated": "2026-11-19 06:37:46",
+    "graph": {
+        "nodes": [],
+        "edges": [],
+        "notes": []
+    }
+}

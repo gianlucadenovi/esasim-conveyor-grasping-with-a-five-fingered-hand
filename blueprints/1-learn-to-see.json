@@ -1,0 +1,156 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 84
+    },
+    "name": "1 · Learn to see",
+    "description": "The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.",
+    "published_version": 1,
+    "updated": "2026-11-19 06:37:54",
+    "graph": {
+        "nodes": [
+            {
+                "id": "learn",
+                "type": "ws-conveyor-grasping-xarm-5-finger-hand",
+                "x": -140,
+                "y": 20,
+                "params": {
+                    "mode": "Learn to see",
+                    "accelerator": "auto",
+                    "worlds": 1024,
+                    "minutes": 30,
+                    "training": "Continue",
+                    "seed": 1
+                },
+                "title": "Learn to see"
+            },
+            {
+                "id": "tel_robot",
+                "type": "telemetry",
+                "x": 280,
+                "y": -60,
+                "params": {
+                    "interval": 0.5,
+                    "channels": "robot",
+                    "keep": 40
+                },
+                "title": "Cell and camera"
+            },
+            {
+                "id": "tel_train",
+                "type": "telemetry",
+                "x": 280,
+                "y": 160,
+                "params": {
+                    "interval": 1,
+                    "channels": "train",
+                    "keep": 4000
+                },
+                "title": "Learning curve"
+            },
+            {
+                "id": "err",
+                "type": "chart",
+                "x": 760,
+                "y": 160,
+                "params": {
+                    "kind": "line",
+                    "x": "minutes",
+                    "y": "centre_cm,test_centre_cm,size_cm,test_size_cm",
+                    "channel": "train",
+                    "ymin": "0",
+                    "title": "Centre and size error (cm): training objects and new objects"
+                },
+                "title": "How far off"
+            },
+            {
+                "id": "yaw",
+                "type": "chart",
+                "x": 760,
+                "y": 380,
+                "params": {
+                    "kind": "line",
+                    "x": "minutes",
+                    "y": "yaw_deg,test_yaw_deg",
+                    "channel": "train",
+                    "ymin": "0",
+                    "title": "Long-axis error (degrees)"
+                },
+                "title": "Which way it lies"
+            },
+            {
+                "id": "numbers",
+                "type": "gauge-view",
+                "x": 760,
+                "y": -60,
+                "params": {
+                    "fields": "train.test_centre_cm,train.test_size_cm,train.test_yaw_deg,train.seen_pct,train.images_k,train.minutes",
+                    "style": "number",
+                    "decimals": 1
+                },
+                "title": "Learning"
+            }
+        ],
+        "edges": [
+            {
+                "id": "learn.telemetry>tel_robot.from",
+                "from": {
+                    "node": "learn",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "tel_robot",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "learn.telemetry>tel_train.from",
+                "from": {
+                    "node": "learn",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "tel_train",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "tel_train.stream>err.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "err",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel_train.stream>yaw.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "yaw",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel_train.stream>numbers.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "numbers",
+                    "port": "data"
+                }
+            }
+        ],
+        "notes": [],
+        "dash": {
+            "items": []
+        }
+    }
+}
