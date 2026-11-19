@@ -5,11 +5,26 @@
     },
     "name": "0 · GPU check (temporary)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 0,
-    "updated": "2026-11-19 07:01:55",
+    "published_version": 1,
+    "updated": "2026-11-19 07:02:07",
     "graph": {
-        "nodes": [],
+        "nodes": [
+            {
+                "id": "chk",
+                "type": "ws-gpu-pytorch-check-grasping",
+                "x": 40,
+                "y": 40,
+                "params": {
+                    "spec": "torch==2.14.1",
+                    "cu": "cu126",
+                    "install": "Yes"
+                }
+            }
+        ],
         "edges": [],
-        "notes": []
+        "notes": [],
+        "dash": {
+            "items": []
+        }
     }
 }

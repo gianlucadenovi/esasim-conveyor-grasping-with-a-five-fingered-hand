@@ -14,8 +14,8 @@
         {
             "name": "0 · GPU check (temporary)",
             "file": "blueprints/0-gpu-check-temporary.json",
-            "published_version": 0,
-            "nodes": 0
+            "published_version": 1,
+            "nodes": 1
         },
         {
             "name": "1 · Learn to see",
@@ -31,6 +31,11 @@
         }
     ],
     "blocks": [
+        {
+            "id": "ws-gpu-pytorch-check-grasping",
+            "version": 1,
+            "name": "GPU PyTorch check (grasping)"
+        },
         {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
             "version": 3,
