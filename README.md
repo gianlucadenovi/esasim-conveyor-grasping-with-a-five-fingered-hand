@@ -116,7 +116,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 10 blocks · version 3
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 9 blocks · version 1
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 9 blocks · version 2
-- [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 6 blocks
+- [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 6 blocks · version 1
 
 ### Workspace blocks it uses
 
