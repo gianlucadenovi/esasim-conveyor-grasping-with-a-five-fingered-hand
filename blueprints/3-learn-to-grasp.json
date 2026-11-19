@@ -6,7 +6,7 @@
     "name": "3 · Learn to grasp",
     "description": "From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.",
     "published_version": 1,
-    "updated": "2026-11-19 14:35:07",
+    "updated": "2026-11-19 19:08:43",
     "graph": {
         "nodes": [
             {
@@ -220,25 +220,25 @@
                     "x": 0,
                     "y": 0,
                     "w": 6,
-                    "h": 20
+                    "h": 21
                 },
                 "success": {
                     "x": 6,
-                    "y": 0,
+                    "y": 3,
                     "w": 6,
-                    "h": 7
+                    "h": 8
                 },
                 "reward": {
                     "x": 6,
-                    "y": 7,
+                    "y": 11,
                     "w": 6,
-                    "h": 7
+                    "h": 10
                 },
                 "numbers": {
                     "x": 6,
-                    "y": 14,
-                    "w": 4,
-                    "h": 5
+                    "y": 0,
+                    "w": 6,
+                    "h": 3
                 }
             }
         }
