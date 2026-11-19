@@ -6,7 +6,7 @@
     "name": "1 · Learn to see",
     "description": "The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.",
     "published_version": 5,
-    "updated": "2026-11-19 08:52:32",
+    "updated": "2026-11-19 14:35:09",
     "graph": {
         "nodes": [
             {
@@ -53,8 +53,8 @@
                 "y": -60,
                 "params": {
                     "interval": 0.5,
-                    "channels": "robot",
-                    "keep": 40
+                    "channels": "joints,scene,events,camera_picture,train",
+                    "keep": 100
                 },
                 "title": "Cell and camera"
             },
@@ -72,11 +72,23 @@
             },
             {
                 "id": "view",
-                "type": "ws-conveyor-grasping-view",
+                "type": "viewer-3d",
                 "x": 760,
                 "y": -200,
-                "params": [],
-                "title": "What the camera sees"
+                "params": {
+                    "environment": "outdoor",
+                    "quality": "high",
+                    "floor": true,
+                    "grid": false,
+                    "joints_channel": "joints",
+                    "scene_channel": "scene",
+                    "delay": 1.5,
+                    "numbers": "train.test_centre_cm=New objects: centre off (cm),train.test_yaw_deg=Long axis off (deg),train.images_k=Thousand images",
+                    "events_channel": "events",
+                    "controls": "button Finish now",
+                    "control_channel": "control"
+                },
+                "title": "What the camera sees (3D)"
             },
             {
                 "id": "err",
@@ -156,14 +168,14 @@
                 }
             },
             {
-                "id": "tel_robot.stream>view.live",
+                "id": "tel_robot.stream>view.scene",
                 "from": {
                     "node": "tel_robot",
                     "port": "stream"
                 },
                 "to": {
                     "node": "view",
-                    "port": "live"
+                    "port": "scene"
                 }
             },
             {

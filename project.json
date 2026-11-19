@@ -27,13 +27,13 @@
             "name": "2 · Learn to reach",
             "file": "blueprints/2-learn-to-reach.json",
             "published_version": 3,
-            "nodes": 10
+            "nodes": 9
         },
         {
             "name": "3 · Learn to grasp",
             "file": "blueprints/3-learn-to-grasp.json",
             "published_version": 1,
-            "nodes": 9
+            "nodes": 8
         },
         {
             "name": "4 · Learn to place",
@@ -53,16 +53,6 @@
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
             "version": 8,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
-        },
-        {
-            "id": "ws-conveyor-grasping-view",
-            "version": 3,
-            "name": "Conveyor grasping view"
-        },
-        {
-            "id": "ws-xarm-6-model",
-            "version": 2,
-            "name": "xArm model"
         }
     ]
 }

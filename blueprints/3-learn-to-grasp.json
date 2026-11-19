@@ -6,7 +6,7 @@
     "name": "3 · Learn to grasp",
     "description": "From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.",
     "published_version": 1,
-    "updated": "2026-11-19 14:06:02",
+    "updated": "2026-11-19 14:35:07",
     "graph": {
         "nodes": [
             {
@@ -20,17 +20,6 @@
                     "pattern": "*.pt"
                 },
                 "title": "Networks so far"
-            },
-            {
-                "id": "arm",
-                "type": "ws-xarm-6-model",
-                "x": -460,
-                "y": -180,
-                "params": {
-                    "arm": "xArm 6",
-                    "detail": 3
-                },
-                "title": "xArm 6 model"
             },
             {
                 "id": "learn",
@@ -65,8 +54,8 @@
                 "y": -60,
                 "params": {
                     "interval": 0.5,
-                    "channels": "robot,events",
-                    "keep": 200
+                    "channels": "joints,scene,events,camera_picture,train",
+                    "keep": 300
                 },
                 "title": "Episodes for the view"
             },
@@ -84,11 +73,23 @@
             },
             {
                 "id": "view",
-                "type": "ws-conveyor-grasping-view",
+                "type": "viewer-3d",
                 "x": 760,
                 "y": -160,
-                "params": [],
-                "title": "The cell"
+                "params": {
+                    "environment": "outdoor",
+                    "quality": "high",
+                    "floor": true,
+                    "grid": false,
+                    "joints_channel": "joints",
+                    "scene_channel": "scene",
+                    "delay": 1.5,
+                    "numbers": "train.success=Grasped and held:%,train.failed=Dropped:%,train.steps_m=Million steps",
+                    "events_channel": "events",
+                    "controls": "button Finish now",
+                    "control_channel": "control"
+                },
+                "title": "The cell (3D)"
             },
             {
                 "id": "success",
@@ -168,25 +169,14 @@
                 }
             },
             {
-                "id": "tel_robot.stream>view.live",
+                "id": "tel_robot.stream>view.scene",
                 "from": {
                     "node": "tel_robot",
                     "port": "stream"
                 },
                 "to": {
                     "node": "view",
-                    "port": "live"
-                }
-            },
-            {
-                "id": "arm.model>view.arm",
-                "from": {
-                    "node": "arm",
-                    "port": "model"
-                },
-                "to": {
-                    "node": "view",
-                    "port": "arm"
+                    "port": "scene"
                 }
             },
             {

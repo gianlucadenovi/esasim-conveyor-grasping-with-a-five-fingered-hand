@@ -113,16 +113,14 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 - [0 · Make the 3D models (one-off)](blueprints/0-make-the-3d-models-one-off.json) · 2 blocks · version 7
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 8 blocks · version 5
-- [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 10 blocks · version 3
-- [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 9 blocks · version 1
+- [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 9 blocks · version 3
+- [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 8 blocks · version 1
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 8 blocks · version 2
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 5 blocks · version 2
 
 ### Workspace blocks it uses
 
 - [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 8
-- [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 3
-- [xArm model](blocks/ws-xarm-6-model) · version 2
 
 ### Assets
 
