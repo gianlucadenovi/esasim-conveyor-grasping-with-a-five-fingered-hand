@@ -12,9 +12,9 @@
     "readme": null,
     "blueprints": [
         {
-            "name": "0 · GPU check (temporary)",
-            "file": "blueprints/0-gpu-check-temporary.json",
-            "published_version": 3,
+            "name": "0 · xArm model to EsaSim storage (one-off)",
+            "file": "blueprints/0-xarm-model-to-esasim-storage-one-off.json",
+            "published_version": 4,
             "nodes": 1
         },
         {
@@ -50,9 +50,9 @@
     ],
     "blocks": [
         {
-            "id": "ws-gpu-pytorch-check-grasping",
-            "version": 3,
-            "name": "GPU PyTorch check (grasping)"
+            "id": "ws-xarm-6-model",
+            "version": 2,
+            "name": "xArm model"
         },
         {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
@@ -63,11 +63,6 @@
             "id": "ws-conveyor-grasping-view",
             "version": 2,
             "name": "Conveyor grasping view"
-        },
-        {
-            "id": "ws-xarm-6-model",
-            "version": 2,
-            "name": "xArm model"
         }
     ]
 }

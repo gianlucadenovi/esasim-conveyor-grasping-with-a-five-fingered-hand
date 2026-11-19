@@ -6,7 +6,7 @@
     "name": "2 · Learn to reach",
     "description": "The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.",
     "published_version": 2,
-    "updated": "2026-11-19 08:56:16",
+    "updated": "2026-11-19 09:01:50",
     "graph": {
         "nodes": [
             {
@@ -30,7 +30,17 @@
                     "arm": "xArm 6",
                     "detail": 3
                 },
-                "title": "xArm 6 model"
+                "title": "xArm 6 model",
+                "dest": {
+                    "location": 4,
+                    "name": "xarm-model",
+                    "folder": "",
+                    "live": true,
+                    "move": false,
+                    "ports": [
+                        "model"
+                    ]
+                }
             },
             {
                 "id": "learn",

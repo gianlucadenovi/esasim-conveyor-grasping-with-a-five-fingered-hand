@@ -10,7 +10,7 @@
 
 **An xArm with a five-fingered hand learns to see objects coming on a conveyor belt, reach them, grasp them with real contact forces (touch sensors in the fingertips and palm) and put them in a bin; then it is tested on objects it never saw, chosen by you.**
 
-![type](https://img.shields.io/badge/type-Robotics%20%26%20manipulation-blue) ![language](https://img.shields.io/badge/language-Python-3776AB) ![runs on](https://img.shields.io/badge/runs%20on-NVIDIA-6f42c1) [![made with](https://img.shields.io/badge/made%20with-EsaSim-0b7285)](https://esacode.com/)
+![type](https://img.shields.io/badge/type-Robotics%20%26%20manipulation-blue) ![language](https://img.shields.io/badge/language-Python-3776AB) ![runs on](https://img.shields.io/badge/runs%20on-CPU%20%7C%20NVIDIA-6f42c1) [![made with](https://img.shields.io/badge/made%20with-EsaSim-0b7285)](https://esacode.com/)
 
 <!-- More badges: ![licence](https://img.shields.io/badge/licence-MIT-green) — label, value and colour, written in the address. -->
 
@@ -18,7 +18,7 @@
 
 ## Flows
 
-- **0 · GPU check (temporary)**: An empty grid: drag blocks from the menu.
+- **0 · xArm model to EsaSim storage (one-off)**: An empty grid: drag blocks from the menu.
 - **1 · Learn to see**: The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.
 - **2 · Learn to reach**: The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.
 - **3 · Learn to grasp**: From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.
@@ -27,9 +27,9 @@
 
 ## What you need
 
-- A computer with the EsaSim worker (Project > Compute); it needs: NVIDIA GPU.
+- A computer with the EsaSim worker (Project > Compute); it runs on any worker, faster with: NVIDIA GPU.
 - Data it reads: the dataset **grasp-networks** of the workspace, read by *Networks so far*; the dataset **grasp-networks** of the workspace, read by *Networks learned*.
-- Python packages, installed by the worker the first time: `torch`, `mujoco>=3.3`, `mujoco-warp`, `warp-lang`, `numpy`.
+- Python packages, installed by the worker the first time: `numpy`, `torch`, `mujoco>=3.3`, `mujoco-warp`, `warp-lang`.
 
 ## How to run it
 
@@ -54,7 +54,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Blueprints in this repository
 
-- [0 · GPU check (temporary)](blueprints/0-gpu-check-temporary.json) · 1 block · version 3
+- [0 · xArm model to EsaSim storage (one-off)](blueprints/0-xarm-model-to-esasim-storage-one-off.json) · 1 block · version 4
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 8 blocks · version 5
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 10 blocks · version 2
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 9 blocks
@@ -63,10 +63,9 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Workspace blocks it uses
 
-- [GPU PyTorch check (grasping)](blocks/ws-gpu-pytorch-check-grasping) · version 3
+- [xArm model](blocks/ws-xarm-6-model) · version 2
 - [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 5
 - [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 2
-- [xArm model](blocks/ws-xarm-6-model) · version 2
 
 The data the blueprints read (grasp-networks) stays in EsaSim.
 
