@@ -1,0 +1,109 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 91
+    },
+    "name": "tmp · template look",
+    "description": "Your own Python code that streams values while it runs, with a live chart and its final table.",
+    "published_version": 0,
+    "updated": "2026-11-19 15:02:07",
+    "graph": {
+        "nodes": [
+            {
+                "id": "code",
+                "type": "python-script",
+                "x": 80,
+                "y": 120,
+                "params": {
+                    "steps": 60
+                }
+            },
+            {
+                "id": "live",
+                "type": "telemetry",
+                "x": 440,
+                "y": 60,
+                "params": {
+                    "interval": 1,
+                    "channels": "signal"
+                }
+            },
+            {
+                "id": "chart",
+                "type": "chart",
+                "x": 780,
+                "y": 40,
+                "params": {
+                    "kind": "line",
+                    "x": "step",
+                    "y": "value",
+                    "channel": "signal",
+                    "title": "Signal"
+                }
+            },
+            {
+                "id": "table",
+                "type": "table-view",
+                "x": 780,
+                "y": 300,
+                "params": {
+                    "rows": 50
+                }
+            },
+            {
+                "id": "result",
+                "type": "metrics-view",
+                "x": 440,
+                "y": 320,
+                "params": []
+            }
+        ],
+        "edges": [
+            {
+                "id": "code.telemetry-live.from",
+                "from": {
+                    "node": "code",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "live",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "live.stream-chart.data",
+                "from": {
+                    "node": "live",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "chart",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "code.table-table.data",
+                "from": {
+                    "node": "code",
+                    "port": "table"
+                },
+                "to": {
+                    "node": "table",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "code.result-result.data",
+                "from": {
+                    "node": "code",
+                    "port": "result"
+                },
+                "to": {
+                    "node": "result",
+                    "port": "data"
+                }
+            }
+        ],
+        "notes": []
+    }
+}
