@@ -5,8 +5,8 @@
     },
     "name": "1 · Learn to see",
     "description": "The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.",
-    "published_version": 2,
-    "updated": "2026-11-19 06:41:29",
+    "published_version": 3,
+    "updated": "2026-11-19 06:44:42",
     "graph": {
         "nodes": [
             {
@@ -16,9 +16,9 @@
                 "y": 20,
                 "params": {
                     "mode": "Learn to see",
-                    "accelerator": "NVIDIA GPU",
-                    "worlds": 1024,
-                    "minutes": 30,
+                    "accelerator": "CPU",
+                    "worlds": 256,
+                    "minutes": 40,
                     "training": "Continue",
                     "seed": 1
                 },
