@@ -6,7 +6,7 @@
     "name": "2 · Learn to reach",
     "description": "The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.",
     "published_version": 3,
-    "updated": "2026-11-19 19:07:43",
+    "updated": "2026-11-19 19:15:28",
     "graph": {
         "nodes": [
             {
@@ -15,7 +15,7 @@
                 "x": -460,
                 "y": 40,
                 "params": {
-                    "dataset": "35",
+                    "dataset": "36",
                     "version": "latest",
                     "pattern": "*.pt"
                 },
@@ -33,6 +33,7 @@
                     "minutes": 60,
                     "training": "Continue",
                     "replay_every": 20,
+                    "belt_drawing": "Flat colours (3D file)",
                     "seed": 1
                 },
                 "title": "Learn to reach",
@@ -84,7 +85,7 @@
                     "joints_channel": "joints",
                     "scene_channel": "scene",
                     "delay": 1.5,
-                    "numbers": "train.success=Reached:%,train.end_dist_cm=Ends from the grasp point (cm),train.steps_m=Million steps",
+                    "numbers": "",
                     "events_channel": "events",
                     "controls": "button Finish now",
                     "control_channel": "control"

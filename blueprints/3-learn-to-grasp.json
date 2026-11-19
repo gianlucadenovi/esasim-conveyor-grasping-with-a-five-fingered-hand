@@ -6,7 +6,7 @@
     "name": "3 · Learn to grasp",
     "description": "From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.",
     "published_version": 1,
-    "updated": "2026-11-19 19:08:43",
+    "updated": "2026-11-19 19:15:28",
     "graph": {
         "nodes": [
             {
@@ -15,7 +15,7 @@
                 "x": -460,
                 "y": 40,
                 "params": {
-                    "dataset": "35",
+                    "dataset": "36",
                     "version": "latest",
                     "pattern": "*.pt"
                 },
@@ -33,6 +33,7 @@
                     "minutes": 90,
                     "training": "Continue",
                     "replay_every": 20,
+                    "belt_drawing": "Flat colours (3D file)",
                     "seed": 2
                 },
                 "title": "Learn to grasp",
@@ -84,7 +85,7 @@
                     "joints_channel": "joints",
                     "scene_channel": "scene",
                     "delay": 1.5,
-                    "numbers": "train.success=Grasped and held:%,train.failed=Dropped:%,train.steps_m=Million steps",
+                    "numbers": "",
                     "events_channel": "events",
                     "controls": "button Finish now",
                     "control_channel": "control"

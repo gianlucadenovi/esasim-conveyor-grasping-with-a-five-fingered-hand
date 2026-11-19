@@ -6,7 +6,7 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 2,
-    "updated": "2026-11-19 14:34:38",
+    "updated": "2026-11-19 19:15:29",
     "graph": {
         "nodes": [
             {
@@ -15,9 +15,9 @@
                 "x": -460,
                 "y": 40,
                 "params": {
-                    "dataset": "35",
+                    "dataset": "36",
                     "version": "latest",
-                    "pattern": "*"
+                    "pattern": "*.pt"
                 },
                 "title": "Networks so far"
             },
@@ -33,6 +33,7 @@
                     "minutes": 90,
                     "training": "Continue",
                     "replay_every": 20,
+                    "belt_drawing": "Flat colours (3D file)",
                     "seed": 3
                 },
                 "title": "Learn to place",
@@ -84,7 +85,7 @@
                     "joints_channel": "joints",
                     "scene_channel": "scene",
                     "delay": 1.5,
-                    "numbers": "train.success=In the bin:%,train.failed=Dropped:%,train.steps_m=Million steps",
+                    "numbers": "",
                     "events_channel": "events",
                     "controls": "button Finish now",
                     "control_channel": "control"
