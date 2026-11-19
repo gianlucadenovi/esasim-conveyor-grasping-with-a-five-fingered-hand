@@ -6,7 +6,7 @@
     "name": "1 · Learn to see",
     "description": "The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.",
     "published_version": 6,
-    "updated": "2026-11-19 19:04:58",
+    "updated": "2026-11-19 19:15:41",
     "graph": {
         "nodes": [
             {
@@ -15,7 +15,7 @@
                 "x": -460,
                 "y": 40,
                 "params": {
-                    "dataset": "35",
+                    "dataset": "36",
                     "version": "latest",
                     "pattern": "*.pt"
                 },
@@ -32,6 +32,7 @@
                     "worlds": 1024,
                     "minutes": 25,
                     "training": "Continue",
+                    "belt_drawing": "Flat colours (3D file)",
                     "seed": 1
                 },
                 "title": "Learn to see",
@@ -54,7 +55,7 @@
                 "params": {
                     "interval": 0.5,
                     "channels": "joints,scene,events,camera_picture,train",
-                    "keep": 100
+                    "keep": 300
                 },
                 "title": "Cell and camera"
             },
@@ -83,7 +84,7 @@
                     "joints_channel": "joints",
                     "scene_channel": "scene",
                     "delay": 1.5,
-                    "numbers": "train.test_centre_cm=New objects: centre off (cm),train.test_yaw_deg=Long axis off (deg),train.images_k=Thousand images",
+                    "numbers": "",
                     "events_channel": "events",
                     "controls": "button Finish now",
                     "control_channel": "control"
