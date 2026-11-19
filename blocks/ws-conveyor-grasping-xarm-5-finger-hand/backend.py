@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 4 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 5 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects.
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -794,6 +794,7 @@ class Camera:
     def image(self, depth, seg, rgba):
         """depth (n, H, W) planar, seg (n, H, W) geom ids (-1: none), rgba (n, ngeom, 4) -> (n, 6, H, W)"""
         torch = self.t
+        depth = torch.nan_to_num(depth, nan=9.0, posinf=9.0, neginf=9.0)    # (a ray that hit nothing: far away)
         P = self.pos + depth[..., None] * self.w                # (n, H, W, 3)
         far = depth > 3.0
         P = torch.where(far[..., None], torch.zeros_like(P), P)
@@ -929,6 +930,7 @@ class GraspEnv:
         self.ep_ret = z(n)
         self.max_steps = int(EP_SECONDS[stage] / CTRL_DT)
         self.k = 0
+        self.n_bad = 0
         self.assist = {"reach": 0.0, "grasp": 0.5, "place": 0.3}[stage]   # a share of episodes start with the hand over the object
 
     # ── resets ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1076,6 +1078,9 @@ class GraspEnv:
             c = c + 0.006 * torch.randn(c.shape, generator=self.gen, device=self.dev)
             e = e * (1 + 0.08 * torch.randn(e.shape, generator=self.gen, device=self.dev))
             seen = objpix >= 6
+        ok_ = torch.isfinite(c).all(1) & torch.isfinite(e).all(1) & torch.isfinite(yw).all(1)
+        seen = seen & ok_
+        c, e, yw = torch.nan_to_num(c), torch.nan_to_num(e), torch.nan_to_num(yw)
         old = self.est_c.clone()
         dt = self.est_age.clamp(min=CTRL_DT)
         vx = (c[:, 0] - old[:, 0]) / dt
@@ -1125,6 +1130,16 @@ class GraspEnv:
         if self.k % CAM_EVERY == 0:
             self.perceive()
         rew, done, info = self.reward(a)
+        # a cell whose physics blew up (rare, among thousands): it ends here and starts again, and teaches nothing
+        bad = ~torch.isfinite(rew) | ~torch.isfinite(sim.qpos).all(1) | ~torch.isfinite(sim.qvel).all(1)
+        if bool(bad.any()):
+            self.n_bad += int(bad.sum())
+            rew = torch.where(bad, torch.zeros_like(rew), rew)
+            done = done | bad
+            info["timeout"] = info["timeout"] | bad
+            info["success"] = info["success"] & ~bad
+            info["fail"] = info["fail"] & ~bad
+            info["d"] = torch.nan_to_num(info["d"], nan=0.0, posinf=0.0, neginf=0.0)
         self.prev_a = a
         self.ep_ret += rew
         return rew, done, info
@@ -1254,7 +1269,7 @@ class GraspEnv:
         st[:, STAGES.index(self.stage)] = 1
         priv = torch.cat([obs, (c - g) * 5, oq, ov[:, :3], ov[:, 3:] * 0.1, e * 10, y, ((op[:, 2] - self.z_rest) * 10)[:, None],
                           (f > 0.3).float(), st, (self.steps.float() / self.max_steps)[:, None], self.lifted_ever.float()[:, None]], 1)
-        return obs, priv
+        return torch.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0).clamp(-100, 100), torch.nan_to_num(priv, nan=0.0, posinf=0.0, neginf=0.0).clamp(-100, 100)
 '''
 _SOURCES['ppo_part'] = r'''import math
 
@@ -1356,7 +1371,7 @@ class PPO:
             if bool(timeout.any()):
                 v_next = self.ac.critic(self.pn(priv_next)).squeeze(-1)
                 rew = rew + self.gamma * v_next * timeout.float()
-            self.b_rew[t], self.b_done[t] = rew, done.float()
+            self.b_rew[t], self.b_done[t] = torch.nan_to_num(rew, nan=0.0, posinf=0.0, neginf=0.0), done.float()
 
     def update(self, priv_last, critic_only=False):
         """one learning step on the batch gathered (critic_only: the policy holds still while the critic learns new ground)"""
@@ -1414,6 +1429,8 @@ class PPO:
                 vl = torch.max((v - ret[idx]) ** 2, (vc - ret[idx]) ** 2).mean()
                 ent = (ls + 1.4189385).sum()
                 loss = vl if critic_only else pl + 1.0 * vl - self.ent * ent
+                if not bool(torch.isfinite(loss)):
+                    continue                                    # (a batch with a broken number in it: skipped, the networks stay sound)
                 self.opt.zero_grad(set_to_none=True)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.ac.parameters(), 1.0)
@@ -1595,6 +1612,10 @@ def find_files(ctx, port, checkpoint, fmt):
             return
         if st.get("format") != fmt:
             return
+        nets = st.get("ac") or st.get("net") or {}
+        if any(torch.is_tensor(v) and v.is_floating_point() and not bool(torch.isfinite(v).all()) for v in nets.values()):
+            ctx.log("Skipped %s: its network is broken (numbers that are not numbers)." % name)
+            return
         out.append({"st": st, "name": str(name), "where": where, "path": path, "stamp": policy_stamp(path, name),
                     "steps": int(st.get("steps") or 0), "stage": st.get("stage")})
     for f in (ctx.inputs.get(port) or []):
@@ -1740,6 +1761,8 @@ def see_run(ctx):
         img, objpix = env.perceive()
         _, _, c, e, y = env.truth()
         s = objpix >= 6
+        ok_ = torch.isfinite(img).flatten(1).all(1) & torch.isfinite(c).all(1) & torch.isfinite(e).all(1) & torch.isfinite(y).all(1)
+        img, c, e, y, s = torch.nan_to_num(img), torch.nan_to_num(c), torch.nan_to_num(e), torch.nan_to_num(y), s & ok_
         k = img.shape[0]
         ids = (torch.arange(k, device=dev) + head) % cap
         B_img[ids] = img.half(); B_c[ids] = c; B_e[ids] = e; B_y[ids] = y; B_s[ids] = s
@@ -1917,7 +1940,7 @@ def learn_run(ctx, stage):
                 ret = sum(h[3] for h in hist) / k_
                 row = {"iteration": it, "minutes": round((time.time() - t0) / 60, 2), "steps_m": round(steps_done / 1e6, 2), "success": round(sc, 1),
                        "failed": round(fail, 1), "episode_s": round(eps, 1), "reward": round(ret, 1), "steps_per_s": round(sps),
-                       "std": round(stats["std"], 3), "kl": round(stats["kl"], 4), "end_dist_cm": round(sum(dist_) / max(1, len(dist_)), 1)}
+                       "std": round(stats["std"], 3), "kl": round(stats["kl"], 4), "end_dist_cm": round(sum(dist_) / max(1, len(dist_)), 1), "restarted": env.n_bad}
                 ctx.telemetry(ch_train, row)
                 cw.writerow([row["minutes"], it, steps_done, row["success"], row["failed"], row["episode_s"], row["reward"], row["steps_per_s"]])
                 curve.flush()
@@ -1934,6 +1957,8 @@ def learn_run(ctx, stage):
     po = final.get("per_object") or {}
     if po:
         ctx.log("Success per object: " + ", ".join("%s %d%%" % (S.TRAIN[k][0] if k in S.TRAIN else k, v) for k, v in sorted(po.items(), key=lambda x: -x[1])))
+    if env.n_bad:
+        ctx.log("%d times a cell's physics blew up (a hard contact among thousands): those episodes were dropped and the cells started again." % env.n_bad)
     ctx.log("Policy written: %s (%s success %.0f%%)." % (name, STAGE_NAME[stage], float(final.get("score") or 0)))
     ctx.log("Done (%s): %d iterations, %.0f million steps in %.1f minutes." % ("time is up" if stop == "time" else "finished on request", it, steps_done / 1e6, (time.time() - t0) / 60))
     return {"success_pct": round(float(final.get("score") or 0), 1), "stage": stage, "steps_m": round(steps_done / 1e6, 1)}
