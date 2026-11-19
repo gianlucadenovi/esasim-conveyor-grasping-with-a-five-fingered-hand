@@ -6,7 +6,7 @@
     "icon": "robot-arm",
     "side": "frontend",
     "customizable": true,
-    "summary": "The grasping cell in 3D (belt, bin, camera, object, five-fingered hand and the xArm posed by inverse kinematics), the camera's picture with the network's box, the touch sensors, and the test's object ",
+    "summary": "The grasping cell in 3D (belt, bin, camera, object, five-fingered hand and the xArm posed by inverse kinematics), the camera's picture with the network's box, the touch sensors, and the test's object",
     "help": "Wire the Conveyor grasping block's telemetry into Live and the xArm model's output into Arm model. Training runs: an episode is replayed every few seconds. Test: choose an object (new to the robot, or seen in training), how it lies, how it is turned and the belt's speed, then Put it on the belt; the trial plays live with what the camera sees and what the fingertips and the palm feel.",
     "inputs": [
         {
@@ -53,6 +53,6 @@
         "resize": "both"
     },
     "esasim": {
-        "version": 1
+        "version": 2
     }
 }

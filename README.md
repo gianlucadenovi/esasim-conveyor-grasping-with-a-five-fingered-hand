@@ -65,7 +65,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 - [GPU PyTorch check (grasping)](blocks/ws-gpu-pytorch-check-grasping) · version 3
 - [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 5
-- [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 1
+- [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 2
 - [xArm model](blocks/ws-xarm-6-model) · version 2
 
 The data the blueprints read (grasp-networks) stays in EsaSim.

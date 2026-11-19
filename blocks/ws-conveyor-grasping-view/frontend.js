@@ -1,5 +1,5 @@
 // ── EsaSim block ──────────────────────────────────────────────────────
-// Conveyor grasping view (ws-conveyor-grasping-view) · version 1 · view, JavaScript: function render(ctx)
+// Conveyor grasping view (ws-conveyor-grasping-view) · version 2 · view, JavaScript: function render(ctx)
 // The grasping cell in 3D (belt, bin, camera, object, five-fingered hand and the xArm posed by inverse kinematics), the camera's picture with the network's box, the touch sensors, and the test's object
 // Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 // Saved: 2026-11-19
@@ -48,6 +48,7 @@ function render(ctx) {
     '.gc input[type=range]{accent-color:#facc15}',
     '.gc .ev{font-size:12px;margin:3px 0;opacity:.9}',
     '.gc .ev.okc{color:#86efac}.gc .ev.badc{color:#fca5a5}',
+    '.gc .note{position:absolute;right:12px;bottom:14px;font-size:11.5px;opacity:.6;pointer-events:none}',
     '.gc .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;opacity:.7;pointer-events:none}',
     '.gc .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center}',
     '.gc .stats div{background:rgba(255,255,255,.04);border-radius:7px;padding:5px}',
@@ -61,6 +62,7 @@ function render(ctx) {
     '<div class="title"><b data-k="label">Conveyor grasping</b><span data-k="badge"></span><div class="muted" data-k="sub"></div></div>' +
     '<div class="bar"><button data-k="vCam">Camera view</button><button data-k="vClose">Close up</button><button data-k="vWide">Whole cell</button>' +
     '<button data-k="box" class="on">Camera box</button><button data-k="arm" class="on">xArm</button><button data-k="finish">Finish now</button></div>' +
+    '<div class="note" data-k="armNote"></div>' +
     '<div class="empty" data-k="empty">Waiting for the cell: start a run of this flow.</div></div>' +
     '<div class="side">' +
     '<div class="sec" data-k="testSec" style="display:none"><h3>Test with a new object</h3>' +
@@ -70,7 +72,7 @@ function render(ctx) {
     '<div class="row"><span>Belt speed</span><input type="range" data-k="spd" min="2" max="8" step="0.5" value="5"><b data-k="spdv"></b></div>' +
     '<div class="row"><button class="go" data-k="drop" style="flex:1">Put it on the belt</button></div>' +
     '<div class="stats"><div><b data-k="nT">0</b><span>trials</span></div><div><b data-k="nG">0</b><span>grasped</span></div><div><b data-k="nP">0</b><span>in the bin</span></div></div></div>' +
-    '<div class="sec"><h3>What the camera sees <span class="muted" data-k="camNote"></span></h3><canvas class="cam" data-k="cam" width="96" height="72"></canvas>' +
+    '<div class="sec" data-k="camSec" style="display:none"><h3>What the camera sees <span class="muted" data-k="camNote"></span></h3><canvas class="cam" data-k="cam" width="96" height="72"></canvas>' +
     '<div class="muted" style="font-size:11.5px;margin-top:4px" data-k="camLab">The network’s box of the object in yellow.</div></div>' +
     '<div class="sec"><h3>Touch <span class="muted">N</span></h3><canvas data-k="touch" width="300" height="190" style="width:100%"></canvas></div>' +
     '<div class="sec"><h3>Events</h3><div data-k="events" class="muted">—</div></div>' +
@@ -90,7 +92,7 @@ function render(ctx) {
   try { if (A.RoomEnvironment) { var pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(new A.RoomEnvironment(), 0.04).texture; } } catch (e) { }
   var camera = new THREE.PerspectiveCamera(42, 1, 0.02, 30);
   camera.up.set(0, 0, 1);
-  camera.position.set(1.15, -0.95, 0.85);
+  camera.position.set(0.95, -0.75, 0.95);
   var controls = null;
   if (A.OrbitControls) { controls = new A.OrbitControls(camera, canvas); controls.enableDamping = true; controls.dampingFactor = 0.08; controls.target.set(0.05, 0.25, 0.05); }
   else camera.lookAt(0.05, 0.25, 0.05);
@@ -276,7 +278,7 @@ function render(ctx) {
     }
     return T;
   }
-  var _p = new THREE.Vector3();
+  var _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
   function flangeTarget() {
     if (st.handBody < 0) return null;
     var h = st.bodyGroups[st.handBody]; h.updateWorldMatrix(true, false);
@@ -351,13 +353,35 @@ function render(ctx) {
     if (u[0] !== 0x1f || u[1] !== 0x8b) return Promise.resolve(buf);
     return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
   }
+  // the arm's model: its file may still be on its way from the worker, so it is asked for again until it comes
+  var armTry = { busy: false, n: 0, timer: null };
+  function armNote(t) { var e = $('armNote'); if (e) e.textContent = t || ''; }
+  function timed(p, ms) {
+    return new Promise(function (res, rej) {
+      var tm = setTimeout(function () { rej(new Error('timed out')); }, ms);
+      Promise.resolve(p).then(function (v) { clearTimeout(tm); res(v); }, function (e) { clearTimeout(tm); rej(e); });
+    });
+  }
   function findArm() {
+    if (arm.model || armTry.busy) return;
     var fs = ((ctx.input('arm') || {}).files || []).filter(function (f) { return /\.robot\.json(\.gz)?$/i.test(f.name || f.path || ''); });
-    var p = fs.length ? ctx.files.buffer(fs[0]) : (ctx.assets && ctx.assets.find ? Promise.resolve(ctx.assets.find(['xarm6.robot.json.gz', 'models/xarm6.robot.json.gz'])).then(function (a) { return a ? ctx.assets.buffer(a) : null; }) : Promise.resolve(null));
-    p.then(function (b) { return b ? gunzip(b) : null; }).then(function (b) {
-      if (!b || arm.model) return;
+    var p;
+    if (fs.length) p = ctx.files.buffer(fs[0]);
+    else if (ctx.assets && ctx.assets.find) p = Promise.resolve(ctx.assets.find(['xarm6.robot.json.gz', 'models/xarm6.robot.json.gz'])).then(function (a) { return a ? ctx.assets.buffer(a) : null; });
+    else p = Promise.resolve(null);
+    if (!fs.length) armNote('xArm: wire the xArm model block into Arm model');
+    else armNote('xArm: loading its model…');
+    armTry.busy = true; armTry.n++;
+    timed(p, 45000).then(function (b) { return b ? gunzip(b) : null; }).then(function (b) {
+      armTry.busy = false;
+      if (!b) return;
       loadArm(JSON.parse(new TextDecoder().decode(b)));
-    }).catch(function (e) { console.warn('grasp view: arm', e); });
+      armNote('');
+    }).catch(function (e) {
+      armTry.busy = false;
+      armNote('xArm: ' + (e && e.message || e) + ' (trying again)');
+      if (armTry.n < 40) { clearTimeout(armTry.timer); armTry.timer = setTimeout(findArm, 5000); }
+    });
   }
 
   // ---------------------------------------------------------------- the camera's picture and the touch panel
@@ -418,7 +442,7 @@ function render(ctx) {
       if (it.channel === CH_EV || (d.text && !d.format)) { if (d.text) addEvent(d); continue; }
       if (d.format !== 'esasim.grasp/1') continue;
       if (d.kind === 'cell') { if (!st.cell || (d.catalog && !st.catalog) || d.bodies.length !== st.cell.bodies.length) buildCell(d); }
-      else if (d.kind === 'camera') { st.camItem = d; drawCam(d); }
+      else if (d.kind === 'camera') { st.camItem = d; $('camSec').style.display = ''; drawCam(d); }
       else if (d.kind === 'object') { buildObject(d.object); st.live = true; st.frames = []; st.playT = 0; st.label = 'Trial ' + d.trial + ': ' + d.object.label + (d.object.test ? ' (new to it)' : ''); st.result = null; }
       else if (d.kind === 'live') {
         st.live = true;
@@ -479,7 +503,7 @@ function render(ctx) {
   function view(p, t) { camera.position.set(p[0], p[1], p[2]); if (controls) { controls.target.set(t[0], t[1], t[2]); controls.update(); } else camera.lookAt(t[0], t[1], t[2]); }
   $('vCam').onclick = function () { if (!st.cell) return; var C = st.cell.camera, M = C.mat; view([C.pos[0] - M[2] * 0.05, C.pos[1] - M[5] * 0.05, C.pos[2] - M[8] * 0.05], [C.pos[0] - M[2], C.pos[1] - M[5], C.pos[2] - M[8]]); };
   $('vClose').onclick = function () { var h = st.handBody >= 0 ? new THREE.Vector3().setFromMatrixPosition(st.bodyGroups[st.handBody].matrixWorld) : new THREE.Vector3(0.1, 0.3, 0.1); view([h.x + 0.35, h.y - 0.35, h.z + 0.22], [h.x, h.y + 0.05, h.z - 0.05]); };
-  $('vWide').onclick = function () { view([1.15, -0.95, 0.85], [0.05, 0.25, 0.05]); };
+  $('vWide').onclick = function () { view([0.95, -0.75, 0.95], [0.05, 0.25, 0.05]); };
 
   // ---------------------------------------------------------------- playing the frames
   var lastNow = performance.now();
