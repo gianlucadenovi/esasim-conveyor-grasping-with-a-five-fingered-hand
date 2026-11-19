@@ -5,8 +5,8 @@
     },
     "name": "0 · GPU check (temporary)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 2,
-    "updated": "2026-11-19 07:04:09",
+    "published_version": 3,
+    "updated": "2026-11-19 07:23:04",
     "graph": {
         "nodes": [
             {
@@ -15,9 +15,10 @@
                 "x": 40,
                 "y": 40,
                 "params": {
-                    "spec": "torch==2.14.1",
+                    "spec": "torch",
                     "cu": "cu126",
-                    "install": "Remove"
+                    "install": "No",
+                    "hold": 12
                 }
             }
         ],

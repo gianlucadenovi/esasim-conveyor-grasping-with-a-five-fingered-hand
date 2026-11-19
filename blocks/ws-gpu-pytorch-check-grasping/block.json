@@ -33,12 +33,18 @@
                 "Yes",
                 "Remove"
             ]
+        },
+        {
+            "key": "hold",
+            "label": "Then wait (minutes)",
+            "type": "number",
+            "default": 0
         }
     ],
     "hardware": [
         "nvidia"
     ],
     "esasim": {
-        "version": 2
+        "version": 3
     }
 }

@@ -6,7 +6,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 
 | | |
 |---|---|
-| Block | `ws-gpu-pytorch-check-grasping` · version 2 |
+| Block | `ws-gpu-pytorch-check-grasping` · version 3 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | NVIDIA GPU |
@@ -18,6 +18,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 | `spec` Torch spec | text | `"torch==2.14.1"` |  |
 | `cu` CUDA index | text | `"cu126"` |  |
 | `install` Install | select | `"No"` |  |
+| `hold` Then wait (minutes) | number | `0` |  |
 
 ## Use it in EsaSim
 
