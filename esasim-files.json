@@ -5,14 +5,6 @@
     },
     "release": null,
     "datasets": [],
-    "assets": [
-        {
-            "path": "probe/grasp_code_grasp_env.py",
-            "size": 41739,
-            "sha256": "8da7478c33affeb9f0060266b68f9b19a807460d4f9341a2479e1fbdb33f48e1",
-            "zip": "assets/probe/grasp_code_grasp_env.py",
-            "in": "repo"
-        }
-    ],
-    "saved": "2026-11-19T14:12:32+00:00"
+    "assets": [],
+    "saved": "2026-11-19T14:13:00+00:00"
 }

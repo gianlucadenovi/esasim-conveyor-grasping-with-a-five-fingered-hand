@@ -124,12 +124,6 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 7
 - [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 3
 
-### Assets
-
-The files the project's views draw with (3D models, textures, sounds), in [assets/](assets/):
-
-- [probe/grasp_code_grasp_env.py](assets/probe/grasp_code_grasp_env.py) · 41 KB
-
 The data the blueprints read (grasp-networks) stays in EsaSim.
 
 Keys pasted in blocks (secret settings) are not saved here, nor are the team and the results of runs.
