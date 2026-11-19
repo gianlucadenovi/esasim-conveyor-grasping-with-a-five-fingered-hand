@@ -124,6 +124,13 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 3
 - [xArm model](blocks/ws-xarm-6-model) · version 2
 
+### Assets
+
+The files the project's views draw with (3D models, textures, sounds), in [assets/](assets/):
+
+- [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 34 KB
+- [models/xarm_hand.robot.json.gz](assets/models/xarm_hand.robot.json.gz) · 237 KB
+
 The data the blueprints read (grasp-networks) stays in EsaSim.
 
 Keys pasted in blocks (secret settings) are not saved here, nor are the team and the results of runs.

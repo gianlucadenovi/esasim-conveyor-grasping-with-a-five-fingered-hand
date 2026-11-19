@@ -5,6 +5,21 @@
     },
     "release": null,
     "datasets": [],
-    "assets": [],
-    "saved": "2026-11-19T14:13:00+00:00"
+    "assets": [
+        {
+            "path": "models/belt_objects.robot.json.gz",
+            "size": 35098,
+            "sha256": "3409c18dcf0197d2587eb527b84977dbaf68babc58284730e5d1eeed558709d3",
+            "zip": "assets/models/belt_objects.robot.json.gz",
+            "in": "repo"
+        },
+        {
+            "path": "models/xarm_hand.robot.json.gz",
+            "size": 243093,
+            "sha256": "f844b7b9ec529dcac6eee1360c13ade1ab34bd1951594442f9174f4fc37b16c0",
+            "zip": "assets/models/xarm_hand.robot.json.gz",
+            "in": "repo"
+        }
+    ],
+    "saved": "2026-11-19T14:33:54+00:00"
 }
