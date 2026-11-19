@@ -5,8 +5,8 @@
     },
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
-    "published_version": 1,
-    "updated": "2026-11-19 12:11:13",
+    "published_version": 2,
+    "updated": "2026-11-19 12:14:42",
     "graph": {
         "nodes": [
             {
@@ -17,7 +17,7 @@
                 "params": {
                     "dataset": "35",
                     "version": "latest",
-                    "pattern": "*.pt"
+                    "pattern": "*"
                 },
                 "title": "Networks so far"
             },
