@@ -117,8 +117,6 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 8 blocks · version 1
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 8 blocks · version 2
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 7 blocks · version 6
-- [tmp · inspect the conveyor model](blueprints/tmp-inspect-the-conveyor-model.json) · 2 blocks · version 1
-- [tmp · template look](blueprints/tmp-template-look.json) · 5 blocks
 
 ### Workspace blocks it uses
 
