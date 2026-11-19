@@ -6,8 +6,8 @@
     "icon": "robot-arm",
     "side": "backend",
     "customizable": true,
-    "summary": "A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects.",
-    "help": "Modes. Learn to see: the camera next to the robot (96x72, depth and colour, rendered in every cell) is turned into a point map; a small convolutional network learns which pixels are the object and from them where it is, how big it is and which way it lies, on the 18 training objects, and is checked on the 12 objects kept for the test. Learn to reach / grasp / place: PPO, thousands of cells at once on the GPU (MuJoCo Warp); the policy senses the hand, its fingers, the 9 touch sensors (fingertips and palm), the belt speed and the camera network's box of the object; it moves the hand (kinematic: 6 stiff servos) and the fingers (real joints, real contacts). Each stage carries on from the one before. Grasp: lift 8 cm and hold for a second while the object is pushed about. Place: release it into the bin. Test with new objects: the policy runs live; pick the object and its pose in the view.",
+    "summary": "A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects. Shown in ",
+    "help": "Modes. Learn to see: the camera next to the robot (96x72, depth and colour, rendered in every cell) is turned into a point map; a small convolutional network learns which pixels are the object and from them where it is, how big it is and which way it lies, on the 18 training objects, and is checked on the 12 objects kept for the test. Learn to reach / grasp / place: PPO, thousands of cells at once on the GPU (MuJoCo Warp); the policy senses the hand, its fingers, the 9 touch sensors (fingertips and palm), the belt speed and the camera network's box of the object; it moves the hand (kinematic: 6 stiff servos) and the fingers (real joints, real contacts). Each stage carries on from the one before. Grasp: lift 8 cm and hold for a second while the object is pushed about. Place: release it into the bin (it first imitates a scripted controller). Test with new objects: the policy runs live; pick the object, its pose, its turn and the belt speed with the 3D view's controls. Make the 3D models: writes the xArm-with-hand and objects robot files for the project's assets. The 3D view (viewer-3d) draws everything: telemetry channels joints, scene, events, camera_picture, train, test.",
     "inputs": [
         {
             "id": "policy",
@@ -19,7 +19,7 @@
                 "pt",
                 "py"
             ],
-            "help": "Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves. A grasp_code_<part>.py here"
+            "help": "Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves. A grasp_override_<part>.py "
         }
     ],
     "outputs": [
@@ -40,6 +40,15 @@
                 "csv"
             ],
             "help": "see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial)"
+        },
+        {
+            "id": "models",
+            "label": "3D models",
+            "type": "files",
+            "formats": [
+                "gz"
+            ],
+            "help": "Make the 3D models: xarm_hand.robot.json.gz (the xArm 6 with the hand on its flange) and belt_objects.robot.json.gz, for the project's assets (the 3D view)"
         }
     ],
     "params": [
@@ -53,7 +62,8 @@
                 "Learn to reach",
                 "Learn to grasp",
                 "Learn to place",
-                "Test with new objects"
+                "Test with new objects",
+                "Make the 3D models"
             ]
         },
         {
@@ -169,6 +179,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 7
+        "version": 8
     }
 }

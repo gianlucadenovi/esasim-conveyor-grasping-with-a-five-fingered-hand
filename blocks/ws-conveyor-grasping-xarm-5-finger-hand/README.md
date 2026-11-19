@@ -1,14 +1,14 @@
 # Conveyor grasping (xArm + 5-finger hand)
 
-A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects.
+A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects. Shown in 
 
-Modes. Learn to see: the camera next to the robot (96x72, depth and colour, rendered in every cell) is turned into a point map; a small convolutional network learns which pixels are the object and from them where it is, how big it is and which way it lies, on the 18 training objects, and is checked on the 12 objects kept for the test. Learn to reach / grasp / place: PPO, thousands of cells at once on the GPU (MuJoCo Warp); the policy senses the hand, its fingers, the 9 touch sensors (fingertips and palm), the belt speed and the camera network's box of the object; it moves the hand (kinematic: 6 stiff servos) and the fingers (real joints, real contacts). Each stage carries on from the one before. Grasp: lift 8 cm and hold for a second while the object is pushed about. Place: release it into the bin. Test with new objects: the policy runs live; pick the object and its pose in the view.
+Modes. Learn to see: the camera next to the robot (96x72, depth and colour, rendered in every cell) is turned into a point map; a small convolutional network learns which pixels are the object and from them where it is, how big it is and which way it lies, on the 18 training objects, and is checked on the 12 objects kept for the test. Learn to reach / grasp / place: PPO, thousands of cells at once on the GPU (MuJoCo Warp); the policy senses the hand, its fingers, the 9 touch sensors (fingertips and palm), the belt speed and the camera network's box of the object; it moves the hand (kinematic: 6 stiff servos) and the fingers (real joints, real contacts). Each stage carries on from the one before. Grasp: lift 8 cm and hold for a second while the object is pushed about. Place: release it into the bin (it first imitates a scripted controller). Test with new objects: the policy runs live; pick the object, its pose, its turn and the belt speed with the 3D view's controls. Make the 3D models: writes the xArm-with-hand and objects robot files for the project's assets. The 3D view (viewer-3d) draws everything: telemetry channels joints, scene, events, camera_picture, train, test.
 
 An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Python (`backend.py`, `def run(ctx)`).
 
 | | |
 |---|---|
-| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 7 |
+| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 8 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any worker, NVIDIA GPU |
@@ -17,7 +17,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 
 | Port | Type | Description |
 |---|---|---|
-| `policy` Policies | Files (pt, py) | Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves. A grasp_code_<part>.py here Several connections. Optional. |
+| `policy` Policies | Files (pt, py) | Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves. A grasp_override_<part>.py  Several connections. Optional. |
 
 ## Outputs
 
@@ -25,6 +25,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 |---|---|---|
 | `policy` Network | Files (pt) | grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used (Learn to reach, grasp, place) |
 | `curve` Learning curve | Table (csv) | see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial) |
+| `models` 3D models | Files (gz) | Make the 3D models: xarm_hand.robot.json.gz (the xArm 6 with the hand on its flange) and belt_objects.robot.json.gz, for the project's assets (the 3D view) |
 
 ## Settings
 
