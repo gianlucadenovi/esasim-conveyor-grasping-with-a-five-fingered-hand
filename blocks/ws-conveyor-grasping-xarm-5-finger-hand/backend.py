@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 11 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 12 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -25,7 +25,7 @@
 #   autoplay    select    Test: pick objects when idle = "Yes" of Yes | No
 #   idle        number    Test: idle before it picks (s) = 8
 #   objects     select    Test objects = "New objects only" of New objects only | All objects
-#   belt_drawing select    Belt drawn = "From the conveyor's 3D file" of From the conveyor's 3D file | Boxes
+#   belt_drawing select    Belt drawn = "Its own materials (3D file)" of Its own materials (3D file) | Flat colours (3D file) …
 #   seed        number    Seed = 1
 # Runs on  Any worker, NVIDIA GPU. Return a dict to fill the "result" output.
 # Packages torch, mujoco>=3.3, mujoco-warp, warp-lang, numpy (installed by the worker with pip when missing)
@@ -2064,6 +2064,7 @@ def glb_meshes(data):
     return out
 
 
+CONVEYOR = {"mode": "flat", "fit": None, "asset": None}   # mode: textured (the 3D view draws the file), flat (baked in colours), boxes
 CONVEYOR_LEN = 2.5                # (m) the length the conveyor's 3D file is drawn at (the simulated belt's frame)
 FLOOR_Z = -0.75                   # the floor (the xArm's pedestal is 75 cm tall)
 
@@ -2111,6 +2112,9 @@ def conveyor_mesh(path, log):
         "Drawn %.2f m long, its belt %.2f m wide (the simulated one), its top on the belt and its feet on the floor (scaled %.2f along, %.2f across, %.2f up)."
         % (len(parts), sum(len(p[1]) for p in parts), ext[0], ext[1], ext[2], ", turned a quarter" if turn else "", b_hi[1] - b_lo[1], b_hi[2] - lo[2],
            CONVEYOR_LEN, S.BELT_W, sx, sy, sz))
+    CONVEYOR["fit"] = {"kind": "model", "id": "conveyor", "asset": os.path.basename(path), "model_units": "m", "up": "y",
+                       "rpy": [0, 0, round(math.pi / 2, 6) if turn else 0], "scale": [round(float(x), 5) for x in sc],
+                       "pos": [round(float(x) * 1000, 1) for x in shift]}
     by_col = {}
     for v, f, c, nm in parts:
         by_col.setdefault(part_colour(c, nm), []).append((v * sc + shift, f))
@@ -2140,9 +2144,6 @@ def objects_model(info, conveyor=None):
     """belt_objects.robot.json: the conveyor (its 3D file, if given, as fixed parts), the belt's slats on a slide
     (along x), then each object on its own free mount"""
     joints, links = [], [{}]
-    for k, (col, m) in enumerate(conveyor or []):
-        joints.append({"name": "conveyor_%d" % k, "type": "fixed", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [0, 0, 1]})
-        links.append(m.link(col))
     joints.append({"name": "belt_x", "type": "prismatic", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [1, 0, 0]})
     links.append(slats_mesh().link(0x6b7078))
     for k, o in enumerate(info):
@@ -2160,6 +2161,10 @@ def objects_model(info, conveyor=None):
             v, f = prim(t, size)
             m.add(v, f, quat_R(S.part_quat(eul)), pos)
         links[-1] = m.link(hexcol(o["rgba"]))
+    # the conveyor's parts last: the 3D view gives the joint items' values to the joints in their order, fixed ones too
+    for k, (col, m) in enumerate(conveyor or []):
+        joints.append({"name": "conveyor_%d" % k, "type": "fixed", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [0, 0, 1]})
+        links.append(m.link(col))
     return {"kind": "esasim.robot/1", "robot": OBJS, "units": "mm", "scale": 0.1, "angle_units": "rad", "joints": joints, "links": links,
             "base": {"xyz": [0, 0, 0], "rpy": [0, 0, 0]}}
 
@@ -2168,7 +2173,10 @@ def write_models(ctx, port, mjm, info, cache, conveyor_file=None):
     links = xarm_links(cache, ctx.log) or simple_xarm_links()
     arm, _ = arm_model(mjm, links)
     conv = None
-    if conveyor_file:
+    if conveyor_file and CONVEYOR["mode"] == "textured":
+        conveyor_mesh(conveyor_file, ctx.log)
+        ctx.log("The conveyor is drawn by the 3D view from its own file, with its materials: not baked into the objects model.")
+    elif conveyor_file:
         try:
             conv = conveyor_mesh(conveyor_file, ctx.log)
         except Exception as e:      # noqa: BLE001
@@ -2272,6 +2280,10 @@ def cell_objects(mjm):
     if not CONVEYOR_DRAWN["value"]:
         objs.append({"id": "belt", "kind": "box", "center": [200.0, round(S.BELT_Y * 1000, 1), -12.0],
                      "size": [2500.0, S.BELT_W * 1000, 24.0], "color": 0x1d1f23, "roughness": 0.95})
+    if CONVEYOR["mode"] == "textured" and CONVEYOR["fit"]:
+        fit = dict(CONVEYOR["fit"])
+        fit["asset"] = CONVEYOR.get("asset") or fit["asset"]
+        objs.append(fit)
     objs.append({"id": "pedestal", "kind": "box", "center": [0, 0, -375.0], "size": [180.0, 180.0, 750.0], "color": 0x3a3f47})
     cam = mjm.camera("cam").id
     R = d.cam_xmat[cam].reshape(3, 3)
@@ -3321,7 +3333,16 @@ def models_run(ctx):
 
 def run(ctx):
     what = str(ctx.params.get("mode") or "Learn to reach").lower()
-    viz.CONVEYOR_DRAWN["value"] = not str(ctx.params.get("belt_drawing") or "From the conveyor's 3D file").lower().startswith("box")
+    bd = str(ctx.params.get("belt_drawing") or "flat").lower()
+    viz.CONVEYOR["mode"] = "boxes" if bd.startswith("box") else "textured" if ("material" in bd or "textur" in bd) else "flat"
+    glb = [f for f in (ctx.inputs.get("conveyor") or []) if str(f.name).lower().endswith(".glb")]
+    if viz.CONVEYOR["mode"] == "textured" and glb and "model" not in what:
+        try:              # (where the 3D view is to draw the conveyor's own file: fitted to the belt as the models are)
+            viz.CONVEYOR["asset"] = str(getattr(glb[0], "rel", None) or glb[0].name).replace("\\", "/")
+            viz.conveyor_mesh(glb[0].path, lambda *a: None)
+        except Exception as e:      # noqa: BLE001
+            ctx.log("The conveyor's 3D file could not be read (%s): the belt is drawn with boxes." % e)
+    viz.CONVEYOR_DRAWN["value"] = viz.CONVEYOR["mode"] == "flat" or bool(viz.CONVEYOR["fit"])
     if "model" in what:
         return models_run(ctx)
     if "combine" in what:

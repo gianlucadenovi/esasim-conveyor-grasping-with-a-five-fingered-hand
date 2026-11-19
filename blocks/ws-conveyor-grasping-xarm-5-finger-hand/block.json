@@ -178,12 +178,13 @@
             "key": "belt_drawing",
             "label": "Belt drawn",
             "type": "select",
-            "default": "From the conveyor's 3D file",
+            "default": "Its own materials (3D file)",
             "options": [
-                "From the conveyor's 3D file",
+                "Its own materials (3D file)",
+                "Flat colours (3D file)",
                 "Boxes"
             ],
-            "help": "From the conveyor's 3D file: when the 3D models carry it (Make the 3D models with Conveyor model wired)"
+            "help": "Its own materials: the 3D view draws the conveyor's file itself, textures and all (wire it to Conveyor model; needs a 3D view with scene models). Flat colours: baked into the objects model by Make the 3D models."
         },
         {
             "key": "seed",
@@ -219,6 +220,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 11
+        "version": 12
     }
 }
