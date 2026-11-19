@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 3 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 4 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects.
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -7,7 +7,7 @@
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
 #   policy      Files (pt)                Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves
 # Outputs  ctx.output("id", "name.ext") is the path to write; ctx.write_json / ctx.write_text
-#   policy      Files (pt)                Network · grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt (Learn to reach, grasp, place)
+#   policy      Files (pt)                Network · grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used (Learn to reach, grasp, place)
 #   curve       Table (csv)               Learning curve · see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial)
 #   telemetry   Live telemetry            ctx.telemetry("channel", data) while it runs
 # Settings ctx.params["key"]
@@ -817,37 +817,68 @@ class Camera:
 
 def make_seenet(torch):
     import torch.nn as nn
+    F = nn.functional
 
     class SeeNet(nn.Module):
-        """camera image (point map and colour) -> the object's box: centre (3), half-extents (3), yaw (cos 2, sin 2),
-        seen (logit)"""
+        """camera image (point map and colour) -> which pixels are the object (a mask), and from them and what the
+        network makes of the whole picture, the object's box: centre (3), half-extents (3), yaw (cos 2, sin 2), seen"""
 
         def __init__(self):
             super().__init__()
-            self.f = nn.Sequential(
-                nn.Conv2d(6, 32, 5, 2, 2), nn.ELU(), nn.Conv2d(32, 64, 3, 2, 1), nn.ELU(),
-                nn.Conv2d(64, 64, 3, 2, 1), nn.ELU(), nn.Conv2d(64, 128, 3, 2, 1), nn.ELU())
-            self.h = nn.Sequential(nn.Flatten(), nn.Linear(128 * 5 * 6, 256), nn.ELU(), nn.Linear(256, 9))
+            self.d1 = nn.Sequential(nn.Conv2d(6, 32, 3, 2, 1), nn.ELU(), nn.Conv2d(32, 32, 3, 1, 1), nn.ELU())      # 36x48
+            self.d2 = nn.Sequential(nn.Conv2d(32, 64, 3, 1, 1), nn.ELU(), nn.Conv2d(64, 64, 3, 2, 1), nn.ELU())     # 18x24
+            self.d3 = nn.Sequential(nn.Conv2d(64, 96, 3, 1, 1), nn.ELU(), nn.Conv2d(96, 96, 3, 2, 1), nn.ELU())     # 9x12
+            self.u2 = nn.Sequential(nn.Conv2d(96 + 64, 64, 3, 1, 1), nn.ELU())
+            self.u1 = nn.Sequential(nn.Conv2d(64 + 32, 32, 3, 1, 1), nn.ELU())
+            self.m = nn.Conv2d(32 + 6, 1, 3, 1, 1)
+            self.h = nn.Sequential(nn.Linear(96 + 12, 256), nn.ELU(), nn.Linear(256, 9))
+            with torch.no_grad():
+                self.m.bias.fill_(-2.0)          # (most of the picture is not the object)
 
-        def forward(self, x):
-            o = self.h(self.f(x))
-            c = torch.stack([0.25 + 0.4 * o[:, 0], S.BELT_Y + 0.4 * o[:, 1], 0.1 * o[:, 2]], 1)
-            e = 0.01 + nn.functional.softplus(o[:, 3:6]) * 0.05
-            yw = o[:, 6:8] / (o[:, 6:8].norm(dim=1, keepdim=True) + 1e-6)
-            return c, e, yw, o[:, 8]
+        def forward(self, x, mask_out=False):
+            f1 = self.d1(x); f2 = self.d2(f1); f3 = self.d3(f2)
+            g2 = self.u2(torch.cat([F.interpolate(f3, size=f2.shape[-2:], mode="bilinear", align_corners=False), f2], 1))
+            g1 = self.u1(torch.cat([F.interpolate(g2, size=f1.shape[-2:], mode="bilinear", align_corners=False), f1], 1))
+            x = x[:, :, ::2, ::2]                                   # (the mask at half the camera's resolution: 36x48)
+            logit = self.m(torch.cat([g1, x], 1))[:, 0]
+            # the object's points, weighted by the mask: where they are, how they spread, how high they reach
+            w = torch.sigmoid(logit) * (x[:, 3:6].abs().sum(1) > 0).float()
+            ws = w.sum((1, 2)).clamp(min=1e-3)
+            X = 0.25 + 0.4 * x[:, 0]; Y = S.BELT_Y + 0.4 * x[:, 1]; H = 0.1 * x[:, 2]
+            mx = (w * X).sum((1, 2)) / ws; my = (w * Y).sum((1, 2)) / ws; mh = (w * H).sum((1, 2)) / ws
+            dx, dy = X - mx[:, None, None], Y - my[:, None, None]
+            cxx = (w * dx * dx).sum((1, 2)) / ws; cyy = (w * dy * dy).sum((1, 2)) / ws; cxy = (w * dx * dy).sum((1, 2)) / ws
+            hmax = (torch.softmax((H * 200).masked_fill(w < 0.5, -1e4).flatten(1), 1) * H.flatten(1)).sum(1)
+            area = ws / 100.0
+            stats = torch.stack([(mx - 0.25) / 0.4, (my - S.BELT_Y) / 0.4, mh * 10, cxx * 400, cyy * 400, cxy * 400, hmax * 10, area,
+                                 torch.sqrt(cxx + cyy + 1e-8) * 20, (cxx - cyy) * 400, 2 * cxy * 400, (ws > 1).float()], 1)
+            o = self.h(torch.cat([f3.mean((2, 3)), stats], 1))
+            c = torch.stack([mx + 0.05 * torch.tanh(o[:, 0]), my + 0.05 * torch.tanh(o[:, 1]), 0.5 * hmax + 0.03 * torch.tanh(o[:, 2])], 1)
+            e = 0.008 + F.softplus(o[:, 3:6]) * 0.04
+            yw = torch.stack([cxx - cyy, 2 * cxy], 1) * 400 + o[:, 6:8] * 0.3
+            yw = yw / (yw.norm(dim=1, keepdim=True) + 1e-6)
+            out = (c, e, yw, o[:, 8])
+            return out + (logit,) if mask_out else out
     return SeeNet()
 
 
-def see_loss(torch, out, centre, ext, yaw2, seen):
-    c, e, yw, logit = out
+def see_loss(torch, out, centre, ext, yaw2, seen, mask=None):
+    c, e, yw, logit = out[:4]
     el = ((ext[:, 0] - ext[:, 1]) / ext[:, 0].clamp(min=1e-3)).clamp(0, 1)      # yaw matters for long things only
     m = seen.float()
-    lc = (torch.nn.functional.smooth_l1_loss(c * 20, centre * 20, reduction="none").sum(1) * m).sum() / m.sum().clamp(min=1)
-    le = (torch.nn.functional.smooth_l1_loss(e * 20, ext * 20, reduction="none").sum(1) * m).sum() / m.sum().clamp(min=1)
+    lc = (torch.nn.functional.smooth_l1_loss(c * 50, centre * 50, reduction="none").sum(1) * m).sum() / m.sum().clamp(min=1)
+    le = (torch.nn.functional.smooth_l1_loss(e * 50, ext * 50, reduction="none").sum(1) * m).sum() / m.sum().clamp(min=1)
     ly = (((yw - yaw2) ** 2).sum(1) * el * m).sum() / m.sum().clamp(min=1)
     lv = torch.nn.functional.binary_cross_entropy_with_logits(logit, m)
-    return lc + le + ly + 0.2 * lv, {"centre_cm": float((((c.detach() - centre).norm(dim=1)) * m).sum() / m.sum().clamp(min=1) * 100),
-                                     "size_cm": float((((e.detach() - ext).abs().mean(1)) * m).sum() / m.sum().clamp(min=1) * 100)}
+    loss = lc + le + 2 * ly + 0.2 * lv
+    if mask is not None and len(out) > 4:
+        g = mask[:, ::2, ::2].float()
+        pw = torch.tensor(20.0, device=mask.device)       # (the object is a small part of the picture)
+        p = torch.sigmoid(out[4])
+        dice = 1 - (2 * (p * g).sum((1, 2)) + 1) / (p.sum((1, 2)) + g.sum((1, 2)) + 1)
+        loss = loss + torch.nn.functional.binary_cross_entropy_with_logits(out[4], g, pos_weight=pw) + 2.0 * dice.mean()
+    return loss, {"centre_cm": float((((c.detach() - centre).norm(dim=1)) * m).sum() / m.sum().clamp(min=1) * 100),
+                  "size_cm": float((((e.detach() - ext).abs().mean(1)) * m).sum() / m.sum().clamp(min=1) * 100)}
 
 
 class GraspEnv:
@@ -893,6 +924,7 @@ class GraspEnv:
         self.prev_a = z(n, ACT_DIM)
         self.steps = torch.zeros(n, dtype=torch.long, device=dev)
         self.ok_cnt, self.hold_cnt, self.bin_cnt = z(n), z(n), z(n)
+        self.hv_avg = z(n, 2)                # the hand's speed over the belt, smoothed (exploration jitters it step to step)
         self.lifted_ever = torch.zeros(n, dtype=torch.bool, device=dev)
         self.ep_ret = z(n)
         self.max_steps = int(EP_SECONDS[stage] / CTRL_DT)
@@ -975,6 +1007,7 @@ class GraspEnv:
         self.sim.set_rows(idx, qpos, qvel, ctrl)
         self.steps[idx] = 0
         self.ok_cnt[idx] = 0
+        self.hv_avg[idx] = 0
         self.hold_cnt[idx] = 0
         self.bin_cnt[idx] = 0
         self.lifted_ever[idx] = False
@@ -1034,8 +1067,9 @@ class GraspEnv:
         img = self.cam.image(depth, seg, self.rgba)
         objpix = torch.isin(seg, torch.as_tensor(self.gs, device=self.dev)).sum((1, 2))
         if self.see is not None:
-            with torch.no_grad():
-                c, e, yw, logit = self.see(img)
+            with torch.no_grad():            # (in pieces: thousands of pictures at once would fill the GPU's memory)
+                outs = [self.see(img[k:k + 512]) for k in range(0, img.shape[0], 512)]
+                c, e, yw, logit = [torch.cat([o[i] for o in outs]) for i in range(4)]
             seen = torch.sigmoid(logit) > 0.5
         else:
             _, _, c, e, yw = self.truth()
@@ -1142,7 +1176,8 @@ class GraspEnv:
         crush = (f.max(1).values - 25.0).clamp(min=0) / 25.0
         low = (0.004 - (g[:, 2] - 0.0)).clamp(min=0) * 50
         hv = sim.qvel[:, self.dh[0]:self.dh[0] + 2].float()
-        match = (hv[:, 0] + self.belt_v).abs() + hv[:, 1].abs()
+        self.hv_avg = 0.75 * self.hv_avg + 0.25 * hv
+        match = (self.hv_avg[:, 0] + self.belt_v).abs() + self.hv_avg[:, 1].abs()
         early = self.steps < 12                                            # (the object settling on the belt)
         self.z_rest = torch.where(self.steps == 12, op[:, 2], self.z_rest)
         r = 0.6 * r_reach + 0.25 * r_align + 0.1 * level.clamp(min=0) - 0.05 * rate - 1.0 * knock - 0.5 * crush - low
@@ -1150,7 +1185,7 @@ class GraspEnv:
         fail = (op[:, 0] < S.EXIT_X) | (op[:, 2] < -0.08)
         in_bin = ((op[:, 0] - S.BIN_C[0]).abs() < S.BIN_HALF[0]) & ((op[:, 1] - S.BIN_C[1]).abs() < S.BIN_HALF[1]) & (op[:, 2] < S.BIN_H) & (op[:, 2] > -0.02)
         if st == "reach":
-            ok = (dxy < 0.02) & (dz < 0.02) & (level > 0.85) & ((elong < 0.3) | (align > 0.7)) & (match < 0.05) & ~early
+            ok = (dxy < 0.025) & (dz < 0.025) & (level > 0.85) & ((elong < 0.3) | (align > 0.7)) & (match < 0.08) & ~early
             self.ok_cnt = torch.where(ok, self.ok_cnt + 1, torch.zeros_like(self.ok_cnt))
             success = self.ok_cnt >= 3
             r = r + 1.0 * r_reach * (dxy < 0.04).float() * (1 - torch.tanh(15 * dz)) + 10.0 * success.float()
@@ -1460,7 +1495,7 @@ from grasp_env import ACT_DIM, OBS_DIM, PRIV_DIM, STAGES, DROP, GraspEnv, make_s
 from ppo_part import PPO, chunks, make_ac, Norm, policy_stamp
 
 FORMAT = "esasim.grasp-policy/1"
-SEE_FORMAT = "esasim.grasp-see/1"
+SEE_FORMAT = "esasim.grasp-see/2"          # (2: the network finds the object's pixels, then its box)
 VIEW = "esasim.grasp/1"
 STAGE_NAME = {"reach": "Reach", "grasp": "Grasp", "place": "Place"}
 
@@ -1641,6 +1676,7 @@ def see_run(ctx):
     cap = min(16384, 12 * n)
     B_img = torch.zeros(cap, 6, S.CAM_H, S.CAM_W, dtype=torch.float16, device=dev)
     B_c, B_e, B_y, B_s = torch.zeros(cap, 3, device=dev), torch.zeros(cap, 3, device=dev), torch.zeros(cap, 2, device=dev), torch.zeros(cap, dtype=torch.bool, device=dev)
+    B_m = torch.zeros(cap, S.CAM_H, S.CAM_W, dtype=torch.bool, device=dev)       # which pixels are the object (the camera's segmentation)
     fill, head = 0, 0
     goal = torch.zeros(n, 3, device=dev)
     env.reset_all()
@@ -1670,8 +1706,8 @@ def see_run(ctx):
     def evaluate(img, c, e, y, s):
         with torch.no_grad():
             out = []
-            for k in range(0, img.shape[0], 512):
-                out.append(net(img[k:k + 512].float()))
+            for k in range(0, img.shape[0], 256):
+                out.append(net(img[k:k + 256].float()))
             cc = torch.cat([o[0] for o in out]); ee = torch.cat([o[1] for o in out]); yy = torch.cat([o[2] for o in out]); ll = torch.cat([o[3] for o in out])
         m = s.float()
         el = ((e[:, 0] - e[:, 1]) / e[:, 0].clamp(min=1e-3)) > 0.3
@@ -1707,13 +1743,14 @@ def see_run(ctx):
         k = img.shape[0]
         ids = (torch.arange(k, device=dev) + head) % cap
         B_img[ids] = img.half(); B_c[ids] = c; B_e[ids] = e; B_y[ids] = y; B_s[ids] = s
+        B_m[ids] = torch.isin(env.last_seg, torch.as_tensor(env.gs, device=dev))
         head = (head + k) % cap
         fill = min(cap, fill + k)
         seen_total += k
         net.train()
         for _ in range(max(2, min(16, k // 128))):
             j = torch.randint(fill, (256,), device=dev)
-            loss, st_ = see_loss(torch, net(B_img[j].float()), B_c[j], B_e[j], B_y[j], B_s[j])
+            loss, st_ = see_loss(torch, net(B_img[j].float(), mask_out=True), B_c[j], B_e[j], B_y[j], B_s[j], B_m[j])
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
@@ -1815,6 +1852,7 @@ def learn_run(ctx, stage):
     t0, last_tel, last_replay, it, best, stop = time.time(), 0.0, -1e9, 0, -1.0, "time"
     out_path = os.path.join(os.getcwd(), "policy_checkpoint.pt")
     rec, rec_ep, rec_obj = [], 0, object_item(env, 0)
+    dist_ = collections.deque(maxlen=3000)          # how far the grasp point ended from where it should be (cm)
 
     def score():
         return 100.0 * sum(h[0] for h in hist) / len(hist) if len(hist) >= 50 else 0.0
@@ -1842,6 +1880,7 @@ def learn_run(ctx, stage):
                 if bool(done.any()):
                     idx = done.nonzero(as_tuple=False).flatten()
                     sc_, fl_, ln_ = info["success"][idx].tolist(), info["fail"][idx].tolist(), env.steps[idx].tolist()
+                    dist_.extend((info["d"][idx] * 100).tolist())
                     rt_, ob_ = env.ep_ret[idx].tolist(), env.obj[idx].tolist()
                     for a_, b_, c_, d_, o_ in zip(sc_, fl_, ln_, rt_, ob_):
                         hist.append((1.0 if a_ else 0.0, 1.0 if b_ else 0.0, c_ * CTRL_DT, d_))
@@ -1878,11 +1917,11 @@ def learn_run(ctx, stage):
                 ret = sum(h[3] for h in hist) / k_
                 row = {"iteration": it, "minutes": round((time.time() - t0) / 60, 2), "steps_m": round(steps_done / 1e6, 2), "success": round(sc, 1),
                        "failed": round(fail, 1), "episode_s": round(eps, 1), "reward": round(ret, 1), "steps_per_s": round(sps),
-                       "std": round(stats["std"], 3), "kl": round(stats["kl"], 4)}
+                       "std": round(stats["std"], 3), "kl": round(stats["kl"], 4), "end_dist_cm": round(sum(dist_) / max(1, len(dist_)), 1)}
                 ctx.telemetry(ch_train, row)
                 cw.writerow([row["minutes"], it, steps_done, row["success"], row["failed"], row["episode_s"], row["reward"], row["steps_per_s"]])
                 curve.flush()
-                ctx.progress(min(99, 100 * (time.time() - t0) / (minutes * 60 + 1)), "%s: %.0f%% success · %.1f M steps" % (STAGE_NAME[stage], sc, steps_done / 1e6))
+                ctx.progress(min(99, 100 * (time.time() - t0) / (minutes * 60 + 1)), "%s: %.0f%% success · ends %.1f cm from the object · %.1f M steps" % (STAGE_NAME[stage], sc, row["end_dist_cm"], steps_done / 1e6))
     finally:
         curve.close()
     if best < 0 or score() >= best:
@@ -1890,6 +1929,8 @@ def learn_run(ctx, stage):
     final = torch.load(out_path, map_location="cpu", weights_only=False)
     name = "grasp_%s_%s_%02d.pt" % (stage, time.strftime("%Y%m%d_%H%M"), int(round(max(0.0, float(final.get("score") or 0)))))
     shutil.copyfile(out_path, ctx.output("policy", name))
+    if sp:      # (and the camera network it saw with, so that the next stage has both wherever it runs)
+        shutil.copyfile(sp["path"], ctx.output("policy", "grasp_see_%s.pt" % time.strftime("%Y%m%d_%H%M", time.localtime(sp["stamp"]))))
     po = final.get("per_object") or {}
     if po:
         ctx.log("Success per object: " + ", ".join("%s %d%%" % (S.TRAIN[k][0] if k in S.TRAIN else k, v) for k, v in sorted(po.items(), key=lambda x: -x[1])))
@@ -2083,7 +2124,10 @@ def _gpu_torch(ctx):
     jobs = os.path.dirname(os.path.dirname(here))
     base = os.path.dirname(jobs) if os.path.basename(jobs).lower() == "jobs" else os.path.dirname(here)
     target = os.path.join(base, "cache", "torch-cuda")
+    marker = target + ".failed"
     probe = "import torch; x = torch.ones(2, device='cuda') * 2; print(torch.__version__, float(x.sum()))"
+
+    why = [""]
 
     def works(path):
         env = dict(os.environ)
@@ -2091,14 +2135,32 @@ def _gpu_torch(ctx):
             env["PYTHONPATH"] = path + os.pathsep + env.get("PYTHONPATH", "")
         try:
             r = subprocess.run([_sys.executable, "-c", probe], capture_output=True, text=True, timeout=300, env=env)
+            why[0] = (r.stderr or r.stdout or "").strip().splitlines()[-1:] or [""]
+            why[0] = why[0][0]
             return r.returncode == 0 and "4.0" in r.stdout
-        except Exception:      # noqa: BLE001
+        except Exception as e:      # noqa: BLE001
+            why[0] = str(e)
             return False
     if os.path.isdir(os.path.join(target, "torch")) and works(target):
         _sys.path.insert(0, target)
         return
     if works(None):
         return
+    try:      # (a GPU this worker's runs cannot reach: nothing to install for)
+        smi = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True, timeout=60)
+        if smi.returncode != 0 or "GPU" not in smi.stdout:
+            ctx.log("This worker's runs cannot reach its NVIDIA GPU (nvidia-smi: %s): on the CPU. (Windows: the worker's "
+                    "service account needs access to the GPU.)" % (smi.stdout or smi.stderr).strip()[:200])
+            return
+    except Exception:          # noqa: BLE001
+        pass
+    try:      # (tried in the last day and the GPU could not be used: not again, the run goes on the CPU)
+        import time as _t
+        if os.path.exists(marker) and _t.time() - os.path.getmtime(marker) < 86400:
+            ctx.log("This worker's NVIDIA GPU cannot be used by its runs (%s): on the CPU." % open(marker).read().strip())
+            return
+    except Exception:          # noqa: BLE001
+        pass
     try:
         ver = subprocess.run([_sys.executable, "-c", "import torch; print(torch.__version__)"], capture_output=True, text=True, timeout=300).stdout.strip()
     except Exception:          # noqa: BLE001
@@ -2116,9 +2178,17 @@ def _gpu_torch(ctx):
             ctx.log("CUDA PyTorch ready (%s %s)." % (spec, cu))
             _sys.path.insert(0, target)
             return
-        ctx.log("PyTorch %s for %s did not work here: %s" % (spec, cu, (r.stderr or r.stdout or "")[-300:].strip()))
-        shutil.rmtree(target, ignore_errors=True)
-    ctx.log("No CUDA build of PyTorch would install: this run uses the CPU.")
+        ctx.log("PyTorch %s for %s did not work here: %s" % (spec, cu, why[0] if r.returncode == 0 else (r.stderr or r.stdout or "")[-300:].strip()))
+        if r.returncode == 0 and "No CUDA GPUs" in why[0]:
+            break       # (installed, but the GPU is not visible to this worker's runs: no other build will see it)
+    shutil.rmtree(target, ignore_errors=True)
+    try:
+        with open(marker, "w") as f:
+            f.write(why[0][:300])
+    except Exception:          # noqa: BLE001
+        pass
+    ctx.log("The GPU cannot be used on this worker (%s): this run uses the CPU. (Windows: the worker's service account needs access "
+            "to the GPU; nvidia-smi run by that account shows it.)" % why[0])
 
 
 def run(ctx):
