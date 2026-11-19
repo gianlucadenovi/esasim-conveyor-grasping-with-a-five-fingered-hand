@@ -1,0 +1,15 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 86
+    },
+    "name": "0 · GPU check (temporary)",
+    "description": "An empty grid: drag blocks from the menu.",
+    "published_version": 0,
+    "updated": "2026-11-19 07:01:55",
+    "graph": {
+        "nodes": [],
+        "edges": [],
+        "notes": []
+    }
+}

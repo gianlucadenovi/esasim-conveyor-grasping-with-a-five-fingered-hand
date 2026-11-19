@@ -18,6 +18,7 @@
 
 ## Flows
 
+- **0 · GPU check (temporary)**: An empty grid: drag blocks from the menu.
 - **1 · Learn to see**: The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.
 - **2 · Learn to reach**: The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.
 
@@ -44,6 +45,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Blueprints in this repository
 
+- [0 · GPU check (temporary)](blueprints/0-gpu-check-temporary.json) · 0 blocks
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 6 blocks · version 3
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 8 blocks · version 1
 
