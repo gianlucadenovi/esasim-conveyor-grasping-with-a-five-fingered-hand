@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 5 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 6 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects.
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -926,6 +926,7 @@ class GraspEnv:
         self.steps = torch.zeros(n, dtype=torch.long, device=dev)
         self.ok_cnt, self.hold_cnt, self.bin_cnt = z(n), z(n), z(n)
         self.hv_avg = z(n, 2)                # the hand's speed over the belt, smoothed (exploration jitters it step to step)
+        self.prev_d = z(n) - 1               # the grasp point's distance a step ago (-1: just reset)
         self.lifted_ever = torch.zeros(n, dtype=torch.bool, device=dev)
         self.ep_ret = z(n)
         self.max_steps = int(EP_SECONDS[stage] / CTRL_DT)
@@ -1010,6 +1011,7 @@ class GraspEnv:
         self.steps[idx] = 0
         self.ok_cnt[idx] = 0
         self.hv_avg[idx] = 0
+        self.prev_d[idx] = -1
         self.hold_cnt[idx] = 0
         self.bin_cnt[idx] = 0
         self.lifted_ever[idx] = False
@@ -1167,7 +1169,12 @@ class GraspEnv:
         d = (g - T).norm(dim=1)
         dxy = (g[:, :2] - T[:, :2]).norm(dim=1)
         dz = (g[:, 2] - T[:, 2]).abs()
-        r_reach = 1 - torch.tanh(8 * d)
+        # near (within ~15 cm) and far (from across the cell) terms: tanh(8 d) alone is flat a hand's length away,
+        # and the policy then never finds the object
+        r_reach = 0.5 * (1 - torch.tanh(8 * d)) + 0.5 * (1 - torch.tanh(2.5 * d))
+        # and the distance gained this step (a potential: it adds up to the start's distance minus the end's)
+        gain = torch.where(self.prev_d >= 0, (self.prev_d - d).clamp(-0.05, 0.05), torch.zeros_like(d))
+        self.prev_d = d.detach().clone()
         # palm down; fingers across the object's long side (the thumb and the fingers close along the hand's x)
         level = R[:, 2, 2]
         hx = R[:, :2, 0]
@@ -1195,7 +1202,7 @@ class GraspEnv:
         match = (self.hv_avg[:, 0] + self.belt_v).abs() + self.hv_avg[:, 1].abs()
         early = self.steps < 12                                            # (the object settling on the belt)
         self.z_rest = torch.where(self.steps == 12, op[:, 2], self.z_rest)
-        r = 0.6 * r_reach + 0.25 * r_align + 0.1 * level.clamp(min=0) - 0.05 * rate - 1.0 * knock - 0.5 * crush - low
+        r = 0.6 * r_reach + 20.0 * gain + 0.25 * r_align + 0.1 * level.clamp(min=0) - 0.05 * rate - 1.0 * knock - 0.5 * crush - low
         success = torch.zeros_like(held)
         fail = (op[:, 0] < S.EXIT_X) | (op[:, 2] < -0.08)
         in_bin = ((op[:, 0] - S.BIN_C[0]).abs() < S.BIN_HALF[0]) & ((op[:, 1] - S.BIN_C[1]).abs() < S.BIN_HALF[1]) & (op[:, 2] < S.BIN_H) & (op[:, 2] > -0.02)
@@ -1469,6 +1476,7 @@ def widen(torch, sd, obs, priv):
         if w.shape[1] < want:
             sd[key] = torch.cat([w, torch.zeros(w.shape[0], want - w.shape[1], dtype=w.dtype)], 1)
     return sd
+
 
 
 def chunks(rows, budget=40000):
@@ -2131,6 +2139,7 @@ def _load():
         mod._grasp_block = True
         _sys.modules[name] = mod
         exec(compile(_SOURCES[name], mod.__file__, "exec"), mod.__dict__)
+
 
 
 def _gpu_torch(ctx):
