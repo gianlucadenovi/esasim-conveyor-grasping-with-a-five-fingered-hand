@@ -1,0 +1,15 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 89
+    },
+    "name": "5 · Test with new objects",
+    "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
+    "published_version": 0,
+    "updated": "2026-11-19 08:11:08",
+    "graph": {
+        "nodes": [],
+        "edges": [],
+        "notes": []
+    }
+}

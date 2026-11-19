@@ -6,9 +6,21 @@
     "name": "2 · Learn to reach",
     "description": "The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.",
     "published_version": 1,
-    "updated": "2026-11-19 06:57:36",
+    "updated": "2026-11-19 08:11:02",
     "graph": {
         "nodes": [
+            {
+                "id": "nets",
+                "type": "dataset",
+                "x": -460,
+                "y": 40,
+                "params": {
+                    "dataset": "35",
+                    "version": "latest",
+                    "pattern": "*.pt"
+                },
+                "title": "Networks so far"
+            },
             {
                 "id": "arm",
                 "type": "ws-xarm-6-model",
@@ -34,7 +46,17 @@
                     "replay_every": 20,
                     "seed": 1
                 },
-                "title": "Learn to reach"
+                "title": "Learn to reach",
+                "dest": {
+                    "location": 9,
+                    "name": "grasp-networks",
+                    "folder": "",
+                    "live": true,
+                    "move": false,
+                    "ports": [
+                        "policy"
+                    ]
+                }
             },
             {
                 "id": "tel_robot",
@@ -85,10 +107,25 @@
                 "title": "Success"
             },
             {
-                "id": "reward",
+                "id": "dist",
                 "type": "chart",
                 "x": 1100,
                 "y": 200,
+                "params": {
+                    "kind": "line",
+                    "x": "minutes",
+                    "y": "end_dist_cm",
+                    "channel": "train",
+                    "ymin": "0",
+                    "title": "Where the hand ends, from the grasp point (cm)"
+                },
+                "title": "How close"
+            },
+            {
+                "id": "reward",
+                "type": "chart",
+                "x": 1100,
+                "y": 420,
                 "params": {
                     "kind": "line",
                     "x": "minutes",
@@ -104,7 +141,7 @@
                 "x": 760,
                 "y": 420,
                 "params": {
-                    "fields": "train.success,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
+                    "fields": "train.success,train.end_dist_cm,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
                     "style": "number",
                     "decimals": 1
                 },
@@ -112,6 +149,17 @@
             }
         ],
         "edges": [
+            {
+                "id": "nets.files>learn.policy",
+                "from": {
+                    "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "learn",
+                    "port": "policy"
+                }
+            },
             {
                 "id": "learn.telemetry>tel_robot.from",
                 "from": {
@@ -164,6 +212,17 @@
                 },
                 "to": {
                     "node": "success",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel_train.stream>dist.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "dist",
                     "port": "data"
                 }
             },

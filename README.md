@@ -21,10 +21,14 @@
 - **0 · GPU check (temporary)**: An empty grid: drag blocks from the menu.
 - **1 · Learn to see**: The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.
 - **2 · Learn to reach**: The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.
+- **3 · Learn to grasp**: From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.
+- **4 · Learn to place**: From the grasp it learned: carry the object to the bin and let it go there.
+- **5 · Test with new objects**: You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.
 
 ## What you need
 
 - A computer with the EsaSim worker (Project > Compute); it needs: NVIDIA GPU.
+- Data it reads: the dataset **grasp-networks** of the workspace, read by *Networks so far*.
 - Python packages, installed by the worker the first time: `torch`, `mujoco>=3.3`, `mujoco-warp`, `warp-lang`, `numpy`.
 
 ## How to run it
@@ -35,7 +39,11 @@
 
 ## What you get
 
-- On the **View** page: *Cell and camera* (1 · Learn to see), *Learning curve* (2 · Learn to reach), *What the camera sees* (1 · Learn to see), *How far off* (1 · Learn to see), *Which way it lies* (1 · Learn to see), *Learning* (2 · Learn to reach), *Episodes for the view* (2 · Learn to reach), *The cell* (2 · Learn to reach), *Success* (2 · Learn to reach), *Reward* (2 · Learn to reach).
+- On the **View** page: *Cell and camera* (1 · Learn to see), *Learning curve* (2 · Learn to reach), *What the camera sees* (1 · Learn to see), *How far off* (1 · Learn to see), *Which way it lies* (1 · Learn to see), *Learning* (1 · Learn to see), *Networks so far* (2 · Learn to reach), *Episodes for the view* (2 · Learn to reach), *The cell* (2 · Learn to reach), *Success* (2 · Learn to reach), *How close* (2 · Learn to reach), *Reward* (2 · Learn to reach).
+
+## Data and licences
+
+- the dataset **grasp-networks** of the workspace, read by *Networks so far*
 
 <!-- esasim: files of the project -->
 
@@ -47,7 +55,10 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 - [0 · GPU check (temporary)](blueprints/0-gpu-check-temporary.json) · 1 block · version 3
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 7 blocks · version 4
-- [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 8 blocks · version 1
+- [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 10 blocks · version 1
+- [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 0 blocks
+- [4 · Learn to place](blueprints/4-learn-to-place.json) · 0 blocks
+- [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 0 blocks
 
 ### Workspace blocks it uses
 
@@ -56,4 +67,6 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 1
 - [xArm model](blocks/ws-xarm-6-model) · version 2
 
-Keys pasted in blocks (secret settings) are not saved here. Datasets, results and the team stay in EsaSim.
+The data the blueprints read (grasp-networks) stays in EsaSim.
+
+Keys pasted in blocks (secret settings) are not saved here, nor are the team and the results of runs.

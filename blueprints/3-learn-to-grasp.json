@@ -1,0 +1,15 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 87
+    },
+    "name": "3 · Learn to grasp",
+    "description": "From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.",
+    "published_version": 0,
+    "updated": "2026-11-19 08:11:06",
+    "graph": {
+        "nodes": [],
+        "edges": [],
+        "notes": []
+    }
+}

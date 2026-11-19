@@ -1,0 +1,15 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 88
+    },
+    "name": "4 · Learn to place",
+    "description": "From the grasp it learned: carry the object to the bin and let it go there.",
+    "published_version": 0,
+    "updated": "2026-11-19 08:11:07",
+    "graph": {
+        "nodes": [],
+        "edges": [],
+        "notes": []
+    }
+}

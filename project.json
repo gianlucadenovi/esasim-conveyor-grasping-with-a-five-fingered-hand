@@ -27,7 +27,25 @@
             "name": "2 · Learn to reach",
             "file": "blueprints/2-learn-to-reach.json",
             "published_version": 1,
-            "nodes": 8
+            "nodes": 10
+        },
+        {
+            "name": "3 · Learn to grasp",
+            "file": "blueprints/3-learn-to-grasp.json",
+            "published_version": 0,
+            "nodes": 0
+        },
+        {
+            "name": "4 · Learn to place",
+            "file": "blueprints/4-learn-to-place.json",
+            "published_version": 0,
+            "nodes": 0
+        },
+        {
+            "name": "5 · Test with new objects",
+            "file": "blueprints/5-test-with-new-objects.json",
+            "published_version": 0,
+            "nodes": 0
         }
     ],
     "blocks": [
