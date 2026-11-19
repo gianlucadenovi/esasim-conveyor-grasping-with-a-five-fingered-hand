@@ -5,8 +5,8 @@
     },
     "name": "1 · Learn to see",
     "description": "The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.",
-    "published_version": 3,
-    "updated": "2026-11-19 06:55:00",
+    "published_version": 4,
+    "updated": "2026-11-19 08:09:01",
     "graph": {
         "nodes": [
             {
@@ -16,13 +16,23 @@
                 "y": 20,
                 "params": {
                     "mode": "Learn to see",
-                    "accelerator": "CPU",
-                    "worlds": 256,
-                    "minutes": 40,
-                    "training": "Continue",
+                    "accelerator": "auto",
+                    "worlds": 1024,
+                    "minutes": 30,
+                    "training": "Start over",
                     "seed": 1
                 },
-                "title": "Learn to see"
+                "title": "Learn to see",
+                "dest": {
+                    "location": 9,
+                    "name": "grasp-networks",
+                    "folder": "",
+                    "live": true,
+                    "move": false,
+                    "ports": [
+                        "policy"
+                    ]
+                }
             },
             {
                 "id": "tel_robot",
@@ -47,6 +57,14 @@
                     "keep": 4000
                 },
                 "title": "Learning curve"
+            },
+            {
+                "id": "view",
+                "type": "ws-conveyor-grasping-view",
+                "x": 760,
+                "y": -200,
+                "params": [],
+                "title": "What the camera sees"
             },
             {
                 "id": "err",
@@ -81,8 +99,8 @@
             {
                 "id": "numbers",
                 "type": "gauge-view",
-                "x": 760,
-                "y": -60,
+                "x": 1100,
+                "y": 160,
                 "params": {
                     "fields": "train.test_centre_cm,train.test_size_cm,train.test_yaw_deg,train.seen_pct,train.images_k,train.minutes",
                     "style": "number",
@@ -112,6 +130,17 @@
                 "to": {
                     "node": "tel_train",
                     "port": "from"
+                }
+            },
+            {
+                "id": "tel_robot.stream>view.live",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "view",
+                    "port": "live"
                 }
             },
             {
