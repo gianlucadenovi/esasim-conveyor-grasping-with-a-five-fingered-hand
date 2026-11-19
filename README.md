@@ -111,7 +111,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Blueprints in this repository
 
-- [0 · xArm model to EsaSim storage (one-off)](blueprints/0-xarm-model-to-esasim-storage-one-off.json) · 1 block · version 5
+- [0 · Make the 3D models (one-off)](blueprints/0-make-the-3d-models-one-off.json) · 1 block · version 6
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 8 blocks · version 5
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 10 blocks · version 3
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 9 blocks · version 1
@@ -120,9 +120,9 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Workspace blocks it uses
 
-- [xArm model](blocks/ws-xarm-6-model) · version 2
 - [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 8
 - [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 3
+- [xArm model](blocks/ws-xarm-6-model) · version 2
 
 The data the blueprints read (grasp-networks) stays in EsaSim.
 

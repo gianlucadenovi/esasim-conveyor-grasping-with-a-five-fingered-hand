@@ -3,30 +3,30 @@
         "kind": "blueprint",
         "flow_id": 86
     },
-    "name": "0 · xArm model to EsaSim storage (one-off)",
+    "name": "0 · Make the 3D models (one-off)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 5,
-    "updated": "2026-11-19 14:05:21",
+    "published_version": 6,
+    "updated": "2026-11-19 14:32:36",
     "graph": {
         "nodes": [
             {
-                "id": "arm",
-                "type": "ws-xarm-6-model",
+                "id": "models",
+                "type": "ws-conveyor-grasping-xarm-5-finger-hand",
                 "x": 0,
                 "y": 0,
                 "params": {
-                    "arm": "xArm 6",
-                    "detail": 3
+                    "mode": "Make the 3D models",
+                    "accelerator": "CPU"
                 },
-                "title": "xArm 6 model",
+                "title": "Make the 3D models",
                 "dest": {
-                    "location": 5,
-                    "name": "xarm-model",
+                    "location": 9,
+                    "name": "grasp-3d-models",
                     "folder": "",
                     "live": true,
                     "move": false,
                     "ports": [
-                        "model"
+                        "models"
                     ]
                 }
             }

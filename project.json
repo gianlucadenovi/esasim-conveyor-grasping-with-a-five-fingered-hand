@@ -12,9 +12,9 @@
     "readme": "README.md",
     "blueprints": [
         {
-            "name": "0 · xArm model to EsaSim storage (one-off)",
-            "file": "blueprints/0-xarm-model-to-esasim-storage-one-off.json",
-            "published_version": 5,
+            "name": "0 · Make the 3D models (one-off)",
+            "file": "blueprints/0-make-the-3d-models-one-off.json",
+            "published_version": 6,
             "nodes": 1
         },
         {
@@ -50,11 +50,6 @@
     ],
     "blocks": [
         {
-            "id": "ws-xarm-6-model",
-            "version": 2,
-            "name": "xArm model"
-        },
-        {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
             "version": 8,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
@@ -63,6 +58,11 @@
             "id": "ws-conveyor-grasping-view",
             "version": 3,
             "name": "Conveyor grasping view"
+        },
+        {
+            "id": "ws-xarm-6-model",
+            "version": 2,
+            "name": "xArm model"
         }
     ]
 }
