@@ -19,7 +19,14 @@
             "sha256": "f844b7b9ec529dcac6eee1360c13ade1ab34bd1951594442f9174f4fc37b16c0",
             "zip": "assets/models/xarm_hand.robot.json.gz",
             "in": "repo"
+        },
+        {
+            "path": "textures/esacode-logo.png",
+            "size": 25614,
+            "sha256": "5165bee68f3a011323761eb87cfae64a9f5076c092c6f27f2627a1a1820c1091",
+            "zip": "assets/textures/esacode-logo.png",
+            "in": "repo"
         }
     ],
-    "saved": "2026-11-19T14:33:54+00:00"
+    "saved": "2026-11-19T14:34:33+00:00"
 }

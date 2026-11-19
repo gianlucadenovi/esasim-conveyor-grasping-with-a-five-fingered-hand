@@ -44,8 +44,8 @@
         {
             "name": "5 · Test with new objects",
             "file": "blueprints/5-test-with-new-objects.json",
-            "published_version": 1,
-            "nodes": 6
+            "published_version": 2,
+            "nodes": 5
         }
     ],
     "blocks": [

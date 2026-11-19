@@ -5,8 +5,8 @@
     },
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
-    "published_version": 1,
-    "updated": "2026-11-19 14:15:40",
+    "published_version": 2,
+    "updated": "2026-11-19 14:34:20",
     "graph": {
         "nodes": [
             {
@@ -20,17 +20,6 @@
                     "pattern": "*.pt"
                 },
                 "title": "Networks learned"
-            },
-            {
-                "id": "arm",
-                "type": "ws-xarm-6-model",
-                "x": -460,
-                "y": -180,
-                "params": {
-                    "arm": "xArm 6",
-                    "detail": 3
-                },
-                "title": "xArm 6 model"
             },
             {
                 "id": "test",
@@ -51,24 +40,36 @@
                 "title": "Test with new objects"
             },
             {
-                "id": "tel_robot",
+                "id": "tel",
                 "type": "telemetry",
                 "x": 280,
                 "y": -60,
                 "params": {
                     "interval": 0.5,
-                    "channels": "robot,events",
-                    "keep": 120
+                    "channels": "joints,scene,events,camera_picture,test",
+                    "keep": 300
                 },
                 "title": "Live cell"
             },
             {
                 "id": "view",
-                "type": "ws-conveyor-grasping-view",
+                "type": "viewer-3d",
                 "x": 760,
                 "y": -160,
-                "params": [],
-                "title": "The test"
+                "params": {
+                    "environment": "outdoor",
+                    "quality": "high",
+                    "floor": true,
+                    "grid": false,
+                    "joints_channel": "joints",
+                    "scene_channel": "scene",
+                    "delay": 1.5,
+                    "numbers": "test.trials=Trials,test.grasped=Grasped,test.placed=In the bin,test.placed_pct=In the bin:%",
+                    "events_channel": "events",
+                    "controls": "select object Banana,Stepped cone,Drill,Pear,Spray can,U block,Plank,Flat egg,Duck,Torch,Z block,Pill bottle\nselect pose upright,on its side,tumbled\nslider turned 0 179 30 1\nslider speed 2 8 5 0.5\nbutton Put it on the belt\nbutton Finish now",
+                    "control_channel": "control"
+                },
+                "title": "The test (3D)"
             },
             {
                 "id": "table",
@@ -92,36 +93,25 @@
                 }
             },
             {
-                "id": "test.telemetry>tel_robot.from",
+                "id": "test.telemetry>tel.from",
                 "from": {
                     "node": "test",
                     "port": "telemetry"
                 },
                 "to": {
-                    "node": "tel_robot",
+                    "node": "tel",
                     "port": "from"
                 }
             },
             {
-                "id": "tel_robot.stream>view.live",
+                "id": "tel.stream>view.scene",
                 "from": {
-                    "node": "tel_robot",
+                    "node": "tel",
                     "port": "stream"
                 },
                 "to": {
                     "node": "view",
-                    "port": "live"
-                }
-            },
-            {
-                "id": "arm.model>view.arm",
-                "from": {
-                    "node": "arm",
-                    "port": "model"
-                },
-                "to": {
-                    "node": "view",
-                    "port": "arm"
+                    "port": "scene"
                 }
             },
             {
