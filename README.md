@@ -54,7 +54,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Blueprints in this repository
 
-- [0 · xArm model to EsaSim storage (one-off)](blueprints/0-xarm-model-to-esasim-storage-one-off.json) · 1 block · version 4
+- [0 · xArm model to EsaSim storage (one-off)](blueprints/0-xarm-model-to-esasim-storage-one-off.json) · 1 block · version 5
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 8 blocks · version 5
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 10 blocks · version 2
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 9 blocks

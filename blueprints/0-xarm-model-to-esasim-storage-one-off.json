@@ -5,8 +5,8 @@
     },
     "name": "0 · xArm model to EsaSim storage (one-off)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 4,
-    "updated": "2026-11-19 09:01:57",
+    "published_version": 5,
+    "updated": "2026-11-19 09:03:43",
     "graph": {
         "nodes": [
             {
@@ -20,7 +20,7 @@
                 },
                 "title": "xArm 6 model",
                 "dest": {
-                    "location": 4,
+                    "location": 5,
                     "name": "xarm-model",
                     "folder": "",
                     "live": true,
