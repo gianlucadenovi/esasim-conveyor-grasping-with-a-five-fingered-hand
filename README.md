@@ -116,7 +116,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 9 blocks · version 3
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 8 blocks · version 1
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 8 blocks · version 2
-- [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 6 blocks · version 3
+- [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 6 blocks · version 4
 - [tmp · inspect the conveyor model](blueprints/tmp-inspect-the-conveyor-model.json) · 2 blocks · version 1
 - [tmp · template look](blueprints/tmp-template-look.json) · 5 blocks
 
@@ -128,7 +128,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 The files the project's views draw with (3D models, textures, sounds), in [assets/](assets/):
 
-- [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 34 KB
+- [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 36 KB
 - [models/simple_rubber_conveyor.glb](assets/models/simple_rubber_conveyor.glb) · 2.9 MB
 - [models/xarm_hand.robot.json.gz](assets/models/xarm_hand.robot.json.gz) · 237 KB
 - [textures/esacode-logo.png](assets/textures/esacode-logo.png) · 25 KB
