@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 15 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 16 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -2352,6 +2352,7 @@ class Pose3D:
         self.err = 0.0
         self.scene = cell_objects(mjm)      # (sent again every few seconds: a view opened later still gets the cell)
         self.n_sent = 0
+        self.last_slide = None
 
     def snap(self, i=0):
         """what the 3D view needs of cell i, now (kept to be turned into joint items later, off the learning's way)"""
@@ -2366,6 +2367,12 @@ class Pose3D:
         arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq]
         r, p, y = rpy_of(quat_R(oq))
         slide = round((belt % SLAT_GAP) * 1000, 1)          # (the slats repeat every SLAT_GAP: where in the gap the belt is)
+        # when the slats wrap round to the start of a gap, the view must not slide them back across it (it eases
+        # between items): that item carries no value for them, so they jump, unseen, to where the next one puts them
+        wrap = self.last_slide is not None and slide > self.last_slide + 0.5 * SLAT_GAP * 1000
+        self.last_slide = slide
+        if wrap:
+            slide = None
         objs = [slide] + [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0] * self.nobj      # (every item complete: the objects not in play under the floor)
         objs[1 + 6 * o:7 + 6 * o] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000, 1), round(y, 4), round(p, 4), round(r, 4)]
         return ({"robot": ARM, "units": "rad", "q": arm}, {"robot": OBJS, "units": "rad", "q": objs})

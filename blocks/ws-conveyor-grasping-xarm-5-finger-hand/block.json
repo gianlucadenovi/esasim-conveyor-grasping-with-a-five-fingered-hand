@@ -197,21 +197,6 @@
         "cpu",
         "nvidia"
     ],
-    "hardware_by": {
-        "param": "accelerator",
-        "map": {
-            "CPU": [
-                "cpu"
-            ],
-            "NVIDIA GPU": [
-                "nvidia"
-            ],
-            "auto": [
-                "cpu",
-                "nvidia"
-            ]
-        }
-    },
     "packages": [
         "torch",
         "mujoco>=3.3",
@@ -220,6 +205,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 15
+        "version": 16
     }
 }
