@@ -28,7 +28,7 @@
 ## What you need
 
 - A computer with the EsaSim worker (Project > Compute); it needs: NVIDIA GPU.
-- Data it reads: the dataset **grasp-networks** of the workspace, read by *Networks so far*.
+- Data it reads: the dataset **grasp-networks** of the workspace, read by *Networks so far*; the dataset **grasp-networks** of the workspace, read by *Networks learned*.
 - Python packages, installed by the worker the first time: `torch`, `mujoco>=3.3`, `mujoco-warp`, `warp-lang`, `numpy`.
 
 ## How to run it
@@ -44,6 +44,7 @@
 ## Data and licences
 
 - the dataset **grasp-networks** of the workspace, read by *Networks so far*
+- the dataset **grasp-networks** of the workspace, read by *Networks learned*
 
 <!-- esasim: files of the project -->
 
@@ -56,9 +57,9 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [0 · GPU check (temporary)](blueprints/0-gpu-check-temporary.json) · 1 block · version 3
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 7 blocks · version 4
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 10 blocks · version 1
-- [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 0 blocks
-- [4 · Learn to place](blueprints/4-learn-to-place.json) · 0 blocks
-- [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 0 blocks
+- [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 9 blocks
+- [4 · Learn to place](blueprints/4-learn-to-place.json) · 9 blocks
+- [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 6 blocks
 
 ### Workspace blocks it uses
 

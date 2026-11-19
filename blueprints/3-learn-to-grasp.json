@@ -6,10 +6,226 @@
     "name": "3 · Learn to grasp",
     "description": "From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.",
     "published_version": 0,
-    "updated": "2026-11-19 08:11:06",
+    "updated": "2026-11-19 08:11:31",
     "graph": {
-        "nodes": [],
-        "edges": [],
-        "notes": []
+        "nodes": [
+            {
+                "id": "nets",
+                "type": "dataset",
+                "x": -460,
+                "y": 40,
+                "params": {
+                    "dataset": "35",
+                    "version": "latest",
+                    "pattern": "*.pt"
+                },
+                "title": "Networks so far"
+            },
+            {
+                "id": "arm",
+                "type": "ws-xarm-6-model",
+                "x": -460,
+                "y": -180,
+                "params": {
+                    "arm": "xArm 6",
+                    "detail": 3
+                },
+                "title": "xArm 6 model"
+            },
+            {
+                "id": "learn",
+                "type": "ws-conveyor-grasping-xarm-5-finger-hand",
+                "x": -140,
+                "y": 20,
+                "params": {
+                    "mode": "Learn to grasp",
+                    "accelerator": "NVIDIA GPU",
+                    "worlds": 2048,
+                    "minutes": 90,
+                    "training": "Continue",
+                    "replay_every": 20,
+                    "seed": 2
+                },
+                "title": "Learn to grasp",
+                "dest": {
+                    "location": 9,
+                    "name": "grasp-networks",
+                    "folder": "",
+                    "live": true,
+                    "move": false,
+                    "ports": [
+                        "policy"
+                    ]
+                }
+            },
+            {
+                "id": "tel_robot",
+                "type": "telemetry",
+                "x": 280,
+                "y": -60,
+                "params": {
+                    "interval": 0.5,
+                    "channels": "robot,events",
+                    "keep": 200
+                },
+                "title": "Episodes for the view"
+            },
+            {
+                "id": "tel_train",
+                "type": "telemetry",
+                "x": 280,
+                "y": 160,
+                "params": {
+                    "interval": 1,
+                    "channels": "train",
+                    "keep": 4000
+                },
+                "title": "Learning curve"
+            },
+            {
+                "id": "view",
+                "type": "ws-conveyor-grasping-view",
+                "x": 760,
+                "y": -160,
+                "params": [],
+                "title": "The cell"
+            },
+            {
+                "id": "success",
+                "type": "chart",
+                "x": 760,
+                "y": 200,
+                "params": {
+                    "kind": "line",
+                    "x": "minutes",
+                    "y": "success,failed",
+                    "channel": "train",
+                    "ymin": "0",
+                    "ymax": "100",
+                    "title": "Grasped and held (%) and dropped (%)"
+                },
+                "title": "Success"
+            },
+            {
+                "id": "reward",
+                "type": "chart",
+                "x": 1100,
+                "y": 200,
+                "params": {
+                    "kind": "line",
+                    "x": "minutes",
+                    "y": "reward",
+                    "channel": "train",
+                    "title": "Return per episode"
+                },
+                "title": "Reward"
+            },
+            {
+                "id": "numbers",
+                "type": "gauge-view",
+                "x": 760,
+                "y": 420,
+                "params": {
+                    "fields": "train.success,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
+                    "style": "number",
+                    "decimals": 1
+                },
+                "title": "Learning"
+            }
+        ],
+        "edges": [
+            {
+                "id": "nets.files>learn.policy",
+                "from": {
+                    "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "learn",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "learn.telemetry>tel_robot.from",
+                "from": {
+                    "node": "learn",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "tel_robot",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "learn.telemetry>tel_train.from",
+                "from": {
+                    "node": "learn",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "tel_train",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "tel_robot.stream>view.live",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "view",
+                    "port": "live"
+                }
+            },
+            {
+                "id": "arm.model>view.arm",
+                "from": {
+                    "node": "arm",
+                    "port": "model"
+                },
+                "to": {
+                    "node": "view",
+                    "port": "arm"
+                }
+            },
+            {
+                "id": "tel_train.stream>success.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "success",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel_train.stream>reward.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "reward",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel_train.stream>numbers.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "numbers",
+                    "port": "data"
+                }
+            }
+        ],
+        "notes": [],
+        "dash": {
+            "items": []
+        }
     }
 }

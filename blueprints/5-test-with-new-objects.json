@@ -6,10 +6,139 @@
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
     "published_version": 0,
-    "updated": "2026-11-19 08:11:08",
+    "updated": "2026-11-19 08:11:32",
     "graph": {
-        "nodes": [],
-        "edges": [],
-        "notes": []
+        "nodes": [
+            {
+                "id": "nets",
+                "type": "dataset",
+                "x": -460,
+                "y": 40,
+                "params": {
+                    "dataset": "35",
+                    "version": "latest",
+                    "pattern": "*.pt"
+                },
+                "title": "Networks learned"
+            },
+            {
+                "id": "arm",
+                "type": "ws-xarm-6-model",
+                "x": -460,
+                "y": -180,
+                "params": {
+                    "arm": "xArm 6",
+                    "detail": 3
+                },
+                "title": "xArm 6 model"
+            },
+            {
+                "id": "test",
+                "type": "ws-conveyor-grasping-xarm-5-finger-hand",
+                "x": -140,
+                "y": 20,
+                "params": {
+                    "mode": "Test with new objects",
+                    "accelerator": "auto",
+                    "worlds": 1,
+                    "minutes": 60,
+                    "pace": 1,
+                    "autoplay": "Yes",
+                    "idle": 15,
+                    "objects": "New objects only",
+                    "seed": 1
+                },
+                "title": "Test with new objects"
+            },
+            {
+                "id": "tel_robot",
+                "type": "telemetry",
+                "x": 280,
+                "y": -60,
+                "params": {
+                    "interval": 0.25,
+                    "channels": "robot,events",
+                    "keep": 600
+                },
+                "title": "Live cell"
+            },
+            {
+                "id": "view",
+                "type": "ws-conveyor-grasping-view",
+                "x": 760,
+                "y": -160,
+                "params": [],
+                "title": "The test"
+            },
+            {
+                "id": "table",
+                "type": "table-view",
+                "x": 760,
+                "y": 260,
+                "params": [],
+                "title": "Trials"
+            }
+        ],
+        "edges": [
+            {
+                "id": "nets.files>test.policy",
+                "from": {
+                    "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "test",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "test.telemetry>tel_robot.from",
+                "from": {
+                    "node": "test",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "tel_robot",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "tel_robot.stream>view.live",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "view",
+                    "port": "live"
+                }
+            },
+            {
+                "id": "arm.model>view.arm",
+                "from": {
+                    "node": "arm",
+                    "port": "model"
+                },
+                "to": {
+                    "node": "view",
+                    "port": "arm"
+                }
+            },
+            {
+                "id": "test.curve>table.data",
+                "from": {
+                    "node": "test",
+                    "port": "curve"
+                },
+                "to": {
+                    "node": "table",
+                    "port": "data"
+                }
+            }
+        ],
+        "notes": [],
+        "dash": {
+            "items": []
+        }
     }
 }
