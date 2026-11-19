@@ -39,7 +39,7 @@
 
 ## What you get
 
-- On the **View** page: *Cell and camera* (1 · Learn to see), *Learning curve* (2 · Learn to reach), *What the camera sees* (1 · Learn to see), *How far off* (1 · Learn to see), *Which way it lies* (1 · Learn to see), *Learning* (1 · Learn to see), *Networks so far* (2 · Learn to reach), *Episodes for the view* (2 · Learn to reach), *The cell* (2 · Learn to reach), *Success* (2 · Learn to reach), *How close* (2 · Learn to reach), *Reward* (2 · Learn to reach).
+- On the **View** page: *Networks so far* (2 · Learn to reach), *Cell and camera* (1 · Learn to see), *Learning curve* (2 · Learn to reach), *What the camera sees* (1 · Learn to see), *How far off* (1 · Learn to see), *Which way it lies* (1 · Learn to see), *Learning* (1 · Learn to see), *Episodes for the view* (2 · Learn to reach), *The cell* (2 · Learn to reach), *Success* (2 · Learn to reach), *How close* (2 · Learn to reach), *Reward* (2 · Learn to reach).
 
 ## Data and licences
 
@@ -55,7 +55,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 ### Blueprints in this repository
 
 - [0 · GPU check (temporary)](blueprints/0-gpu-check-temporary.json) · 1 block · version 3
-- [1 · Learn to see](blueprints/1-learn-to-see.json) · 7 blocks · version 4
+- [1 · Learn to see](blueprints/1-learn-to-see.json) · 8 blocks · version 5
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 10 blocks · version 1
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 9 blocks
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 9 blocks
