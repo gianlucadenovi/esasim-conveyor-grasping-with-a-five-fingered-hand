@@ -14,7 +14,7 @@
         {
             "name": "0 · Make the 3D models (one-off)",
             "file": "blueprints/0-make-the-3d-models-one-off.json",
-            "published_version": 9,
+            "published_version": 10,
             "nodes": 3
         },
         {
@@ -63,7 +63,7 @@
     "blocks": [
         {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
-            "version": 10,
+            "version": 11,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
         }
     ]

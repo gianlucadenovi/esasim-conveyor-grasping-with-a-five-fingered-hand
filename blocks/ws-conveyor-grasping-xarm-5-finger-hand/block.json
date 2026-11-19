@@ -7,7 +7,7 @@
     "side": "backend",
     "customizable": true,
     "summary": "A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr",
-    "help": "Modes. Learn to see: the camera beside the robot (96x72, depth and colour) feeds a small convolutional network that learns which pixels are the object, where it is, how big and which way it lies (18 training objects, checked on 12 kept for the test). Learn to reach / grasp / place: PPO over thousands of cells (MuJoCo Warp on an NVIDIA GPU, or MuJoCo on the CPU). The xArm 6 is simulated: six position servos with torque limits follow the hand target through inverse kinematics, and the arm, the hand and the fingers collide with the pedestal, the belt frame, the bin and its stand. Objects are dropped onto the moving belt so where they land varies. Each stage carries on from the one before. Parallel tasks (workers): more than 1 runs the round as that many tasks, each on its own worker (any hardware), all starting from the policy given as input; a combine task then averages their policies (weighted by the steps each gathered) into one, written as the round's output: chain rounds for distributed training. Test with new objects: the policy runs live; pick the object, its pose, its turn and the belt speed in the 3D view; the object falls from Drop height onto the moving belt. Make the 3D models: writes the xArm-with-hand and objects robot files for the project's assets; a conveyor .glb wired to Conveyor model is fitted to the belt and baked in. Telemetry channels: joints, scene, events, camera_picture, train (train_1.. for the other tasks), rounds, test.",
+    "help": "Modes. Learn to see: the camera beside the robot (96x72, depth and colour) feeds a small convolutional network that learns which pixels are the object, where it is, how big and which way it lies (18 training objects, checked on 12 kept for the test). Learn to reach / grasp / place: PPO over thousands of cells (MuJoCo Warp on an NVIDIA GPU, or MuJoCo on the CPU). The xArm 6 is simulated: six position servos with torque limits follow the hand target through inverse kinematics, and the arm, the hand and the fingers collide with the pedestal, the conveyor (frame and side rails), the bin and its stand. Objects are dropped onto the moving belt so where they land varies. Each stage carries on from the one before. Multi-worker rounds: put several Learn nodes in a flow, each with its own Task in a round (1, 2, 3...) and its own Run on (GPU or CPU), all fed the same start policy; wire their Network outputs into a node in Combine a round mode, which averages their policies (weighted by the steps each gathered) into the round's policy; chain rounds for distributed training. Test with new objects: the policy runs live; pick the object, its pose, its turn and the belt speed in the 3D view; the object falls from Drop height onto the moving belt. Make the 3D models: writes the xArm-with-hand and objects robot files for the project's assets; a conveyor .glb wired to Conveyor model is fitted to the belt and baked in. Telemetry channels: joints, scene, events, camera_picture, train (train_1.. for the other tasks), rounds, test.",
     "inputs": [
         {
             "id": "policy",
@@ -19,7 +19,7 @@
                 "pt",
                 "py"
             ],
-            "help": "Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves (not in parallel rounds, whi"
+            "help": "Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from, test or combine; those left on the machine by earlier runs are found by themselves (not in a round, which"
         },
         {
             "id": "conveyor",
@@ -40,7 +40,7 @@
             "formats": [
                 "pt"
             ],
-            "help": "grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; a parallel round: the combined policy"
+            "help": "grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; Combine a round: the combined policy"
         },
         {
             "id": "curve",
@@ -72,6 +72,7 @@
                 "Learn to reach",
                 "Learn to grasp",
                 "Learn to place",
+                "Combine a round",
                 "Test with new objects",
                 "Make the 3D models"
             ]
@@ -89,13 +90,13 @@
             "help": "auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU"
         },
         {
-            "key": "tasks",
-            "label": "Parallel tasks (workers)",
+            "key": "round_task",
+            "label": "Task in a round",
             "type": "number",
-            "default": 1,
-            "min": 1,
-            "max": 16,
-            "help": "Learn to reach / grasp / place: more than 1 splits the round over that many workers (CPU or GPU), then averages their policies"
+            "default": 0,
+            "min": 0,
+            "max": 32,
+            "help": "0: learns alone. 1, 2, 3...: one of the Learn nodes of a multi-worker round (all start from the policy wired in; task 1 drives the 3D view); a Combine a round node averages them"
         },
         {
             "key": "worlds",
@@ -218,6 +219,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 10
+        "version": 11
     }
 }

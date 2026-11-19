@@ -5,8 +5,8 @@
     },
     "name": "0 · Make the 3D models (one-off)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 9,
-    "updated": "2026-11-19 15:44:41",
+    "published_version": 10,
+    "updated": "2026-11-19 16:03:36",
     "graph": {
         "nodes": [
             {
@@ -43,7 +43,7 @@
                 "title": "Make the 3D models",
                 "dest": {
                     "location": 9,
-                    "name": "grasp-3d-models-3",
+                    "name": "grasp-3d-models-4",
                     "folder": "",
                     "live": true,
                     "move": false,

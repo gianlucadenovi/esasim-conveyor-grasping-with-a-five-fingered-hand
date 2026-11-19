@@ -1,21 +1,21 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 10 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 11 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
-#   policy      Files (pt, py)            Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves (not in parallel rounds, whi
+#   policy      Files (pt, py)            Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from, test or combine; those left on the machine by earlier runs are found by themselves (not in a round, which
 #   conveyor    Files (glb)               Conveyor model · optional · Make the 3D models: a conveyor 3D file (.glb), fitted to the simulated belt and drawn in place of the boxes
 # Outputs  ctx.output("id", "name.ext") is the path to write; ctx.write_json / ctx.write_text
-#   policy      Files (pt)                Network · grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; a parallel round: the combined policy
+#   policy      Files (pt)                Network · grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; Combine a round: the combined policy
 #   curve       Table (csv)               Learning curve · see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial)
 #   models      Files (gz)                3D models · Make the 3D models: xarm_hand.robot.json.gz and belt_objects.robot.json.gz (with the conveyor's 3D file when one is wired in), for the project's assets
 #   telemetry   Live telemetry            ctx.telemetry("channel", data) while it runs
 # Settings ctx.params["key"]
 #   mode        select    What to do = "Learn to reach" of Learn to see | Learn to reach | Learn to grasp | Learn to place | …
 #   accelerator select    Run on = "auto" of auto | NVIDIA GPU | CPU
-#   tasks       number    Parallel tasks (workers) = 1
+#   round_task  number    Task in a round = 0
 #   worlds      number    Cells learning at once = 2048
 #   minutes     number    Minutes = 60
 #   training    select    Training = "Continue" of Continue | Start over
@@ -53,6 +53,7 @@ import math
 import numpy as np
 
 BELT_Y, BELT_W, BELT_TOP = 0.42, 0.30, 0.0       # belt centre line (y), width, top surface height
+RAIL_HW, RAIL_HH = 0.037, 0.0185                # the side rails' half width and half height (the conveyor model's: 7.4 cm wide, 3.7 cm above the belt)
 BELT_LEN = 6.4                                   # long enough to run a whole episode without being reset
 BELT_X0 = 0.2                                    # belt centre (x) at the start of an episode
 SPAWN_X = (0.55, 0.72)                           # where objects are put on the belt
@@ -308,14 +309,14 @@ def scene_xml(obj_parts=None, rgba=None):
          '<light pos="-0.6 -0.4 1.2" dir="0.4 0.4 -1" diffuse="0.35 0.35 0.35" castshadow="false"/>',
          '<geom name="floor" type="plane" size="3 3 0.1" pos="0 0 -0.75" rgba="0.55 0.56 0.58 1" contype="0" conaffinity="0"/>',
          '<geom name="pedestal" type="box" size="0.09 0.09 0.375" pos="0 0 -0.375" rgba="0.3 0.3 0.33 1" contype="1" conaffinity="2"/>',
-         '<geom name="belt_frame" type="box" size="%s" pos="%s" rgba="0.35 0.37 0.40 1" contype="1" conaffinity="2"/>' % (_f((1.25, BELT_W / 2 + 0.03, 0.36)), _f((0.2, BELT_Y, -0.39))),
+         '<geom name="belt_frame" type="box" size="%s" pos="%s" rgba="0.35 0.37 0.40 1" contype="1" conaffinity="2"/>' % (_f((1.25, BELT_W / 2 + 0.074, 0.36)), _f((0.2, BELT_Y, -0.39))),
          # the belt: a long slab on a slide, driven at the belt speed; objects ride on it by friction
          '<body name="belt" pos="%s"><joint name="belt" type="slide" axis="1 0 0" damping="5"/>' % _f((BELT_X0, BELT_Y, 0)),
          '<geom name="belt" type="box" size="%s" pos="0 0 -0.012" mass="40" material="belt" contype="1" conaffinity="2" condim="3" friction="1.0 0.01 0.001"/>' % _f((BELT_LEN / 2, BELT_W / 2, 0.012)),
          '</body>',
          # side rails, so round things stay on the belt
-         '<geom name="rail_l" type="box" size="%s" pos="%s" rgba="0.55 0.58 0.62 1" contype="1" conaffinity="2" friction="0.3"/>' % (_f((1.25, 0.008, 0.016)), _f((0.2, BELT_Y + BELT_W / 2 + 0.008, 0.008))),
-         '<geom name="rail_r" type="box" size="%s" pos="%s" rgba="0.55 0.58 0.62 1" contype="1" conaffinity="2" friction="0.3"/>' % (_f((1.25, 0.008, 0.016)), _f((0.2, BELT_Y - BELT_W / 2 - 0.008, 0.008))),
+         '<geom name="rail_l" type="box" size="%s" pos="%s" rgba="0.55 0.58 0.62 1" contype="1" conaffinity="2" friction="0.3"/>' % (_f((1.25, RAIL_HW, RAIL_HH)), _f((0.2, BELT_Y + BELT_W / 2 + RAIL_HW, RAIL_HH))),
+         '<geom name="rail_r" type="box" size="%s" pos="%s" rgba="0.55 0.58 0.62 1" contype="1" conaffinity="2" friction="0.3"/>' % (_f((1.25, RAIL_HW, RAIL_HH)), _f((0.2, BELT_Y - BELT_W / 2 - RAIL_HW, RAIL_HH))),
          # the bin
          '<body name="bin" pos="%s">' % _f(BIN_C),
          '<geom name="bin_floor" type="box" size="%s" pos="0 0 -0.006" rgba="0.20 0.42 0.70 1" contype="1" conaffinity="2"/>' % _f((bx + BIN_WALL, by + BIN_WALL, 0.006)),
@@ -2035,7 +2036,7 @@ def glb_meshes(data):
 
     cols = []
     for mt in js.get("materials", []):
-        c = (mt.get("pbrMetallicRoughness") or {}).get("baseColorFactor", [0.6, 0.6, 0.6, 1])
+        c = (mt.get("pbrMetallicRoughness") or {}).get("baseColorFactor")
         cols.append(c)
     out = []
 
@@ -2043,14 +2044,17 @@ def glb_meshes(data):
         nd = js["nodes"][i]
         T = Tp @ node_T(nd)
         if "mesh" in nd:
-            for pr in js["meshes"][nd["mesh"]]["primitives"]:
+            mesh = js["meshes"][nd["mesh"]]
+            for pr in mesh["primitives"]:
                 if pr.get("mode", 4) != 4:
                     continue
                 v = acc(pr["attributes"]["POSITION"])
                 v = v @ T[:3, :3].T + T[:3, 3]
                 f = acc(pr["indices"]).reshape(-1, 3) if "indices" in pr else np.arange(len(v)).reshape(-1, 3)
-                c = cols[pr["material"]] if pr.get("material") is not None and pr["material"] < len(cols) else [0.6, 0.6, 0.6, 1]
-                out.append((v, f, c))
+                mi = pr.get("material")
+                c = cols[mi] if mi is not None and mi < len(cols) else None
+                mname = js["materials"][mi].get("name", "") if mi is not None and mi < len(js.get("materials", [])) else ""
+                out.append((v, f, c, " ".join([str(nd.get("name", "")), str(mesh.get("name", "")), str(mname)]).lower()))
         for ch in nd.get("children", []):
             walk(ch, T)
     sc = js.get("scenes", [{"nodes": list(range(len(js.get("nodes", []))))}])[js.get("scene", 0)]
@@ -2060,43 +2064,68 @@ def glb_meshes(data):
     return out
 
 
+CONVEYOR_LEN = 2.5                # (m) the length the conveyor's 3D file is drawn at (the simulated belt's frame)
+FLOOR_Z = -0.75                   # the floor (the xArm's pedestal is 75 cm tall)
+
+
+def part_colour(c, name):
+    """a part's colour: its material's, else one by its name (a textured model has none)"""
+    if c is not None:
+        return hexcol(c)
+    if "belt" in name or "rubber" in name:
+        return 0x1d1f23
+    if "leg" in name or "stand" in name or "foot" in name or "feet" in name:
+        return 0x4a4f57
+    return 0x9aa1aa
+
+
 def conveyor_mesh(path, log):
-    """the conveyor's 3D file, fitted to the simulated belt: its long side along the belt, its width the belt frame's,
-    its top at the rails' top, centred on the belt; the parts by colour, decimated"""
+    """the conveyor's 3D file, fitted to the simulated one: its long side along the belt (CONVEYOR_LEN long, centred on
+    the belt), its belt (the part named belt) as wide as the simulated belt and its top surface on it, its feet on the
+    floor. The proportions across and up are kept as far as that allows; the parts coloured by their names."""
     parts = glb_meshes(open(path, "rb").read())
     if not parts:
         return None
-    allv = np.concatenate([v for v, f, c in parts])
+    allv = np.concatenate([p[0] for p in parts])
     lo, hi = allv.min(0), allv.max(0)
     ext = hi - lo
     turn = ext[1] > ext[0]                         # (its long side along y: turned a quarter so it runs along x)
     if turn:
         Rq = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1.0]])
-        parts = [(v @ Rq.T, f, c) for v, f, c in parts]
-        allv = np.concatenate([v for v, f, c in parts])
+        parts = [(v @ Rq.T, f, c, nm) for v, f, c, nm in parts]
+        allv = np.concatenate([p[0] for p in parts])
         lo, hi = allv.min(0), allv.max(0)
         ext = hi - lo
-    s = (S.BELT_W + 0.06) / max(ext[1], 1e-6)
-    shift = np.array([0.2, S.BELT_Y, 0.016]) - np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, hi[2]]) * s
-    log("Conveyor model: %d parts, %d triangles; %.2f x %.2f x %.2f m in its file%s; scaled %.3f to the belt (%.2f m long, %.2f m high)."
-        % (len(parts), sum(len(f) for v, f, c in parts), ext[0], ext[1], ext[2], ", turned a quarter" if turn else "", s, ext[0] * s, ext[2] * s))
+    belt = [p for p in parts if "belt" in p[3]]
+    if belt:
+        bv = np.concatenate([p[0] for p in belt])
+        b_lo, b_hi = bv.min(0), bv.max(0)
+    else:                                          # (no part named belt: the belt is taken as the whole width, under the top)
+        b_lo, b_hi = lo.copy(), hi.copy()
+    sx = CONVEYOR_LEN / max(ext[0], 1e-6)
+    sy = S.BELT_W / max(b_hi[1] - b_lo[1], 1e-6)
+    sz = (S.BELT_TOP - FLOOR_Z) / max(b_hi[2] - lo[2], 1e-6)
+    sc = np.array([sx, sy, sz])
+    shift = np.array([0.2, S.BELT_Y, S.BELT_TOP]) - np.array([(lo[0] + hi[0]) / 2, (b_lo[1] + b_hi[1]) / 2, b_hi[2]]) * sc
+    log("Conveyor model: %d parts, %d triangles; %.2f m long, %.2f m wide, %.2f m high in its file%s, its belt %.2f m wide with its top at %.2f m. "
+        "Drawn %.2f m long, its belt %.2f m wide (the simulated one), its top on the belt and its feet on the floor (scaled %.2f along, %.2f across, %.2f up)."
+        % (len(parts), sum(len(p[1]) for p in parts), ext[0], ext[1], ext[2], ", turned a quarter" if turn else "", b_hi[1] - b_lo[1], b_hi[2] - lo[2],
+           CONVEYOR_LEN, S.BELT_W, sx, sy, sz))
     by_col = {}
-    for v, f, c in parts:
-        key = hexcol(c)
-        by_col.setdefault(key, []).append((v * s + shift, f))
+    for v, f, c, nm in parts:
+        by_col.setdefault(part_colour(c, nm), []).append((v * sc + shift, f))
     links = []
     for col, items in by_col.items():
         m = Mesh()
         for v, f in items:
-            tris = v[f]                                       # (k, 3, 3)
-            vv, ff = decimate(tris * 1000.0, 2.0) if len(f) > 3000 else (v * 1000.0, f)
+            vv, ff = decimate(v[f] * 1000.0, 2.0) if len(f) > 3000 else (v * 1000.0, f)
             m.add(vv / 1000.0, ff)
         links.append((col, m))
     return links
 
 
 SLAT_GAP = 0.10                   # the belt's slats, every 10 cm: they move with the simulated belt
-SLAT_X = (-1.0, 1.35)
+SLAT_X = (-1.03, 1.33)            # (along the drawn belt: CONVEYOR_LEN centred on x = 0.2)
 
 
 def slats_mesh():
@@ -2891,6 +2920,9 @@ def learn_run(ctx, stage):
     task = getattr(ctx, "task", None)
     n_tasks = int(getattr(task, "count", 1) or 1)
     t_idx = int(getattr(task, "index", 0) or 0)
+    rt = int(float(p.get("round_task") or 0))         # (a round made of several nodes of this block, each its own worker)
+    if n_tasks <= 1 and rt > 0:
+        n_tasks, t_idx = max(2, rt), rt - 1
     lead = t_idx == 0                                  # (the first task drives the 3D view and the learning curve)
     ch_train = ch_train if lead else "%s_%d" % (ch_train, t_idx)
     found = [] if str(p.get("training") or "").lower().startswith("start") else find_files(ctx, "policy", "policy_checkpoint.pt", FORMAT)
@@ -2913,7 +2945,7 @@ def learn_run(ctx, stage):
     else:
         ctx.log("No policy to carry on from: a new one learns from nothing.")
     ctx.log("Learning to %s on %s: %d cells at once, for up to %.0f minutes%s." % (stage, label, n, minutes,
-            (" (task %d of %d of this round: its policy is averaged with the others' when they are done)" % (t_idx + 1, n_tasks)) if n_tasks > 1 else ""))
+            (" (task %d of this round: its policy is averaged with the others' when they are done)" % (t_idx + 1)) if n_tasks > 1 else ""))
     steps_start = steps_done
     pose = viz.Pose3D(env)
     if lead:
@@ -2943,7 +2975,7 @@ def learn_run(ctx, stage):
         st = algo.state()
         st.update({"format": FORMAT, "stage": stage, "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": ACT_DIM, "score": score(), "note": note,
                    "steps": steps_done, "round_steps": steps_done - steps_start, "device": label, "minutes": (time.time() - t0) / 60, "ctrl_dt": CTRL_DT,
-                   "episodes": len(hist), "arm": "xarm6-in-physics",
+                   "episodes": len(hist), "arm": "xarm6-in-physics", "round_task": (t_idx + 1) if n_tasks > 1 else 0,
                    "per_object": {k: round(100 * sum(v) / max(1, len(v))) for k, v in per_obj.items()}})
         torch.save(st, out_path)
 
@@ -3038,12 +3070,17 @@ def combine_run(ctx, stage):
                 except Exception as e:      # noqa: BLE001
                     ctx.log("Skipped %s: %s" % (f.name, e))
                     continue
-                if st.get("format") == FORMAT and st.get("stage") == stage and f.task is not None:
+                if st.get("format") == FORMAT and (stage is None or st.get("stage") == stage) and (getattr(f, "task", None) is not None or st.get("round_task")):
                     pols.append((f, st))
                 elif st.get("format") == SEE_FORMAT:
                     sees.append(f)
     if not pols:
-        raise RuntimeError("No policies from this round's tasks to combine.")
+        raise RuntimeError("No policies from this round's tasks to combine (wire the Network outputs of the round's Learn nodes in).")
+    if stage is None:              # (Combine a round: the stage of the policies wired in)
+        order = {s_: k for k, s_ in enumerate(STAGES)}
+        stage = max((st.get("stage") for f, st in pols), key=lambda s_: order.get(s_, -1))
+        pols = [(f, st) for f, st in pols if st.get("stage") == stage]
+    tag = lambda f, st: f.task if getattr(f, "task", None) is not None else st.get("round_task")    # noqa: E731
     w = np.array([max(1.0, float(st.get("round_steps") or 0)) for f, st in pols])
     w = w / w.sum()
     base = pols[int(np.argmax(w))][1]
@@ -3070,6 +3107,7 @@ def combine_run(ctx, stage):
     out["score"] = float(sum(e * float(st.get("score") or 0) for e, (f, st) in zip(eps, pols)) / max(1.0, sum(eps)))
     out["steps"] = int(max(float(st.get("steps") or 0) - float(st.get("round_steps") or 0) for f, st in pols) + sum(float(st.get("round_steps") or 0) for f, st in pols))
     out["round_steps"] = 0
+    out["round_task"] = 0
     out["lr"] = float(np.median([float(st.get("lr") or 3e-4) for f, st in pols]))
     out["note"] = "averaged from %d workers" % len(pols)
     out["device"] = " + ".join(str(st.get("device")) for f, st in pols)
@@ -3078,12 +3116,12 @@ def combine_run(ctx, stage):
     for f in sees[:1]:
         shutil.copyfile(f.path, ctx.output("policy", f.name))
     for (f, st), wi in zip(pols, w):
-        ctx.log("Task %s on %s: %.0f%% success, %.1f M steps this round, weight %.2f." % (f.task, st.get("device"), float(st.get("score") or 0), float(st.get("round_steps") or 0) / 1e6, wi))
+        ctx.log("Task %s on %s: %.0f%% success, %.1f M steps this round, weight %.2f." % (tag(f, st), st.get("device"), float(st.get("score") or 0), float(st.get("round_steps") or 0) / 1e6, wi))
     ctx.log("Combined: %s (%.0f%% success across the workers, %.1f M steps in all)." % (name, out["score"], out["steps"] / 1e6))
     row = {"success": round(out["score"], 1), "steps_m": round(out["steps"] / 1e6, 2), "workers": len(pols)}
     for (f, st) in pols:
-        row["task%s_steps_m" % f.task] = round(float(st.get("round_steps") or 0) / 1e6, 2)
-        row["task%s_success" % f.task] = round(float(st.get("score") or 0), 1)
+        row["task%s_steps_m" % tag(f, st)] = round(float(st.get("round_steps") or 0) / 1e6, 2)
+        row["task%s_success" % tag(f, st)] = round(float(st.get("score") or 0), 1)
     ctx.telemetry("rounds", row)
     return {"success_pct": round(out["score"], 1), "stage": stage, "workers": len(pols), "steps_m": round(out["steps"] / 1e6, 1)}
 
@@ -3286,6 +3324,8 @@ def run(ctx):
     viz.CONVEYOR_DRAWN["value"] = not str(ctx.params.get("belt_drawing") or "From the conveyor's 3D file").lower().startswith("box")
     if "model" in what:
         return models_run(ctx)
+    if "combine" in what:
+        return combine_run(ctx, None)
     if "see" in what:
         return see_run(ctx)
     if "test" in what:
