@@ -5,8 +5,8 @@
     },
     "name": "0 · Make the 3D models (one-off)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 10,
-    "updated": "2026-11-19 16:03:36",
+    "published_version": 11,
+    "updated": "2026-11-19 18:53:06",
     "graph": {
         "nodes": [
             {
@@ -38,12 +38,13 @@
                 "y": 0,
                 "params": {
                     "mode": "Make the 3D models",
-                    "accelerator": "CPU"
+                    "accelerator": "CPU",
+                    "belt_drawing": "Flat colours (3D file)"
                 },
                 "title": "Make the 3D models",
                 "dest": {
                     "location": 9,
-                    "name": "grasp-3d-models-4",
+                    "name": "grasp-3d-models-5",
                     "folder": "",
                     "live": true,
                     "move": false,
