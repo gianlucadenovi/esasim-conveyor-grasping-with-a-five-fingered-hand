@@ -14,6 +14,13 @@
             "in": "repo"
         },
         {
+            "path": "models/simple_rubber_conveyor.glb",
+            "size": 3080048,
+            "sha256": "4b473efcf9b1a46b7b743a90aaa58df2012317d2092ad2290418550b0d3e439b",
+            "zip": "assets/models/simple_rubber_conveyor.glb",
+            "in": "repo"
+        },
+        {
             "path": "models/xarm_hand.robot.json.gz",
             "size": 243093,
             "sha256": "f844b7b9ec529dcac6eee1360c13ade1ab34bd1951594442f9174f4fc37b16c0",
@@ -28,5 +35,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-19T14:34:33+00:00"
+    "saved": "2026-11-19T14:54:15+00:00"
 }
