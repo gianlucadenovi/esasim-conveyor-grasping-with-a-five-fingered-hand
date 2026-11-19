@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 12 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 13 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -25,7 +25,7 @@
 #   autoplay    select    Test: pick objects when idle = "Yes" of Yes | No
 #   idle        number    Test: idle before it picks (s) = 8
 #   objects     select    Test objects = "New objects only" of New objects only | All objects
-#   belt_drawing select    Belt drawn = "Its own materials (3D file)" of Its own materials (3D file) | Flat colours (3D file) …
+#   belt_drawing select    Belt drawn = "Flat colours (3D file)" of Its own materials (3D file) | Flat colours (3D file) | Box…
 #   seed        number    Seed = 1
 # Runs on  Any worker, NVIDIA GPU. Return a dict to fill the "result" output.
 # Packages torch, mujoco>=3.3, mujoco-warp, warp-lang, numpy (installed by the worker with pip when missing)
@@ -2793,6 +2793,8 @@ def see_run(ctx):
     test_m = None
     out_path = os.path.join(os.getcwd(), "see_checkpoint.pt")
     seen_total = 0
+    player = viz.Replayer(ctx, pose, 2 * CTRL_DT)     # (one cell's hand wandering over its object, replayed in the 3D view)
+    rec, last_replay = [], -1e9
 
     def wander():
         """the hand wanders about the object (hiding it, now and then), the fingers open and close"""
@@ -2838,9 +2840,16 @@ def see_run(ctx):
             break
         for _ in range(3):
             env.step(wander())
+            if int(env.steps[0]) % 2 == 0:
+                rec.append(pose.snap(0))
             dn = env.steps >= 120
             idx = dn.nonzero().flatten()
             if len(idx):
+                if bool(dn[0]):
+                    if len(rec) > 10 and time.time() - last_replay > 12:
+                        last_replay = time.time()
+                        player.play(rec, "Learning to see: the hand moves over a %s while the camera looks" % env.info[int(env.obj[0])]["label"].lower(), camera_png(env, 0))
+                    rec = []
                 env.reset(idx)
                 sim.refresh()
         img, objpix = env.perceive()
@@ -2882,7 +2891,6 @@ def see_run(ctx):
                 env.est_c[0], env.est_e[0], env.est_y[0] = pred[0][0], pred[1][0], pred[2][0]
                 ctx.telemetry("camera_picture", {"image": camera_png(env, 0)})
                 ctx.telemetry("events", {"text": "Unseen object: %s, its centre found within %.1f cm" % (env.info[int(env.obj[0])]["label"], float((pred[0][0] - tc[0]).norm()) * 100)})
-                pose.send(ctx, pose.snap(0))
                 env.pool = env.train_ids
                 env.reset_all()
             last_tel = time.time()
@@ -2899,6 +2907,7 @@ def see_run(ctx):
                 best = score
                 save("best so far", stats)
     curve.close()
+    player.stop()
     if not os.path.exists(out_path):
         save("final", stats)
     name = "grasp_see_%s.pt" % time.strftime("%Y%m%d_%H%M")

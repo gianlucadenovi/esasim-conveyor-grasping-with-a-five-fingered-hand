@@ -178,7 +178,7 @@
             "key": "belt_drawing",
             "label": "Belt drawn",
             "type": "select",
-            "default": "Its own materials (3D file)",
+            "default": "Flat colours (3D file)",
             "options": [
                 "Its own materials (3D file)",
                 "Flat colours (3D file)",
@@ -220,6 +220,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 12
+        "version": 13
     }
 }
