@@ -6,9 +6,19 @@
     "name": "0 · Make the 3D models (one-off)",
     "description": "An empty grid: drag blocks from the menu.",
     "published_version": 8,
-    "updated": "2026-11-19 15:02:58",
+    "updated": "2026-11-19 15:44:41",
     "graph": {
         "nodes": [
+            {
+                "id": "belt",
+                "type": "project-assets",
+                "x": -320,
+                "y": 140,
+                "params": {
+                    "files": "models/simple_rubber_conveyor.glb"
+                },
+                "title": "Your conveyor model"
+            },
             {
                 "id": "nets",
                 "type": "dataset",
@@ -17,7 +27,7 @@
                 "params": {
                     "dataset": "35",
                     "version": "latest",
-                    "pattern": "*.py"
+                    "pattern": "README*"
                 },
                 "title": "(keeps it on the machine with the networks)"
             },
@@ -33,7 +43,7 @@
                 "title": "Make the 3D models",
                 "dest": {
                     "location": 9,
-                    "name": "grasp-3d-models-2",
+                    "name": "grasp-3d-models-3",
                     "folder": "",
                     "live": true,
                     "move": false,
@@ -53,6 +63,17 @@
                 "to": {
                     "node": "models",
                     "port": "policy"
+                }
+            },
+            {
+                "id": "belt.files>models.conveyor",
+                "from": {
+                    "node": "belt",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "models",
+                    "port": "conveyor"
                 }
             }
         ],
