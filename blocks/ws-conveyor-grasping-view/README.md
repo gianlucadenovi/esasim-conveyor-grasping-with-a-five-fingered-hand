@@ -2,13 +2,13 @@
 
 The grasping cell in 3D (belt, bin, camera, object, five-fingered hand and the xArm posed by inverse kinematics), the camera's picture with the network's box, the touch sensors, and the test's object
 
-Wire the Conveyor grasping block's telemetry into Live and the xArm model's output into Arm model. Training runs: an episode is replayed every few seconds. Test: choose an object (new to the robot, or seen in training), how it lies, how it is turned and the belt's speed, then Put it on the belt; the trial plays live with what the camera sees and what the fingertips and the palm feel.
+Wire the Conveyor grasping block's telemetry into Live and the xArm model's output into Arm model (if the file cannot reach the view, a simple xArm 6 is drawn from its kinematics). Training runs: an episode is replayed every few seconds. Test: choose an object (new to the robot, or seen in training), how it lies, how it is turned and the belt's speed, then Put it on the belt; the trial plays live with what the camera sees and what the fingertips and the palm feel.
 
 An [EsaSim](https://esacode.com/) blueprint block: a view that draws in the browser, in JavaScript (`frontend.js`, `function render(ctx)`).
 
 | | |
 |---|---|
-| Block | `ws-conveyor-grasping-view` · version 2 |
+| Block | `ws-conveyor-grasping-view` · version 3 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 

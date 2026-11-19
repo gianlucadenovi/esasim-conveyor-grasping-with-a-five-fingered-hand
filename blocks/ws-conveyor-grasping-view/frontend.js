@@ -1,5 +1,5 @@
 // ── EsaSim block ──────────────────────────────────────────────────────
-// Conveyor grasping view (ws-conveyor-grasping-view) · version 2 · view, JavaScript: function render(ctx)
+// Conveyor grasping view (ws-conveyor-grasping-view) · version 3 · view, JavaScript: function render(ctx)
 // The grasping cell in 3D (belt, bin, camera, object, five-fingered hand and the xArm posed by inverse kinematics), the camera's picture with the network's box, the touch sensors, and the test's object
 // Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 // Saved: 2026-11-19
@@ -252,6 +252,7 @@ function render(ctx) {
   scene.add(arm.group);
   function rpyMat(r, p, y) { return new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(r, p, y, 'ZYX')); }
   function loadArm(model) {
+    while (arm.group.children.length) arm.group.remove(arm.group.children[0]);
     arm.model = model;
     var s = (model.scale || 1) * (model.units === 'mm' ? 0.001 : 1);
     arm.joints = model.joints.map(function (j) {
@@ -268,6 +269,46 @@ function render(ctx) {
       var m = new THREE.Mesh(g, i === 0 ? dark : white); m.castShadow = true; m.receiveShadow = true; m.matrixAutoUpdate = false;
       arm.group.add(m); return m;
     });
+    poseArm();
+  }
+  // when the arm's file cannot be had: the xArm 6 drawn from its kinematics (xarm_ros, mm), a rounded link from each
+  // joint to the next and a housing on each joint
+  var XARM6 = [[[0, 0, 267], [0, 0, 0]], [[0, 0, 0], [-1.5708, 0, 0]], [[53.5, -284.5, 0], [0, 0, 0]], [[77.5, 342.5, 0], [-1.5708, 0, 0]],
+    [[0, 0, 0], [1.5708, 0, 0]], [[76, 97, 0], [-1.5708, 0, 0]]];
+  var XARM6_LIM = [[-178.2, 178.2], [-118, 120], [-178.2, 11], [-178.2, 178.2], [-97, 178.2], [-178.2, 178.2]];
+  function loadSimpleArm() {
+    if (arm.model) return;
+    arm.model = { simple: true };
+    arm.joints = XARM6.map(function (j, i) {
+      return { T: new THREE.Matrix4().makeTranslation(j[0][0] / 1000, j[0][1] / 1000, j[0][2] / 1000).multiply(rpyMat(j[1][0], j[1][1], j[1][2])),
+        lo: XARM6_LIM[i][0] * Math.PI / 180, hi: XARM6_LIM[i][1] * Math.PI / 180 };
+    });
+    var white = new THREE.MeshStandardMaterial({ color: 0xe9ebee, roughness: 0.4, metalness: 0.15 });
+    var dark = new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.5, metalness: 0.3 });
+    var R = [0.075, 0.06, 0.055, 0.05, 0.045, 0.04, 0.035];
+    function rod(g, a, b, r, m) {          // a rounded rod from a to b (link frame, metres)
+      var d = new THREE.Vector3().subVectors(b, a), L = d.length(); if (L < 1e-4) return;
+      var c = new THREE.Mesh(new THREE.CapsuleGeometry(r, L, 6, 20), m);
+      c.position.copy(a).add(b).multiplyScalar(0.5);
+      c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+      c.castShadow = true; c.receiveShadow = true; g.add(c);
+    }
+    function housing(g, r, h, m) { var c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 28).rotateX(Math.PI / 2), m); c.castShadow = true; g.add(c); }
+    arm.links = [];
+    for (var i = 0; i <= 6; i++) {
+      var g = new THREE.Group(); g.matrixAutoUpdate = false;
+      if (i === 0) { var b = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.2, 32).rotateX(Math.PI / 2), dark); b.position.z = 0.1; b.castShadow = true; g.add(b); }
+      else {
+        housing(g, R[i] * 1.1, R[i] * 2.4, i === 6 ? dark : white);
+        if (i < 6) {
+          var nx = new THREE.Vector3(XARM6[i][0][0] / 1000, XARM6[i][0][1] / 1000, XARM6[i][0][2] / 1000);
+          if (nx.x !== 0 && nx.y !== 0) { var mid = new THREE.Vector3(nx.x, 0, 0); rod(g, new THREE.Vector3(), mid, R[i], white); rod(g, mid, nx, R[i], white); }
+          else rod(g, new THREE.Vector3(), nx, R[i], white);
+        }
+      }
+      arm.group.add(g); arm.links.push(g);
+    }
+    armNote('xArm: drawn simply (its model file did not come)');
     poseArm();
   }
   function fk(q, out) {       // out[i]: the frame of link i (0: the base)
@@ -363,23 +404,26 @@ function render(ctx) {
     });
   }
   function findArm() {
-    if (arm.model || armTry.busy) return;
+    if ((arm.model && !arm.model.simple) || armTry.busy) return;
     var fs = ((ctx.input('arm') || {}).files || []).filter(function (f) { return /\.robot\.json(\.gz)?$/i.test(f.name || f.path || ''); });
+    if (arm.model && arm.model.simple && !fs.length) return;
     var p;
     if (fs.length) p = ctx.files.buffer(fs[0]);
     else if (ctx.assets && ctx.assets.find) p = Promise.resolve(ctx.assets.find(['xarm6.robot.json.gz', 'models/xarm6.robot.json.gz'])).then(function (a) { return a ? ctx.assets.buffer(a) : null; });
     else p = Promise.resolve(null);
-    if (!fs.length) armNote('xArm: wire the xArm model block into Arm model');
-    else armNote('xArm: loading its model…');
+    if (!fs.length && !(ctx.assets && ctx.assets.find)) { loadSimpleArm(); return; }
+    armNote('xArm: loading its model…');
     armTry.busy = true; armTry.n++;
     timed(p, 45000).then(function (b) { return b ? gunzip(b) : null; }).then(function (b) {
       armTry.busy = false;
-      if (!b) return;
+      if (!b) { if (!fs.length) loadSimpleArm(); return; }
+      if (arm.model && !arm.model.simple) return;
       loadArm(JSON.parse(new TextDecoder().decode(b)));
       armNote('');
     }).catch(function (e) {
       armTry.busy = false;
       armNote('xArm: ' + (e && e.message || e) + ' (trying again)');
+      if (armTry.n >= 2 && !arm.model) loadSimpleArm();
       if (armTry.n < 40) { clearTimeout(armTry.timer); armTry.timer = setTimeout(findArm, 5000); }
     });
   }
