@@ -14,8 +14,8 @@
         {
             "name": "0 · Make the 3D models (one-off)",
             "file": "blueprints/0-make-the-3d-models-one-off.json",
-            "published_version": 6,
-            "nodes": 1
+            "published_version": 7,
+            "nodes": 2
         },
         {
             "name": "1 · Learn to see",

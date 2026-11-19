@@ -5,10 +5,22 @@
     },
     "name": "0 · Make the 3D models (one-off)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 6,
-    "updated": "2026-11-19 14:32:36",
+    "published_version": 7,
+    "updated": "2026-11-19 14:33:05",
     "graph": {
         "nodes": [
+            {
+                "id": "nets",
+                "type": "dataset",
+                "x": -320,
+                "y": 0,
+                "params": {
+                    "dataset": "35",
+                    "version": "latest",
+                    "pattern": "*.py"
+                },
+                "title": "(keeps it on the machine with the networks)"
+            },
             {
                 "id": "models",
                 "type": "ws-conveyor-grasping-xarm-5-finger-hand",
@@ -31,7 +43,19 @@
                 }
             }
         ],
-        "edges": [],
+        "edges": [
+            {
+                "id": "nets.files>models.policy",
+                "from": {
+                    "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "models",
+                    "port": "policy"
+                }
+            }
+        ],
         "notes": [],
         "dash": {
             "items": []
