@@ -6,7 +6,7 @@
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
     "published_version": 6,
-    "updated": "2026-11-19 18:54:06",
+    "updated": "2026-11-19 20:00:55",
     "graph": {
         "nodes": [
             {
@@ -78,7 +78,7 @@
                     "delay": 1.5,
                     "numbers": "",
                     "events_channel": "events",
-                    "controls": "select object Banana,Stepped cone,Drill,Pear,Spray can,U block,Plank,Flat egg,Duck,Torch,Z block,Pill bottle\nselect pose upright,on its side,tumbled\nslider turned 0 179 30 1\nslider speed 2 8 5 0.5\nbutton Put it on the belt\nbutton Finish now",
+                    "controls": "select object Banana,Stepped cone,Drill,Pear,Spray can,U block,Plank,Flat egg,Duck,Torch,Z block,Pill bottle\nselect pose upright,on its side,tumbled\nslider turned 0 179 30 1\nslider speed 4 15 10 1\nbutton Put it on the belt\nbutton Finish now",
                     "control_channel": "control"
                 },
                 "title": "The test (3D)"
