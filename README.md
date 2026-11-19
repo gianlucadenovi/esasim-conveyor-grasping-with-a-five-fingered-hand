@@ -44,7 +44,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Blueprints in this repository
 
-- [1 · Learn to see](blueprints/1-learn-to-see.json) · 6 blocks · version 1
+- [1 · Learn to see](blueprints/1-learn-to-see.json) · 6 blocks · version 2
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 0 blocks
 
 ### Workspace blocks it uses
