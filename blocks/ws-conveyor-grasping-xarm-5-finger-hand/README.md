@@ -1,14 +1,14 @@
 # Conveyor grasping (xArm + 5-finger hand)
 
-A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects. Shown in 
+A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 
-Modes. Learn to see: the camera next to the robot (96x72, depth and colour, rendered in every cell) is turned into a point map; a small convolutional network learns which pixels are the object and from them where it is, how big it is and which way it lies, on the 18 training objects, and is checked on the 12 objects kept for the test. Learn to reach / grasp / place: PPO, thousands of cells at once on the GPU (MuJoCo Warp); the policy senses the hand, its fingers, the 9 touch sensors (fingertips and palm), the belt speed and the camera network's box of the object; it moves the hand (kinematic: 6 stiff servos) and the fingers (real joints, real contacts). Each stage carries on from the one before. Grasp: lift 8 cm and hold for a second while the object is pushed about. Place: release it into the bin (it first imitates a scripted controller). Test with new objects: the policy runs live; pick the object, its pose, its turn and the belt speed with the 3D view's controls. Make the 3D models: writes the xArm-with-hand and objects robot files for the project's assets. The 3D view (viewer-3d) draws everything: telemetry channels joints, scene, events, camera_picture, train, test.
+Modes. Learn to see: the camera beside the robot (96x72, depth and colour) feeds a small convolutional network that learns which pixels are the object, where it is, how big and which way it lies (18 training objects, checked on 12 kept for the test). Learn to reach / grasp / place: PPO over thousands of cells (MuJoCo Warp on an NVIDIA GPU, or MuJoCo on the CPU). The xArm 6 is simulated: six position servos with torque limits follow the hand target through inverse kinematics, and the arm, the hand and the fingers collide with the pedestal, the belt frame, the bin and its stand. Objects are dropped onto the moving belt so where they land varies. Each stage carries on from the one before. Parallel tasks (workers): more than 1 runs the round as that many tasks, each on its own worker (any hardware), all starting from the policy given as input; a combine task then averages their policies (weighted by the steps each gathered) into one, written as the round's output: chain rounds for distributed training. Test with new objects: the policy runs live; pick the object, its pose, its turn and the belt speed in the 3D view; the object falls from Drop height onto the moving belt. Make the 3D models: writes the xArm-with-hand and objects robot files for the project's assets; a conveyor .glb wired to Conveyor model is fitted to the belt and baked in. Telemetry channels: joints, scene, events, camera_picture, train (train_1.. for the other tasks), rounds, test.
 
 An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Python (`backend.py`, `def run(ctx)`).
 
 | | |
 |---|---|
-| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 9 |
+| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 10 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any worker, NVIDIA GPU |
@@ -17,30 +17,34 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 
 | Port | Type | Description |
 |---|---|---|
-| `policy` Policies | Files (pt, py) | Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves. A grasp_override_<part>.py  Several connections. Optional. |
+| `policy` Policies | Files (pt, py) | Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves (not in parallel rounds, whi Several connections. Optional. |
+| `conveyor` Conveyor model | Files (glb) | Make the 3D models: a conveyor 3D file (.glb), fitted to the simulated belt and drawn in place of the boxes Optional. |
 
 ## Outputs
 
 | Port | Type | Description |
 |---|---|---|
-| `policy` Network | Files (pt) | grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used (Learn to reach, grasp, place) |
+| `policy` Network | Files (pt) | grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; a parallel round: the combined policy |
 | `curve` Learning curve | Table (csv) | see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial) |
-| `models` 3D models | Files (gz) | Make the 3D models: xarm_hand.robot.json.gz (the xArm 6 with the hand on its flange) and belt_objects.robot.json.gz, for the project's assets (the 3D view) |
+| `models` 3D models | Files (gz) | Make the 3D models: xarm_hand.robot.json.gz and belt_objects.robot.json.gz (with the conveyor's 3D file when one is wired in), for the project's assets |
 
 ## Settings
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `mode` What to do | select | `"Learn to reach"` |  |
-| `accelerator` Run on | select | `"auto"` | auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU. A worker whose PyTorch is built for the CPU only gets a CUDA build of it once, for this block only |
-| `worlds` Cells learning at once | number | `2048` | Each cell is a belt, an object, the hand and the camera (CPU: at most 256) |
+| `accelerator` Run on | select | `"auto"` | auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU |
+| `tasks` Parallel tasks (workers) | number | `1` | Learn to reach / grasp / place: more than 1 splits the round over that many workers (CPU or GPU), then averages their policies |
+| `worlds` Cells learning at once | number | `2048` | Each cell is a belt, an object, the arm with the hand and the camera (CPU: at most 256) |
 | `minutes` Minutes | number | `60` |  |
 | `training` Training | select | `"Continue"` | Continue carries on from the newest network or policy (of this stage, or of the stage before) |
 | `replay_every` Replay every (s) | number | `20` |  |
 | `pace` Test pace (1 = real time) | number | `1` | 0: as fast as it can |
+| `drop_cm` Test: drop height (cm) | number | `25` | How high above the belt the chosen object is let go |
 | `autoplay` Test: pick objects when idle | select | `"Yes"` |  |
 | `idle` Test: idle before it picks (s) | number | `8` |  |
 | `objects` Test objects | select | `"New objects only"` |  |
+| `belt_drawing` Belt drawn | select | `"From the conveyor's 3D file"` | From the conveyor's 3D file: when the 3D models carry it (Make the 3D models with Conveyor model wired) |
 | `seed` Seed | number | `1` |  |
 
 ## Use it in EsaSim

@@ -63,7 +63,7 @@
     "blocks": [
         {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
-            "version": 9,
+            "version": 10,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
         }
     ]

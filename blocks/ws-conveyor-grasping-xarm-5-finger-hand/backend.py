@@ -1,27 +1,31 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 9 · worker block, Python: def run(ctx)
-# A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects. Shown in
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 10 · worker block, Python: def run(ctx)
+# A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
-#   policy      Files (pt, py)            Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves. A grasp_override_<part>.py
+#   policy      Files (pt, py)            Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves (not in parallel rounds, whi
+#   conveyor    Files (glb)               Conveyor model · optional · Make the 3D models: a conveyor 3D file (.glb), fitted to the simulated belt and drawn in place of the boxes
 # Outputs  ctx.output("id", "name.ext") is the path to write; ctx.write_json / ctx.write_text
-#   policy      Files (pt)                Network · grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used (Learn to reach, grasp, place)
+#   policy      Files (pt)                Network · grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; a parallel round: the combined policy
 #   curve       Table (csv)               Learning curve · see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial)
-#   models      Files (gz)                3D models · Make the 3D models: xarm_hand.robot.json.gz (the xArm 6 with the hand on its flange) and belt_objects.robot.json.gz, for the project's assets (the 3D view)
+#   models      Files (gz)                3D models · Make the 3D models: xarm_hand.robot.json.gz and belt_objects.robot.json.gz (with the conveyor's 3D file when one is wired in), for the project's assets
 #   telemetry   Live telemetry            ctx.telemetry("channel", data) while it runs
 # Settings ctx.params["key"]
 #   mode        select    What to do = "Learn to reach" of Learn to see | Learn to reach | Learn to grasp | Learn to place | …
 #   accelerator select    Run on = "auto" of auto | NVIDIA GPU | CPU
+#   tasks       number    Parallel tasks (workers) = 1
 #   worlds      number    Cells learning at once = 2048
 #   minutes     number    Minutes = 60
 #   training    select    Training = "Continue" of Continue | Start over
 #   replay_every number    Replay every (s) = 20
 #   pace        number    Test pace (1 = real time) = 1
+#   drop_cm     number    Test: drop height (cm) = 25
 #   autoplay    select    Test: pick objects when idle = "Yes" of Yes | No
 #   idle        number    Test: idle before it picks (s) = 8
 #   objects     select    Test objects = "New objects only" of New objects only | All objects
+#   belt_drawing select    Belt drawn = "From the conveyor's 3D file" of From the conveyor's 3D file | Boxes
 #   seed        number    Seed = 1
 # Runs on  Any worker, NVIDIA GPU. Return a dict to fill the "result" output.
 # Packages torch, mujoco>=3.3, mujoco-warp, warp-lang, numpy (installed by the worker with pip when missing)
@@ -34,13 +38,14 @@ object is simulated by MuJoCo; touch sensors in the fingertips and the palm), an
 objects it never learned on, chosen in the view, in the pose chosen.
 
 Modes: Learn to see (the camera network), Learn to reach, Learn to grasp, Learn to place (PPO, each stage carrying on
-from the one before), Test with new objects. On the NVIDIA GPU (MuJoCo Warp, thousands of cells at once, with its
-batch renderer for the cameras) or on the CPU (MuJoCo)."""
+from the one before; in parallel rounds over several workers, GPU and CPU, their policies averaged), Test with new
+objects, Make the 3D models. On the NVIDIA GPU (MuJoCo Warp, thousands of cells at once, with its batch renderer for
+the cameras) or on the CPU (MuJoCo). The xArm 6 and the hand are simulated bodies: every contact is a force."""
 import sys as _sys
 import types as _types
 
 _SOURCES = {}
-_SOURCES['scene'] = r'''# ── the cell: belt, bin, camera, the hand on its kinematic mount, and the objects ────────────────────────────────────
+_SOURCES['scene'] = r'''# ── the cell: belt, bin, camera, the xArm with the hand on its flange, and the objects ───────────────────────────────
 # World frame: the xArm's base at the origin, z up, metres. The belt runs along x in front of the robot (objects come
 # from +x and travel towards -x); the bin is next to the belt, downstream; the camera is on a pole beside the robot.
 import math
@@ -60,6 +65,16 @@ CAM_LOOK = np.array([0.24, 0.42, 0.0])
 CAM_FOVY = 58.0
 CAM_W, CAM_H = 96, 72
 HOME = np.array([0.12, 0.22, 0.30])              # the hand's rest pose (palm down, fingers along +x)
+# the UFACTORY xArm 6 (its kinematics, mm and rad: each joint's place and turn in the frame of the one before; every
+# joint turns about its own z), standing on its pedestal at the origin; the hand is screwed onto its flange
+XARM6 = [((0.0, 0.0, 267.0), (0.0, 0.0, 0.0)), ((0.0, 0.0, 0.0), (-1.5708, 0.0, 0.0)), ((53.5, -284.5, 0.0), (0.0, 0.0, 0.0)),
+         ((77.5, 342.5, 0.0), (-1.5708, 0.0, 0.0)), ((0.0, 0.0, 0.0), (1.5708, 0.0, 0.0)), ((76.0, 97.0, 0.0), (-1.5708, 0.0, 0.0))]
+XARM6_LIM = [(-178.2, 178.2), (-118.0, 120.0), (-178.2, 11.0), (-178.2, 178.2), (-97.0, 178.2), (-178.2, 178.2)]   # degrees
+ARM_MASS = (2.38, 2.30, 1.98, 1.32, 1.19, 0.17)                  # kg (UFACTORY's figures, rounded)
+ARM_TORQUE = (50.0, 50.0, 32.0, 32.0, 32.0, 20.0)                # N m: what each joint's motor can give
+ARM_R = (0.062, 0.056, 0.052, 0.046, 0.044, 0.038)               # the links' collision capsules (m)
+R_FH = np.array([[0.0, 0.0, 1.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]])   # the hand in the flange's frame
+P_FH = np.array([-0.002, 0.0, 0.118])
 GRASP_PT = (0.048, 0.010, -0.058)                # between the thumb and the fingertips, in the hand's frame
 THUMB_OPEN, THUMB_CLOSED = -2.0, 0.45            # the thumb's base joint: swung back, and opposing the fingers
 
@@ -74,7 +89,7 @@ FINGERS = [  # name, base y, phalanx lengths, radius
 THUMB = {"base": (-0.030, 0.012, -0.014), "len": (0.040, 0.032, 0.026), "r": 0.0098}
 THUMB_U = np.array([0.30, -0.08, -0.95]); THUMB_U = THUMB_U / np.linalg.norm(THUMB_U)      # the thumb's direction (open-ish)
 THUMB_A = np.cross(THUMB_U, [1.0, 0.0, 0.25]); THUMB_A = THUMB_A / np.linalg.norm(THUMB_A)   # its flexion axis: curls it forward
-# what the policy moves: the hand's pose (6 stiff position servos) and 6 finger motors: each finger's curl (its three
+# what the policy moves: where the hand should be (the arm's six servos take it there) and 6 finger motors: each finger's curl (its three
 # joints together, as tendons do) and the thumb's opposition (swinging it under the palm); the thumb's curl is the 5th
 CURL_SPLIT = (0.45, 0.33, 0.22)                  # how a finger's curl shares out over its three joints
 CURL_MAX = (1.45, 1.55, 1.2)                     # their limits (rad)
@@ -167,18 +182,54 @@ def assign_slots(parts):
 
 
 # ── the model (MJCF) ────────────────────────────────────────────────────────────────────────────────────────────────
+def rpy_quat(r, p, y):
+    """w x y z of R = Rz(y) Ry(p) Rx(r)"""
+    return quat_from_euler(r, p, y)
+
+
+def mat_quat(R):
+    R = np.asarray(R, float)
+    w = math.sqrt(max(0.0, 1 + R[0, 0] + R[1, 1] + R[2, 2])) / 2
+    x = math.copysign(math.sqrt(max(0.0, 1 + R[0, 0] - R[1, 1] - R[2, 2])) / 2, R[2, 1] - R[1, 2])
+    y = math.copysign(math.sqrt(max(0.0, 1 - R[0, 0] + R[1, 1] - R[2, 2])) / 2, R[0, 2] - R[2, 0])
+    z = math.copysign(math.sqrt(max(0.0, 1 - R[0, 0] - R[1, 1] + R[2, 2])) / 2, R[1, 0] - R[0, 1])
+    return (w, x, y, z)
+
+
+def arm_open_xml():
+    """the xArm 6: six links on its six joints (position servos, stiff, with the torques its motors have, gravity
+    compensated as its controller does), each with collision capsules from its joint to the next; then the hand on
+    the flange. The arm and the hand collide with the belt, its rails, the bin, the pedestal and the object."""
+    ag = 'contype="2" conaffinity="1" condim="3" friction="0.6 0.01 0.001"'
+    s = []
+    for i, ((xyz, rpy), lim) in enumerate(zip(XARM6, XARM6_LIM)):
+        p = np.array(xyz) / 1000.0
+        s.append('<body name="link%d" pos="%s" quat="%s" gravcomp="1">' % (i + 1, _f(p), _f(rpy_quat(*rpy))))
+        s.append('<joint name="j%d" type="hinge" axis="0 0 1" range="%g %g" armature="0.25" damping="2"/>' % (i + 1, math.radians(lim[0]), math.radians(lim[1])))
+        s.append('<inertial pos="0 0 0" mass="%g" diaginertia="0.008 0.008 0.006"/>' % ARM_MASS[i])
+        r = ARM_R[i]
+        s.append('<geom name="arm%d_j" type="sphere" size="%g" rgba="0.94 0.95 0.96 1" %s/>' % (i + 1, r * 1.05, ag))
+        if i + 1 < len(XARM6):
+            nx = np.array(XARM6[i + 1][0]) / 1000.0
+            pts = [np.zeros(3), np.array([nx[0], 0, 0]), nx] if nx[0] and nx[1] else [np.zeros(3), nx]
+            for k, (a, b) in enumerate(zip(pts[:-1], pts[1:])):
+                if np.linalg.norm(b - a) > 1e-4:
+                    s.append('<geom name="arm%d_%d" type="capsule" fromto="%s %s" size="%g" rgba="0.94 0.95 0.96 1" %s/>' % (i + 1, k, _f(a), _f(b), r, ag))
+        if i == 0:      # the shoulder housing, down to the base
+            s.append('<geom name="arm1_col" type="capsule" fromto="0 0 -0.07 0 0 -0.02" size="%g" rgba="0.94 0.95 0.96 1" %s/>' % (r, ag))
+    s.append('<body name="hand" pos="%s" quat="%s">' % (_f(P_FH), _f(mat_quat(R_FH))))
+    return "\n".join(s)
+
+
+def arm_close_xml():
+    return "</body>" + "</body>" * len(XARM6)
+
+
 def hand_xml():
-    """the five-fingered hand, on six stiff servos (x, y, z, then yaw, pitch, roll): its pose is kinematic, its
-    fingers are real joints with real contacts"""
+    """the xArm, and on its flange the five-fingered hand: its fingers are real joints with real contacts"""
     px, py, pz = PALM_HALF
     hg = 'contype="2" conaffinity="1" condim="4" friction="1.2 0.02 0.001" solref="0.004 1"'
-    s = []
-    s.append('<body name="hand_x" pos="0 0 0"><joint name="hx" type="slide" axis="1 0 0" range="-1.5 1.5" armature="0.5"/><inertial pos="0 0 0" mass="0.05" diaginertia="1e-4 1e-4 1e-4"/>')
-    s.append('<body name="hand_y"><joint name="hy" type="slide" axis="0 1 0" range="-1.5 1.5" armature="0.5"/><inertial pos="0 0 0" mass="0.05" diaginertia="1e-4 1e-4 1e-4"/>')
-    s.append('<body name="hand_z"><joint name="hz" type="slide" axis="0 0 1" range="-0.5 1.5" armature="0.5"/><inertial pos="0 0 0" mass="0.05" diaginertia="1e-4 1e-4 1e-4"/>')
-    s.append('<body name="hand_yaw"><joint name="hyaw" type="hinge" axis="0 0 1" range="-6.3 6.3" armature="0.02"/><inertial pos="0 0 0" mass="0.02" diaginertia="1e-5 1e-5 1e-5"/>')
-    s.append('<body name="hand_pitch"><joint name="hpitch" type="hinge" axis="0 1 0" range="-1.6 1.6" armature="0.02"/><inertial pos="0 0 0" mass="0.02" diaginertia="1e-5 1e-5 1e-5"/>')
-    s.append('<body name="hand"><joint name="hroll" type="hinge" axis="1 0 0" range="-1.6 1.6" armature="0.02"/>')
+    s = [arm_open_xml()]
     s.append('<geom name="palm" type="box" size="%s" mass="0.35" rgba="0.82 0.84 0.88 1" %s/>' % (_f(PALM_HALF), hg))
     s.append('<geom name="wrist" type="cylinder" size="0.030 0.022" pos="%s" euler="0 1.5708 0" mass="0.05" rgba="0.25 0.27 0.30 1" contype="0" conaffinity="0"/>' % _f((-px - 0.020, 0, 0.002)))
     s.append('<site name="grasp" pos="%s" size="0.006" rgba="1 0 0 0"/>' % _f(GRASP_PT))
@@ -210,20 +261,20 @@ def hand_xml():
     s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.007" rgba="0.30 0.32 0.36 1" %s/>' % (_f(u * T3), tr * 0.9, hg))
     s.append('<site name="thumb_tip" pos="%s" size="%g" rgba="0 0 0 0"/>' % (_f(u * T3 * 0.75), tr * 1.45))
     s.append('</body></body></body>')
-    s.append('</body></body></body></body></body></body>')
+    s.append(arm_close_xml())
     return "\n".join(s)
 
 
-HAND_JOINTS = ["hx", "hy", "hz", "hyaw", "hpitch", "hroll"]
+HAND_JOINTS = ["j1", "j2", "j3", "j4", "j5", "j6"]           # (the arm's joints: they place the hand)
 FINGER_JOINTS = ["thumb_rot", "thumb_j1", "thumb_j2"] + ["%s_j%d" % (f[0], k) for f in FINGERS for k in (1, 2, 3)]
 
 
 def actuators_xml():
     a = []
-    for j in ("hx", "hy", "hz"):
-        a.append('<position name="a_%s" joint="%s" kp="4000" kv="160" ctrlrange="-1.5 1.5"/>' % (j, j))
-    for j in ("hyaw", "hpitch", "hroll"):
-        a.append('<position name="a_%s" joint="%s" kp="60" kv="1.2" ctrlrange="-6.3 6.3"/>' % (j, j))
+    for i, j in enumerate(HAND_JOINTS):
+        lo, hi = XARM6_LIM[i]
+        a.append('<position name="a_%s" joint="%s" kp="%g" kv="%g" forcerange="-%g %g" ctrlrange="%g %g"/>'
+                 % (j, j, 1500 if i < 3 else 500, 60 if i < 3 else 15, ARM_TORQUE[i], ARM_TORQUE[i], math.radians(lo), math.radians(hi)))
     for j in FINGER_JOINTS:
         a.append('<position name="a_%s" joint="%s" kp="1.6" kv="0.03" forcerange="-0.9 0.9" ctrlrange="%s"/>' % (j, j, "-2.1 0.9" if j == "thumb_rot" else "-0.2 1.8"))
     a.append('<velocity name="a_belt" joint="belt" kv="400" ctrlrange="-1 1"/>')
@@ -256,8 +307,8 @@ def scene_xml(obj_parts=None, rgba=None):
          '<light pos="0.2 0.3 1.6" dir="0 0 -1" diffuse="0.9 0.9 0.9" castshadow="false"/>',
          '<light pos="-0.6 -0.4 1.2" dir="0.4 0.4 -1" diffuse="0.35 0.35 0.35" castshadow="false"/>',
          '<geom name="floor" type="plane" size="3 3 0.1" pos="0 0 -0.75" rgba="0.55 0.56 0.58 1" contype="0" conaffinity="0"/>',
-         '<geom name="pedestal" type="cylinder" size="0.09 0.375" pos="0 0 -0.375" rgba="0.3 0.3 0.33 1" contype="0" conaffinity="0"/>',
-         '<geom name="belt_frame" type="box" size="%s" pos="%s" rgba="0.35 0.37 0.40 1" contype="0" conaffinity="0"/>' % (_f((1.25, BELT_W / 2 + 0.03, 0.36)), _f((0.2, BELT_Y, -0.39))),
+         '<geom name="pedestal" type="box" size="0.09 0.09 0.375" pos="0 0 -0.375" rgba="0.3 0.3 0.33 1" contype="1" conaffinity="2"/>',
+         '<geom name="belt_frame" type="box" size="%s" pos="%s" rgba="0.35 0.37 0.40 1" contype="1" conaffinity="2"/>' % (_f((1.25, BELT_W / 2 + 0.03, 0.36)), _f((0.2, BELT_Y, -0.39))),
          # the belt: a long slab on a slide, driven at the belt speed; objects ride on it by friction
          '<body name="belt" pos="%s"><joint name="belt" type="slide" axis="1 0 0" damping="5"/>' % _f((BELT_X0, BELT_Y, 0)),
          '<geom name="belt" type="box" size="%s" pos="0 0 -0.012" mass="40" material="belt" contype="1" conaffinity="2" condim="3" friction="1.0 0.01 0.001"/>' % _f((BELT_LEN / 2, BELT_W / 2, 0.012)),
@@ -272,14 +323,16 @@ def scene_xml(obj_parts=None, rgba=None):
          '<geom name="bin_w2" type="box" size="%s" pos="%s" rgba="0.22 0.46 0.76 1" contype="1" conaffinity="2"/>' % (_f((BIN_WALL / 2, by + BIN_WALL, BIN_H / 2)), _f((-bx - BIN_WALL / 2, 0, BIN_H / 2))),
          '<geom name="bin_w3" type="box" size="%s" pos="%s" rgba="0.22 0.46 0.76 1" contype="1" conaffinity="2"/>' % (_f((bx, BIN_WALL / 2, BIN_H / 2)), _f((0, by + BIN_WALL / 2, BIN_H / 2))),
          '<geom name="bin_w4" type="box" size="%s" pos="%s" rgba="0.22 0.46 0.76 1" contype="1" conaffinity="2"/>' % (_f((bx, BIN_WALL / 2, BIN_H / 2)), _f((0, -by - BIN_WALL / 2, BIN_H / 2))),
-         '<geom name="bin_stand" type="box" size="%s" pos="0 0 -0.38" rgba="0.3 0.3 0.33 1" contype="0" conaffinity="0"/>' % _f((bx, by, 0.37)),
+         '<geom name="bin_stand" type="box" size="%s" pos="0 0 -0.38" rgba="0.3 0.3 0.33 1" contype="1" conaffinity="2"/>' % _f((bx, by, 0.37)),
          '</body>',
          # the camera on its pole beside the robot
          '<geom name="cam_pole" type="cylinder" size="0.012 %g" pos="%s" rgba="0.25 0.25 0.28 1" contype="0" conaffinity="0"/>' % ((CAM_POS[2] + 0.75) / 2, _f((CAM_POS[0], CAM_POS[1] - 0.06, (CAM_POS[2] - 0.75) / 2))),
          '<camera name="cam" pos="%s" xyaxes="%s" fovy="%g"/>' % (_f(CAM_POS), _f(cam_xy), CAM_FOVY),
          '<camera name="overview" pos="%s" xyaxes="%s" fovy="45"/>' % (_f((0.95, -0.75, 0.75)), _f(look_xyaxes((0.95, -0.75, 0.75), (0.05, 0.25, 0.02)))),
          '<camera name="closeup" pos="%s" xyaxes="%s" fovy="40"/>' % (_f((0.45, -0.05, 0.42)), _f(look_xyaxes((0.45, -0.05, 0.42), (0.12, 0.30, 0.12)))),
-         '<body name="hand_mount" pos="0 0 0">', hand_xml(), '</body>',
+         '<body name="arm_mount" pos="0 0 0">',
+         '<geom name="arm_base" type="cylinder" size="0.066 0.06" pos="0 0 0.06" rgba="0.17 0.18 0.2 1" contype="1" conaffinity="2"/>',
+         hand_xml(), '</body>',
          object_xml(),
          '</worldbody>',
          '<actuator>', actuators_xml(), '</actuator>',
@@ -439,7 +492,7 @@ class WarpSim:
                     setattr(self.m.opt, f, 0)
                 except Exception:
                     pass
-            self.d = mjw.make_data(mjm, nworld=n, nconmax=80, njmax=520)
+            self.d = mjw.make_data(mjm, nworld=n, nconmax=128, njmax=900)
             # the object's model fields, one copy per world
             self.batched = {}
             for f in ("geom_size", "geom_pos", "geom_quat", "geom_rgba", "geom_aabb", "geom_rbound", "body_mass", "body_inertia", "body_ipos", "body_iquat", "body_subtreemass"):
@@ -708,9 +761,10 @@ _SOURCES['grasp_env'] = r'''# ── the task: see the object coming on the belt
 # What the policy senses (as the robot itself could): its hand's pose and speed, its fingers' angles and commands, the
 # touch sensors (four fingertips, the thumb tip and four zones of the palm), the conveyor's speed (the cell knows it),
 # where the bin is, and what the camera network says of the object (where it is, how big, which way it lies), carried
-# along at the belt speed between camera frames. What it does: moves its hand (6 stiff servos: x, y, z, yaw, pitch,
-# roll: kinematic positioning) and its fingers (each finger's curl and the thumb's swing under the palm). The fingers
-# and the object touch through MuJoCo's contacts: every force between them is simulated.
+# along at the belt speed between camera frames. What it does: says where its hand should go (x, y, z, yaw, pitch,
+# roll), which the xArm's six servos do through inverse kinematics, and moves its fingers (each finger's curl and the
+# thumb's swing under the palm). The arm, the hand, the fingers and the object are all simulated bodies: every contact
+# between them, the belt, its rails, the bin and the pedestal is a force MuJoCo computes.
 import math
 
 import numpy as np
@@ -728,6 +782,9 @@ LIFT_OK, HOLD_STEPS = 0.08, 25     # a grasp: lifted 8 cm and held for 1 s (push
 WORK_LO = np.array([-0.62, -0.08, 0.005])   # where the grasp point may go (the arm's reach around the cell)
 WORK_HI = np.array([0.62, 0.62, 0.45])
 DROP = np.array([S.BIN_C[0], S.BIN_C[1], 0.20])
+TRAIN_DROP = 0.15                  # in training, half the objects fall onto the belt from up to 15 cm
+YAW_MAX = 3.0                      # the hand's yaw (rad) either way: nearly every way round, so the arm can choose the pose it reaches
+SETTLE = 22                        # steps (0.9 s) for an object to land and settle before it counts as resting
 
 
 def quat_mat(q):
@@ -773,6 +830,125 @@ def obb_of(torch, pts_world):
     centre = torch.stack([cx, cy, (z0 + z1) / 2], -1)
     ext = torch.stack([(u1 - u0) / 2, (v1 - v0) / 2, (z1 - z0) / 2], -1)
     return centre, ext, torch.stack([torch.cos(2 * psi), torch.sin(2 * psi)], -1)
+
+
+class ArmKin:
+    """the xArm 6's kinematics in torch, for thousands of cells at once: where the hand is for given joint angles, and
+    the joint angles that put the hand where the policy wants it (damped least squares, warm-started from the angles
+    of the step before, within the joints' limits)"""
+
+    def __init__(self, torch, dev):
+        self.t = torch
+        J = []
+        for xyz, rpy in S.XARM6:
+            T = np.eye(4)
+            T[:3, :3] = _rpy(*rpy)
+            T[:3, 3] = np.array(xyz) / 1000.0
+            J.append(T)
+        self.J = torch.as_tensor(np.stack(J), dtype=torch.float32, device=dev)          # (6, 4, 4)
+        FH = np.eye(4)
+        FH[:3, :3] = S.R_FH
+        FH[:3, 3] = S.P_FH
+        self.FH = torch.as_tensor(FH, dtype=torch.float32, device=dev)
+        # the range the controller keeps each joint in: inside the arm's own limits, and for the shoulder and the
+        # elbow the part where the arm works over the belt (not folded down under itself)
+        self.lo = torch.as_tensor(np.radians([-175.0, -100.0, -170.0, -175.0, -90.0, -175.0]), dtype=torch.float32, device=dev)
+        self.hi = torch.as_tensor(np.radians([175.0, 65.0, 0.0, 175.0, 170.0, 175.0]), dtype=torch.float32, device=dev)
+        # the posture it prefers when the hand's pose leaves it a choice (elbow up, wrist over the work), and how much
+        self.q_pref = torch.as_tensor([0.0, -0.35, -1.25, 0.0, 1.5, 0.0], dtype=torch.float32, device=dev)
+        self.w_pref = torch.as_tensor([0.0, 1.0, 1.0, 0.6, 0.6, 0.0], dtype=torch.float32, device=dev)
+
+    def fk(self, q):
+        """q (n, 6) -> the hand's frame (n, 4, 4), and each joint's axis and origin (n, 6, 3) in the world"""
+        torch = self.t
+        n = q.shape[0]
+        T = torch.eye(4, device=q.device).expand(n, 4, 4)
+        zs, ps = [], []
+        c, s = torch.cos(q), torch.sin(q)
+        for i in range(6):
+            T = T @ self.J[i]
+            zs.append(T[:, :3, 2])
+            ps.append(T[:, :3, 3])
+            Rz = torch.zeros(n, 4, 4, device=q.device)
+            Rz[:, 0, 0], Rz[:, 0, 1], Rz[:, 1, 0], Rz[:, 1, 1] = c[:, i], -s[:, i], s[:, i], c[:, i]
+            Rz[:, 2, 2] = 1
+            Rz[:, 3, 3] = 1
+            T = T @ Rz
+        return T @ self.FH, torch.stack(zs, 1), torch.stack(ps, 1)
+
+    def residual(self, q, p_t, R_t, clearance=False):
+        H, z, o = self.fk(q)
+        r = (p_t - H[:, :3, 3]).norm(dim=1) + 0.1 * rot_log(self.t, R_t @ H[:, :3, :3].transpose(1, 2)).norm(dim=1)
+        if clearance:      # an arm pose through its own base, the pedestal or the belt is no pose at all
+            pts = self.t.cat([o[:, 2:], 0.5 * (o[:, 2:3] + o[:, 3:4]), H[:, None, :3, 3]], 1)      # elbow, forearm, wrist, hand
+            near_base = pts[..., :2].norm(dim=-1) < 0.22
+            low = (0.20 - pts[..., 2]).clamp(min=0) * near_base.float() + (0.03 - pts[..., 2]).clamp(min=0)
+            r = r + 10.0 * low.sum(1)
+        return r
+
+    def solve_seeds(self, p_t, R_t, iters=60):
+        """(at a reset) the best of several starting poses of the arm"""
+        torch = self.t
+        n = p_t.shape[0]
+        best_q, best_r = None, None
+        for sd in ARM_SEEDS:
+            q = self.solve(torch.tensor(sd, device=p_t.device, dtype=torch.float32).expand(n, 6).clone(), p_t, R_t, iters=iters)
+            r = self.residual(q, p_t, R_t, clearance=True)
+            if best_q is None:
+                best_q, best_r = q, r
+            else:
+                better = r < best_r
+                best_q = torch.where(better[:, None], q, best_q)
+                best_r = torch.where(better, r, best_r)
+        return best_q
+
+    def solve(self, q, p_t, R_t, iters=3, lam=4e-3, wr=0.4):
+        """joint angles from q towards the hand at p_t (n, 3) turned R_t (n, 3, 3); what the hand's pose leaves free
+        goes towards the preferred posture"""
+        torch = self.t
+        eye6 = torch.eye(6, device=q.device)
+        for _ in range(iters):
+            H, z, o = self.fk(q)
+            ep = p_t - H[:, :3, 3]
+            er = rot_log(torch, R_t @ H[:, :3, :3].transpose(1, 2))
+            e = torch.cat([ep, wr * er], -1)                                         # (n, 6)
+            Jv = torch.cross(z, H[:, None, :3, 3] - o, dim=-1)                       # (n, 6, 3)
+            Jm = torch.cat([Jv, wr * z], -1).transpose(1, 2)                         # (n, 6 rows, 6 joints)
+            A = Jm @ Jm.transpose(1, 2) + lam * eye6
+            Jp = Jm.transpose(1, 2) @ torch.linalg.inv(A)                            # (damped) pseudo-inverse
+            dq = (Jp @ e[..., None])[..., 0]
+            pref = self.q_pref.clone().expand_as(q).clone()
+            pref[:, 0] = torch.atan2(p_t[:, 1], p_t[:, 0])                         # (the base turned towards the hand)
+            dn = self.w_pref * 0.3 * (pref - q)
+            dq = dq + ((eye6 - Jp @ Jm) @ dn[..., None])[..., 0]
+            q = torch.max(torch.min(q + dq.clamp(-0.2, 0.2), self.hi), self.lo)
+        return q
+
+
+ARM_SEEDS = ([0.6, -0.4, -1.2, 0.0, 1.4, 0.0], [1.2, -0.3, -1.3, 0.0, 1.4, 0.0], [0.0, -0.5, -1.0, 0.0, 1.2, 0.0],
+             [2.2, 0.0, -1.0, 0.0, 1.0, 0.0], [-1.0, -0.3, -1.2, 0.0, 1.3, 0.0], [0.6, -0.4, -1.2, 0.0, 1.4, 3.0],
+             [0.6, -0.4, -1.2, 0.0, 1.4, -3.0], [1.6, 0.2, -1.6, 0.0, 1.2, 1.5])
+
+
+def rot_log(torch, Re):
+    """the rotation vector (axis times angle) of rotation matrices (n, 3, 3), right up to half a turn"""
+    v = 0.5 * torch.stack([Re[:, 2, 1] - Re[:, 1, 2], Re[:, 0, 2] - Re[:, 2, 0], Re[:, 1, 0] - Re[:, 0, 1]], -1)
+    c = ((Re[:, 0, 0] + Re[:, 1, 1] + Re[:, 2, 2] - 1) / 2).clamp(-1, 1)
+    ang = torch.acos(c)
+    s = v.norm(dim=1)
+    w = v / s.clamp(min=1e-9)[:, None] * ang[:, None]
+    # near half a turn: about the axis the rotation leaves alone (its largest diagonal column)
+    k = torch.argmax(torch.diagonal(Re, dim1=1, dim2=2), dim=1)
+    ax = Re[torch.arange(Re.shape[0], device=Re.device), :, k] + torch.nn.functional.one_hot(k, 3).float()
+    ax = ax / ax.norm(dim=1, keepdim=True).clamp(min=1e-9) * math.pi
+    return torch.where(((s < 1e-4) & (c < 0))[:, None], ax, torch.where((s < 1e-9)[:, None], v, w))
+
+
+def _rpy(r, p, y):
+    cr, sr, cp, sp, cy, sy = math.cos(r), math.sin(r), math.cos(p), math.sin(p), math.cos(y), math.sin(y)
+    return np.array([[cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+                     [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+                     [-sp, cp * sr, cp * cr]])
 
 
 class Camera:
@@ -905,8 +1081,10 @@ class GraspEnv:
         self.rgba = torch.as_tensor(np.array(tmpl.geom_rgba), dtype=torch.float32, device=dev)[None].repeat(n, 1, 1)
         J = lambda nm: mjm.joint(nm).qposadr[0]      # noqa: E731
         Dv = lambda nm: mjm.joint(nm).dofadr[0]      # noqa: E731
-        self.qh = torch.tensor([J(j) for j in S.HAND_JOINTS], device=dev)
+        self.qh = torch.tensor([J(j) for j in S.HAND_JOINTS], device=dev)         # the arm's six joints
         self.dh = torch.tensor([Dv(j) for j in S.HAND_JOINTS], device=dev)
+        self.kin = ArmKin(torch, dev)
+        self.hbody = mjm.body("hand").id
         self.qf = torch.tensor([J(j) for j in S.FINGER_JOINTS], device=dev)
         self.qo, self.do_ = J("obj"), Dv("obj")
         self.qb, self.db = J("belt"), Dv("belt")
@@ -927,6 +1105,14 @@ class GraspEnv:
         self.steps = torch.zeros(n, dtype=torch.long, device=dev)
         self.ok_cnt, self.hold_cnt, self.bin_cnt = z(n), z(n), z(n)
         self.hv_avg = z(n, 2)                # the hand's speed over the belt, smoothed (exploration jitters it step to step)
+        self.hv = z(n, 6)                    # the hand's speed (linear, angular), measured from its pose step to step
+        self.g_prev, self.R_prev = z(n, 3), torch.eye(3, device=dev).repeat(n, 1, 1)
+        self.q_cmd = z(n, 6)                 # the arm's joint targets
+        # the arm's angles with the hand at rest over the belt (from a seed the arm likes: elbow up, wrist down)
+        R0 = self._euler_R(torch.zeros(1, 3, device=dev))
+        p0 = torch.as_tensor(S.HOME, dtype=torch.float32, device=dev)[None] - R0[:, :, 0] * 0 - torch.einsum("kij,j->ki", R0, torch.as_tensor(S.GRASP_PT, dtype=torch.float32, device=dev))
+        qs = torch.tensor([[0.6, -0.4, -1.2, 0.0, 1.4, 0.0]], device=dev)
+        self.q_home = self.kin.solve(qs, p0, R0, iters=200)
         self.prev_d = z(n) - 1               # the grasp point's distance a step ago (-1: just reset)
         self.prev_dd = z(n) - 1              # (place) the object's distance from over the bin a step ago
         self.lifted_ever = torch.zeros(n, dtype=torch.bool, device=dev)
@@ -943,7 +1129,7 @@ class GraspEnv:
         self.reset(self.t.arange(self.n, device=self.dev))
         self.sim.refresh()
 
-    def reset(self, idx, obj=None, mode=None, yaw=None, speed=None, x0=None, assist=None):
+    def reset(self, idx, obj=None, mode=None, yaw=None, speed=None, x0=None, assist=None, drop=None):
         torch = self.t
         k = len(idx)
         if k == 0:
@@ -978,13 +1164,29 @@ class GraspEnv:
             x0 = torch.full((k,), float(x0), device=dev)
         y0 = S.BELT_Y + 0.06 * (torch.rand(k, generator=g, device=dev) * 2 - 1)
         qpos = self.qpos0[None].repeat(k, 1)
-        qpos[:, self.qo:self.qo + 3] = torch.stack([x0, y0, -zlow + 0.006], -1)
+        z0 = -zlow + 0.006
+        # dropped from above the belt, turning a little: where and how it lands is up to the physics (the test drops
+        # every object; in training half of them fall from up to TRAIN_DROP)
+        if drop:
+            dh = float(drop) * (0.6 + 0.4 * torch.rand(k, generator=g, device=dev))
+        else:
+            dh = torch.where(torch.rand(k, generator=g, device=dev) < 0.5, TRAIN_DROP * torch.rand(k, generator=g, device=dev), torch.zeros(k, device=dev))
+        falls = dh > 0.01
+        z_rest0, q_rest0 = z0.clone(), q.clone()
+        z0 = z0 + dh
+        tilt = random_quat(torch, k, g, dev)
+        q = torch.where(falls[:, None], torch.nn.functional.normalize(q + 0.25 * tilt * torch.sign((q * tilt).sum(-1, keepdim=True) + 1e-9), dim=-1), q)
+        qpos[:, self.qo:self.qo + 3] = torch.stack([x0, y0, z0], -1)
         qpos[:, self.qo + 3:self.qo + 7] = q
         # the belt's speed
         v = (0.03 + 0.05 * torch.rand(k, generator=g, device=dev)) if speed is None else torch.full((k,), float(speed), device=dev)
         self.belt_v[idx] = v
         qvel = torch.zeros(k, self.mjm.nv, device=dev)
         qvel[:, self.db] = -v
+        spin = 4.0 * (torch.rand(k, 3, generator=g, device=dev) * 2 - 1)            # spinning as it falls
+        slide = 0.15 * (torch.rand(k, 2, generator=g, device=dev) * 2 - 1)
+        qvel[:, self.do_ + 3:self.do_ + 6] = torch.where(falls[:, None], spin, torch.zeros_like(spin))
+        qvel[:, self.do_:self.do_ + 2] = torch.where(falls[:, None], slide, torch.zeros_like(slide))
         # the hand: at rest, palm down, open (a little off each time)
         hp = torch.as_tensor(S.HOME, dtype=torch.float32, device=dev)[None] + 0.04 * (torch.rand(k, 3, generator=g, device=dev) * 2 - 1)
         hy = 0.3 * (torch.rand(k, generator=g, device=dev) * 2 - 1)
@@ -1000,16 +1202,26 @@ class GraspEnv:
             hy_a = torch.remainder(hy_a + math.pi / 2, math.pi) - math.pi / 2       # (a turn of pi is the same grasp)
             hp = torch.where(over[:, None], hp_a, hp)
             hy = torch.where(over, hy_a, hy)
-        R0 = self._euler_R(torch.stack([hy, torch.zeros_like(hy), torch.zeros_like(hy)], -1))
+            # (with the hand already over it, the object rests on the belt: it is not dropped into the hand)
+            qpos[:, self.qo + 2] = torch.where(over, z_rest0, qpos[:, self.qo + 2])
+            qpos[:, self.qo + 3:self.qo + 7] = torch.where(over[:, None], q_rest0, qpos[:, self.qo + 3:self.qo + 7])
+            qvel[:, self.do_:self.do_ + 6] = torch.where(over[:, None], torch.zeros_like(qvel[:, self.do_:self.do_ + 6]), qvel[:, self.do_:self.do_ + 6])
+        e0 = torch.stack([hy, torch.zeros_like(hy), torch.zeros_like(hy)], -1)
+        R0 = self._euler_R(e0)
         root = hp - torch.einsum("kij,j->ki", R0, torch.as_tensor(S.GRASP_PT, dtype=torch.float32, device=dev))
-        qpos[:, self.qh[0]], qpos[:, self.qh[1]], qpos[:, self.qh[2]] = root[:, 0], root[:, 1], root[:, 2]
-        qpos[:, self.qh[3]] = hy
+        q0 = self.kin.solve_seeds(root, R0)
+        qpos[:, self.qh] = q0
+        self.q_cmd[idx] = q0
         self.tgt_p[idx] = hp
-        self.tgt_e[idx] = torch.stack([hy, torch.zeros_like(hy), torch.zeros_like(hy)], -1)
+        self.tgt_e[idx] = e0
         self.curl[idx] = 0.0
         self.opp[idx] = 0.0
         ctrl = torch.zeros(k, self.mjm.nu, device=dev)
-        self._fill_ctrl(ctrl, self.tgt_p[idx], self.tgt_e[idx], self.curl[idx], self.opp[idx])
+        self._fill_ctrl(ctrl, self.tgt_p[idx], self.tgt_e[idx], self.curl[idx], self.opp[idx], idx=idx)
+        H, _, _ = self.kin.fk(q0)
+        self.R_prev[idx] = H[:, :3, :3]
+        self.g_prev[idx] = H[:, :3, 3] + torch.einsum("kij,j->ki", H[:, :3, :3], torch.as_tensor(S.GRASP_PT, dtype=torch.float32, device=dev))
+        self.hv[idx] = 0
         ctrl[:, self.a_belt] = -v
         self.sim.set_rows(idx, qpos, qvel, ctrl)
         self.steps[idx] = 0
@@ -1029,15 +1241,29 @@ class GraspEnv:
         self.est_e[idx] = 0.03
         self.est_y[idx] = torch.tensor([1.0, 0.0], device=dev)
 
-    def _fill_ctrl(self, ctrl, p, e, curl, opp):
-        """the hand mount's servos from where the grasp point should be (palm down, turned by yaw); the fingers' joints
-        from their curls; the thumb's base from its swing"""
+    def restart_clock(self, idx):
+        """(after a dropped object has landed) the episode starts now: its clock and counters from zero"""
+        self.steps[idx] = 0
+        for a in (self.ok_cnt, self.hold_cnt, self.bin_cnt, self.ep_ret):
+            a[idx] = 0
+        self.prev_d[idx] = -1
+        self.prev_dd[idx] = -1
+        self.lifted_ever[idx] = False
+
+    def _fill_ctrl(self, ctrl, p, e, curl, opp, idx=None):
+        """the arm's servos from where the grasp point should be (palm down, turned by yaw, pitch and roll): the joint
+        angles that put the hand there (or as near as the arm can); the fingers' joints from their curls; the thumb's
+        base from its swing"""
         torch = self.t
         R = self._euler_R(e)
         gp = torch.as_tensor(S.GRASP_PT, dtype=torch.float32, device=self.dev)
         root = p - torch.einsum("kij,j->ki", R, gp)
-        ctrl[:, 0:3] = root
-        ctrl[:, 3:6] = e
+        if idx is None:
+            q = self.kin.solve(self.q_cmd, root, R, iters=6)
+            self.q_cmd = q
+            ctrl[:, 0:6] = self.q_cmd
+        else:
+            ctrl[:, 0:6] = self.q_cmd[idx]
         cm = torch.as_tensor(S.CURL_MAX, dtype=torch.float32, device=self.dev)
         ctrl[:, 6] = S.THUMB_OPEN + opp * (S.THUMB_CLOSED - S.THUMB_OPEN)
         ctrl[:, 7] = curl[:, 0] * 1.0
@@ -1112,7 +1338,7 @@ class GraspEnv:
         self.tgt_p = torch.max(torch.min(self.tgt_p, hi), lo)
         de = torch.stack([a[:, 3] * 0.10, a[:, 4] * 0.06, a[:, 5] * 0.06], -1)
         self.tgt_e = self.tgt_e + de
-        self.tgt_e[:, 0] = self.tgt_e[:, 0].clamp(-2.4, 2.4)        # (any grasp yaw is within pi/2 of the next one)
+        self.tgt_e[:, 0] = self.tgt_e[:, 0].clamp(-YAW_MAX, YAW_MAX)
         self.tgt_e[:, 1:] = self.tgt_e[:, 1:].clamp(-0.7, 0.7)
         self.curl = (self.curl + a[:, 6:11] * 0.12).clamp(0, 1)
         self.opp = (self.opp + a[:, 11] * 0.12).clamp(0, 1)
@@ -1130,6 +1356,11 @@ class GraspEnv:
                     self._push_dir = d_ / d_.norm(dim=1, keepdim=True)
                 sim.xfrc[:, self.ob, :3] = (1.2 * self._push_dir * push[:, None].float()).to(sim.xfrc.dtype)
         sim.step()
+        g_, R_ = self.hand_state()
+        Rd = R_ @ self.R_prev.transpose(1, 2)
+        w_ = 0.5 * torch.stack([Rd[:, 2, 1] - Rd[:, 1, 2], Rd[:, 0, 2] - Rd[:, 2, 0], Rd[:, 1, 0] - Rd[:, 0, 1]], -1)
+        self.hv = torch.cat([(g_ - self.g_prev) / CTRL_DT, w_ / CTRL_DT], -1)
+        self.g_prev, self.R_prev = g_.clone(), R_.clone()
         self.k += 1
         self.steps += 1
         self.est_age += CTRL_DT
@@ -1202,11 +1433,11 @@ class GraspEnv:
         rate = ((a - self.prev_a) ** 2).mean(1)
         crush = (f.max(1).values - 25.0).clamp(min=0) / 25.0
         low = (0.004 - (g[:, 2] - 0.0)).clamp(min=0) * 50
-        hv = sim.qvel[:, self.dh[0]:self.dh[0] + 2].float()
+        hv = self.hv[:, :2]
         self.hv_avg = 0.85 * self.hv_avg + 0.15 * hv
         match = (self.hv_avg[:, 0] + self.belt_v).abs() + self.hv_avg[:, 1].abs()
-        early = self.steps < 12                                            # (the object settling on the belt)
-        self.z_rest = torch.where(self.steps == 12, op[:, 2], self.z_rest)
+        early = self.steps < SETTLE                                        # (the object falling and settling on the belt)
+        self.z_rest = torch.where(self.steps == SETTLE, op[:, 2], self.z_rest)
         r = 0.6 * r_reach + 20.0 * gain + 0.25 * r_align + 0.1 * level.clamp(min=0) - 0.05 * rate - 1.0 * knock - 0.5 * crush - low
         success = torch.zeros_like(held)
         fail = (op[:, 0] < S.EXIT_X) | (op[:, 2] < -0.08)
@@ -1262,7 +1493,7 @@ class GraspEnv:
         torch = self.t
         sim = self.sim
         g, R = self.hand_state()
-        hv = sim.qvel[:, self.dh].float()
+        hv = self.hv
         fq = sim.qpos[:, self.qf].float()
         f = self.touches()
         tn = torch.log1p(f) / math.log1p(20.0)
@@ -1318,6 +1549,22 @@ class Demo:
         T = torch.stack([ec[:, 0] - env.belt_v * 0.15, ec[:, 1], torch.max(ec[:, 2], ec[:, 2] + ee[:, 2] - 0.05)], -1)
         psi = 0.5 * torch.atan2(ey[:, 1], ey[:, 0])
         want = torch.remainder(psi + math.pi, math.pi) - math.pi / 2
+        # of the two ways round (a grasp turned half a turn is the same grasp), the one the arm reaches better
+        if self.timer.sum() == 0 or int(self.timer.max()) % 10 == 0:
+            alt = torch.where(want > 0, want - math.pi, want + math.pi)
+            gp = torch.as_tensor(S.GRASP_PT, dtype=torch.float32, device=dev)
+            res = []
+            for yv in (want, alt):
+                Rw = env._euler_R(torch.stack([yv, torch.zeros_like(yv), torch.zeros_like(yv)], -1))
+                root = T - torch.einsum("kij,j->ki", Rw, gp)
+                res.append(env.kin.residual(env.kin.solve(env.q_cmd.clone(), root, Rw, iters=12), root, Rw))
+            self.flip = res[1] + 0.01 < res[0]
+        if getattr(self, "flip", None) is not None:
+            want = torch.where(self.flip, torch.where(want > 0, want - math.pi, want + math.pi), want)
+        # carrying and over the bin: the fingers pointing away from the arm's base (a pose the arm reaches well there)
+        out = torch.atan2(env.tgt_p[:, 1], env.tgt_p[:, 0])
+        out = torch.where(out > YAW_MAX, out - 2 * math.pi, torch.where(out < -YAW_MAX, out + 2 * math.pi, out)).clamp(-YAW_MAX, YAW_MAX)
+        want = torch.where(phase >= 4, out, want)
         a = torch.zeros(n, ACT_DIM, device=dev)
         tgt = T.clone()
         tgt[:, 2] = torch.where(phase == 0, T[:, 2] + 0.07, T[:, 2])
@@ -1325,10 +1572,23 @@ class Demo:
         drop = torch.as_tensor(DROP, dtype=torch.float32, device=dev).expand(n, 3)
         tgt = torch.where((phase == 2)[:, None], env.tgt_p, tgt)
         tgt = torch.where((phase == 3)[:, None], lift, tgt)
-        tgt = torch.where((phase >= 4)[:, None], drop, tgt)
-        a[:, :3] = ((tgt - env.tgt_p) / 0.018).clamp(-1, 1)
-        a[:, 3] = ((want - env.tgt_e[:, 0]) / 0.10).clamp(-1, 1)
-        a[:, 4:6] = (-env.tgt_e[:, 1:] / 0.06).clamp(-1, 1)
+        # carrying: round the arm's base at a steady distance from it (an arc, as a robot programmer would), not in
+        # a straight line that cuts close past the base where the arm would have to fold up
+        r_now = env.tgt_p[:, :2].norm(dim=1).clamp(min=1e-3)
+        th_now = torch.atan2(env.tgt_p[:, 1], env.tgt_p[:, 0])
+        r_d = drop[:, :2].norm(dim=1)
+        th_d = torch.atan2(drop[:, 1], drop[:, 0])
+        dth = torch.remainder(th_d - th_now + math.pi, 2 * math.pi) - math.pi
+        th_n = th_now + dth.clamp(-0.03 / r_now, 0.03 / r_now)
+        r_n = r_now + (r_d - r_now).clamp(-0.012, 0.012)
+        arc = torch.stack([r_n * torch.cos(th_n), r_n * torch.sin(th_n), drop[:, 2]], -1)
+        arc = torch.where(((env.tgt_p[:, :2] - drop[:, :2]).norm(dim=1) < 0.03)[:, None], drop, arc)
+        tgt = torch.where((phase >= 4)[:, None], arc, tgt)
+        a[:, :3] = ((tgt - env.tgt_p) / 0.018).clamp(-1, 1) * torch.where(phase >= 3, 0.6, 1.0)[:, None]   # (carrying: steadier)
+        a[:, 3] = ((want - env.tgt_e[:, 0]) / 0.10).clamp(-1, 1) * torch.where(phase >= 4, 0.35, 1.0)     # (turning gently with it in hand)
+        # fingers tilted down to grasp (the arm reaches low on the belt far better so), level to carry
+        want_e = torch.stack([torch.where(phase <= 3, 0.4, 0.0), torch.zeros(n, device=dev)], -1)
+        a[:, 4:6] = ((want_e - env.tgt_e[:, 1:]) / 0.06).clamp(-1, 1)
         close = (phase >= 2) & (phase < 5)
         a[:, 6:11] = torch.where(close[:, None], torch.ones(n, 5, device=dev), -torch.ones(n, 5, device=dev))
         a[:, 11] = torch.where(close | ((phase == 1) & (timer > 4)), torch.ones(n, device=dev), -torch.ones(n, device=dev))
@@ -1439,8 +1699,7 @@ def install_imitation(env):
 _SOURCES['viz'] = r'''# ── what the project's 3D view draws: the xArm carrying the hand, the objects on the belt, the cell around them ─────────
 # The 3D view poses robots (esasim.robot/1 files in the project's assets) from live joint angles. Two robots:
 #   xarm_hand: the UFACTORY xArm 6 (its own meshes) with the five-fingered hand screwed onto its flange, so the hand
-#              is always where the arm puts it; the arm's six angles come from inverse kinematics on the simulated
-#              hand's pose, the fingers' from the simulation
+#              is always where the arm puts it; the arm's six angles and the fingers' are the simulated ones
 #   belt_objects: every object of the library, each on a free mount (x, y, z, then turns about z, y, x); the one on the
 #              belt is posed from the simulation, the others wait out of sight under the floor
 # and the cell (belt, rails, bin, pedestal, camera on its pole) as objects of the scene channel.
@@ -1735,9 +1994,128 @@ def _under(mjm, b, top):
     return False
 
 
-def objects_model(info):
-    """belt_objects.robot.json: each object on its own free mount"""
+# ── a 3D file of the conveyor (glTF binary), baked into the cell model ────────────────────────────────────────────
+def glb_meshes(data):
+    """the triangles of a .glb: [(vertices (m, Z up), faces, colour)] with every node's transform applied"""
+    import struct
+    n = struct.unpack("<I", data[12:16])[0]
+    js = json.loads(data[20:20 + n])
+    off = 20 + n
+    bl = struct.unpack("<I", data[off:off + 4])[0]
+    binc = data[off + 8:off + 8 + bl]
+    CT = {5120: np.int8, 5121: np.uint8, 5122: np.int16, 5123: np.uint16, 5125: np.uint32, 5126: np.float32}
+    NC = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
+
+    def acc(i):
+        a = js["accessors"][i]
+        bv = js["bufferViews"][a["bufferView"]]
+        dt = np.dtype(CT[a["componentType"]])
+        k = NC[a["type"]]
+        start = bv.get("byteOffset", 0) + a.get("byteOffset", 0)
+        stride = bv.get("byteStride", 0) or dt.itemsize * k
+        raw = np.frombuffer(binc, dtype=np.uint8, count=stride * (a["count"] - 1) + dt.itemsize * k, offset=start)
+        rows = np.lib.stride_tricks.as_strided(raw, shape=(a["count"], dt.itemsize * k), strides=(stride, 1))
+        return np.ascontiguousarray(rows).view(dt).reshape(a["count"], k).astype(np.float64 if dt == np.float32 else np.int64)
+
+    def node_T(nd):
+        if "matrix" in nd:
+            return np.array(nd["matrix"], float).reshape(4, 4).T
+        T = np.eye(4)
+        if "scale" in nd:
+            T = np.diag(list(nd["scale"]) + [1.0]) @ T
+        if "rotation" in nd:
+            x, y, z, w = nd["rotation"]
+            R = quat_R((w, x, y, z))
+            M = np.eye(4); M[:3, :3] = R
+            T = M @ T
+        if "translation" in nd:
+            M = np.eye(4); M[:3, 3] = nd["translation"]
+            T = M @ T
+        return T
+
+    cols = []
+    for mt in js.get("materials", []):
+        c = (mt.get("pbrMetallicRoughness") or {}).get("baseColorFactor", [0.6, 0.6, 0.6, 1])
+        cols.append(c)
+    out = []
+
+    def walk(i, Tp):
+        nd = js["nodes"][i]
+        T = Tp @ node_T(nd)
+        if "mesh" in nd:
+            for pr in js["meshes"][nd["mesh"]]["primitives"]:
+                if pr.get("mode", 4) != 4:
+                    continue
+                v = acc(pr["attributes"]["POSITION"])
+                v = v @ T[:3, :3].T + T[:3, 3]
+                f = acc(pr["indices"]).reshape(-1, 3) if "indices" in pr else np.arange(len(v)).reshape(-1, 3)
+                c = cols[pr["material"]] if pr.get("material") is not None and pr["material"] < len(cols) else [0.6, 0.6, 0.6, 1]
+                out.append((v, f, c))
+        for ch in nd.get("children", []):
+            walk(ch, T)
+    sc = js.get("scenes", [{"nodes": list(range(len(js.get("nodes", []))))}])[js.get("scene", 0)]
+    Yup = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1.0]])        # (glTF is Y up; the cell is Z up)
+    for i in sc["nodes"]:
+        walk(i, Yup)
+    return out
+
+
+def conveyor_mesh(path, log):
+    """the conveyor's 3D file, fitted to the simulated belt: its long side along the belt, its width the belt frame's,
+    its top at the rails' top, centred on the belt; the parts by colour, decimated"""
+    parts = glb_meshes(open(path, "rb").read())
+    if not parts:
+        return None
+    allv = np.concatenate([v for v, f, c in parts])
+    lo, hi = allv.min(0), allv.max(0)
+    ext = hi - lo
+    turn = ext[1] > ext[0]                         # (its long side along y: turned a quarter so it runs along x)
+    if turn:
+        Rq = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1.0]])
+        parts = [(v @ Rq.T, f, c) for v, f, c in parts]
+        allv = np.concatenate([v for v, f, c in parts])
+        lo, hi = allv.min(0), allv.max(0)
+        ext = hi - lo
+    s = (S.BELT_W + 0.06) / max(ext[1], 1e-6)
+    shift = np.array([0.2, S.BELT_Y, 0.016]) - np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, hi[2]]) * s
+    log("Conveyor model: %d parts, %d triangles; %.2f x %.2f x %.2f m in its file%s; scaled %.3f to the belt (%.2f m long, %.2f m high)."
+        % (len(parts), sum(len(f) for v, f, c in parts), ext[0], ext[1], ext[2], ", turned a quarter" if turn else "", s, ext[0] * s, ext[2] * s))
+    by_col = {}
+    for v, f, c in parts:
+        key = hexcol(c)
+        by_col.setdefault(key, []).append((v * s + shift, f))
+    links = []
+    for col, items in by_col.items():
+        m = Mesh()
+        for v, f in items:
+            tris = v[f]                                       # (k, 3, 3)
+            vv, ff = decimate(tris * 1000.0, 2.0) if len(f) > 3000 else (v * 1000.0, f)
+            m.add(vv / 1000.0, ff)
+        links.append((col, m))
+    return links
+
+
+SLAT_GAP = 0.10                   # the belt's slats, every 10 cm: they move with the simulated belt
+SLAT_X = (-1.0, 1.35)
+
+
+def slats_mesh():
+    m = Mesh()
+    v, f = _box(0.004, S.BELT_W / 2 - 0.008, 0.0008)
+    for x in np.arange(SLAT_X[0], SLAT_X[1], SLAT_GAP):
+        m.add(v, f, p=(x, S.BELT_Y, 0.0008))
+    return m
+
+
+def objects_model(info, conveyor=None):
+    """belt_objects.robot.json: the conveyor (its 3D file, if given, as fixed parts), the belt's slats on a slide
+    (along x), then each object on its own free mount"""
     joints, links = [], [{}]
+    for k, (col, m) in enumerate(conveyor or []):
+        joints.append({"name": "conveyor_%d" % k, "type": "fixed", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [0, 0, 1]})
+        links.append(m.link(col))
+    joints.append({"name": "belt_x", "type": "prismatic", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [1, 0, 0]})
+    links.append(slats_mesh().link(0x6b7078))
     for k, o in enumerate(info):
         par = "base"
         for nm, typ, axis in (("x", "prismatic", [1, 0, 0]), ("y", "prismatic", [0, 1, 0]), ("z", "prismatic", [0, 0, 1]),
@@ -1757,10 +2135,17 @@ def objects_model(info):
             "base": {"xyz": [0, 0, 0], "rpy": [0, 0, 0]}}
 
 
-def write_models(ctx, port, mjm, info, cache):
+def write_models(ctx, port, mjm, info, cache, conveyor_file=None):
     links = xarm_links(cache, ctx.log) or simple_xarm_links()
     arm, _ = arm_model(mjm, links)
-    objs = objects_model(info)
+    conv = None
+    if conveyor_file:
+        try:
+            conv = conveyor_mesh(conveyor_file, ctx.log)
+        except Exception as e:      # noqa: BLE001
+            ctx.log("The conveyor's 3D file could not be read (%s): the belt is drawn with boxes." % e)
+    objs = objects_model(info, conv)
+    objs["conveyor"] = bool(conv)
     for name, model in ((ARM, arm), (OBJS, objs)):
         raw = json.dumps(model, separators=(",", ":")).encode()
         with open(ctx.output(port, "%s.robot.json.gz" % name), "wb") as fh:
@@ -1840,19 +2225,24 @@ class ArmIK:
 
 
 # ── the items the 3D view gets ────────────────────────────────────────────────────────────────────────────────────
+CONVEYOR_DRAWN = {"value": False}     # (set when the objects model carries the conveyor's 3D file)
+
+
 def cell_objects(mjm):
     """the cell around the robot (scene channel): belt, frame, rails, bin, pedestal, the camera on its pole"""
     import mujoco
     d = mujoco.MjData(mjm)
     mujoco.mj_forward(mjm, d)
     objs = []
-    for nm, col in (("belt_frame", 0x5a6068), ("rail_l", 0x9aa1aa), ("rail_r", 0x9aa1aa), ("bin_floor", 0x2f6db5), ("bin_w1", 0x3a7fd0),
+    belt_parts = () if CONVEYOR_DRAWN["value"] else (("belt_frame", 0x5a6068), ("rail_l", 0x9aa1aa), ("rail_r", 0x9aa1aa))
+    for nm, col in belt_parts + (("bin_floor", 0x2f6db5), ("bin_w1", 0x3a7fd0),
                     ("bin_w2", 0x3a7fd0), ("bin_w3", 0x3a7fd0), ("bin_w4", 0x3a7fd0), ("bin_stand", 0x4a4f57)):
         g = mjm.geom(nm).id
         objs.append({"id": nm, "kind": "box", "center": [round(float(x) * 1000, 1) for x in d.geom_xpos[g]],
                      "size": [round(float(x) * 2000, 1) for x in mjm.geom_size[g]], "color": col})
-    objs.append({"id": "belt", "kind": "box", "center": [200.0, round(S.BELT_Y * 1000, 1), -12.0],
-                 "size": [2500.0, S.BELT_W * 1000, 24.0], "color": 0x1d1f23, "roughness": 0.95})
+    if not CONVEYOR_DRAWN["value"]:
+        objs.append({"id": "belt", "kind": "box", "center": [200.0, round(S.BELT_Y * 1000, 1), -12.0],
+                     "size": [2500.0, S.BELT_W * 1000, 24.0], "color": 0x1d1f23, "roughness": 0.95})
     objs.append({"id": "pedestal", "kind": "box", "center": [0, 0, -375.0], "size": [180.0, 180.0, 750.0], "color": 0x3a3f47})
     cam = mjm.camera("cam").id
     R = d.cam_xmat[cam].reshape(3, 3)
@@ -1863,6 +2253,10 @@ def cell_objects(mjm):
     # the camera's picture beside it, on a sheet
     objs.append({"id": "camera_picture", "kind": "quad", "image_channel": "camera_picture",
                  "corners": [[420, -260, 520], [640, -260, 520], [640, -260, 355], [420, -260, 355]], "lift": 0, "fit": False})
+    # the two robots where the simulation has them: the xArm's base on its pedestal at the origin, the objects' mounts
+    # at the origin too (else the view stands robots without a place 0.8 m apart)
+    objs.append({"id": ARM, "kind": "robot", "robot": ARM, "pos": [0, 0, 0], "rpy": [0, 0, 0]})
+    objs.append({"id": OBJS, "kind": "robot", "robot": OBJS, "pos": [0, 0, 0], "rpy": [0, 0, 0]})
     return {"units": "mm", "up": "z", "floor": -750, "objects": objs}
 
 
@@ -1872,7 +2266,6 @@ class Pose3D:
     def __init__(self, env):
         mjm = env.mjm
         self.env = env
-        self.ik = ArmIK()
         self.hand = mjm.body("hand").id
         import mujoco
         hb = self.hand
@@ -1889,18 +2282,18 @@ class Pose3D:
     def snap(self, i=0):
         """what the 3D view needs of cell i, now (kept to be turned into joint items later, off the learning's way)"""
         env, sim = self.env, self.env.sim
-        return (sim.xpos[i, self.hand].float().cpu().numpy().astype(float), sim.xquat[i, self.hand].float().cpu().numpy().astype(float),
+        return (sim.qpos[i, env.qh].float().cpu().numpy().astype(float), None,
                 sim.qpos[i, self.fq_t].float().cpu().numpy().astype(float), int(env.obj[i]),
-                sim.xpos[i, env.ob].float().cpu().numpy().astype(float), sim.xquat[i, env.ob].float().cpu().numpy().astype(float))
+                sim.xpos[i, env.ob].float().cpu().numpy().astype(float), sim.xquat[i, env.ob].float().cpu().numpy().astype(float),
+                float(sim.qpos[i, env.qb]))
 
     def items(self, sn):
-        hp, hq, fq, o, op, oq = sn
-        q, e = self.ik.solve(hp, quat_R(hq))
-        self.err = e
+        q, _, fq, o, op, oq, belt = sn            # (the arm's angles are the simulated arm's own)
         arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq]
         r, p, y = rpy_of(quat_R(oq))
-        objs = [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0] * self.nobj      # (every item complete: the objects not in play under the floor)
-        objs[6 * o:6 * o + 6] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000, 1), round(y, 4), round(p, 4), round(r, 4)]
+        slide = round((belt % SLAT_GAP) * 1000, 1)          # (the slats repeat every SLAT_GAP: where in the gap the belt is)
+        objs = [slide] + [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0] * self.nobj      # (every item complete: the objects not in play under the floor)
+        objs[1 + 6 * o:7 + 6 * o] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000, 1), round(y, 4), round(p, 4), round(r, 4)]
         return ({"robot": ARM, "units": "rad", "q": arm}, {"robot": OBJS, "units": "rad", "q": objs})
 
     def send(self, ctx, sn):
@@ -2495,7 +2888,14 @@ def learn_run(ctx, stage):
     algo = PPO(torch, dev, n, OBS_DIM, PRIV_DIM, ACT_DIM, horizon=32, lr=3e-4, entropy=0.002, schedule="adaptive")
     steps_done, warm = 0, 0
     order = {s: k for k, s in enumerate(STAGES)}
+    task = getattr(ctx, "task", None)
+    n_tasks = int(getattr(task, "count", 1) or 1)
+    t_idx = int(getattr(task, "index", 0) or 0)
+    lead = t_idx == 0                                  # (the first task drives the 3D view and the learning curve)
+    ch_train = ch_train if lead else "%s_%d" % (ch_train, t_idx)
     found = [] if str(p.get("training") or "").lower().startswith("start") else find_files(ctx, "policy", "policy_checkpoint.pt", FORMAT)
+    if n_tasks > 1:        # every task of a parallel round starts from the same policy: the newest given as input
+        found = [f for f in found if f["where"] == "dataset"]
     found = [f for f in found if order.get(f["stage"], 9) <= order[stage]]
     found.sort(key=lambda f: (order.get(f["stage"], 0), f["steps"], f["stamp"]), reverse=True)
     if found:
@@ -2512,10 +2912,17 @@ def learn_run(ctx, stage):
             ctx.log("Continuing from %s (%.0f%% success, %.0f million steps)." % (pick["name"], float(st.get("score") or 0), steps_done / 1e6))
     else:
         ctx.log("No policy to carry on from: a new one learns from nothing.")
-    ctx.log("Learning to %s on %s: %d cells at once, for up to %.0f minutes." % (stage, label, n, minutes))
-    ctx.telemetry("scene", viz.cell_objects(lib[0]))
+    ctx.log("Learning to %s on %s: %d cells at once, for up to %.0f minutes%s." % (stage, label, n, minutes,
+            (" (task %d of %d of this round: its policy is averaged with the others' when they are done)" % (t_idx + 1, n_tasks)) if n_tasks > 1 else ""))
+    steps_start = steps_done
     pose = viz.Pose3D(env)
-    player = viz.Replayer(ctx, pose, 2 * CTRL_DT)
+    if lead:
+        ctx.telemetry("scene", viz.cell_objects(lib[0]))
+        player = viz.Replayer(ctx, pose, 2 * CTRL_DT)
+    else:
+        player = viz.Replayer.__new__(viz.Replayer)          # (a silent one: only the first task shows its episodes)
+        player.play = lambda *a, **k: None
+        player.stop = lambda: None
     env.reset_all()
     env.perceive()
     a_obs, a_priv = env.obs()
@@ -2535,7 +2942,8 @@ def learn_run(ctx, stage):
     def save(note):
         st = algo.state()
         st.update({"format": FORMAT, "stage": stage, "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": ACT_DIM, "score": score(), "note": note,
-                   "steps": steps_done, "device": label, "minutes": (time.time() - t0) / 60, "ctrl_dt": CTRL_DT,
+                   "steps": steps_done, "round_steps": steps_done - steps_start, "device": label, "minutes": (time.time() - t0) / 60, "ctrl_dt": CTRL_DT,
+                   "episodes": len(hist), "arm": "xarm6-in-physics",
                    "per_object": {k: round(100 * sum(v) / max(1, len(v))) for k, v in per_obj.items()}})
         torch.save(st, out_path)
 
@@ -2598,7 +3006,7 @@ def learn_run(ctx, stage):
     finally:
         curve.close()
         player.stop()
-    if best < 0 or score() >= best:
+    if best < 0 or score() >= best or n_tasks > 1:
         save("final")
     final = torch.load(out_path, map_location="cpu", weights_only=False)
     name = "grasp_%s_%s_%02d.pt" % (stage, time.strftime("%Y%m%d_%H%M"), int(round(max(0.0, float(final.get("score") or 0)))))
@@ -2615,6 +3023,71 @@ def learn_run(ctx, stage):
     return {"success_pct": round(float(final.get("score") or 0), 1), "stage": stage, "steps_m": round(steps_done / 1e6, 1)}
 
 
+# ── a parallel round's combine task: the tasks' policies averaged ────────────────────────────────────────────────
+def combine_run(ctx, stage):
+    """the policies the round's tasks learned (each from the same start, on its own worker and hardware) averaged into
+    one: each weighted by the experience it gathered in the round; the input scalings merged as the statistics of all
+    their samples together. It is the start of the next round."""
+    import torch
+    pols, sees = [], []
+    for port, files in ctx.inputs.items():
+        for f in files:
+            if str(f.name).endswith(".pt"):
+                try:
+                    st = torch.load(f.path, map_location="cpu", weights_only=False)
+                except Exception as e:      # noqa: BLE001
+                    ctx.log("Skipped %s: %s" % (f.name, e))
+                    continue
+                if st.get("format") == FORMAT and st.get("stage") == stage and f.task is not None:
+                    pols.append((f, st))
+                elif st.get("format") == SEE_FORMAT:
+                    sees.append(f)
+    if not pols:
+        raise RuntimeError("No policies from this round's tasks to combine.")
+    w = np.array([max(1.0, float(st.get("round_steps") or 0)) for f, st in pols])
+    w = w / w.sum()
+    base = pols[int(np.argmax(w))][1]
+    ac = {}
+    for k, v in base["ac"].items():
+        if torch.is_tensor(v) and v.is_floating_point():
+            ac[k] = sum(float(wi) * st["ac"][k].float() for wi, (f, st) in zip(w, pols)).to(v.dtype)
+        else:
+            ac[k] = v
+
+    def merge(key):
+        ms = [st[key] for f, st in pols]
+        cnt = [m["count"].double() if torch.is_tensor(m["count"]) else torch.tensor(float(m["count"])).double() for m in ms]
+        tot = sum(cnt)
+        mean = sum(c * m["mean"].double() for c, m in zip(cnt, ms)) / tot
+        var = sum(c * (m["var"].double() + (m["mean"].double() - mean) ** 2) for c, m in zip(cnt, ms)) / tot
+        return {"mean": mean.float(), "var": var.float(), "count": tot.float()}
+    out = dict(base)
+    out.pop("opt", None)          # (each task's optimizer moments belong to its own weights: the next round starts them afresh)
+    out["ac"] = ac
+    out["obs_norm"] = merge("obs_norm")
+    out["priv_norm"] = merge("priv_norm")
+    eps = [float(st.get("episodes") or 0) for f, st in pols]
+    out["score"] = float(sum(e * float(st.get("score") or 0) for e, (f, st) in zip(eps, pols)) / max(1.0, sum(eps)))
+    out["steps"] = int(max(float(st.get("steps") or 0) - float(st.get("round_steps") or 0) for f, st in pols) + sum(float(st.get("round_steps") or 0) for f, st in pols))
+    out["round_steps"] = 0
+    out["lr"] = float(np.median([float(st.get("lr") or 3e-4) for f, st in pols]))
+    out["note"] = "averaged from %d workers" % len(pols)
+    out["device"] = " + ".join(str(st.get("device")) for f, st in pols)
+    name = "grasp_%s_%s_%02d.pt" % (stage, time.strftime("%Y%m%d_%H%M%S"), int(round(max(0.0, out["score"]))))
+    torch.save(out, ctx.output("policy", name))
+    for f in sees[:1]:
+        shutil.copyfile(f.path, ctx.output("policy", f.name))
+    for (f, st), wi in zip(pols, w):
+        ctx.log("Task %s on %s: %.0f%% success, %.1f M steps this round, weight %.2f." % (f.task, st.get("device"), float(st.get("score") or 0), float(st.get("round_steps") or 0) / 1e6, wi))
+    ctx.log("Combined: %s (%.0f%% success across the workers, %.1f M steps in all)." % (name, out["score"], out["steps"] / 1e6))
+    row = {"success": round(out["score"], 1), "steps_m": round(out["steps"] / 1e6, 2), "workers": len(pols)}
+    for (f, st) in pols:
+        row["task%s_steps_m" % f.task] = round(float(st.get("round_steps") or 0) / 1e6, 2)
+        row["task%s_success" % f.task] = round(float(st.get("score") or 0), 1)
+    ctx.telemetry("rounds", row)
+    return {"success_pct": round(out["score"], 1), "stage": stage, "workers": len(pols), "steps_m": round(out["steps"] / 1e6, 1)}
+
+
 # ── the test: objects it never learned on, chosen in the view ──────────────────────────────────────────────────
 POSES = {"upright": 0, "on its side": 1, "side": 1, "any": 2, "random": 2, "tumbled": 2}
 
@@ -2628,6 +3101,7 @@ def test_run(ctx):
     torch.manual_seed(seed)
     pace = float(p.get("pace") or 1.0)
     auto = str(p.get("autoplay") or "Yes").lower().startswith("y")
+    drop = float(p.get("drop_cm") if p.get("drop_cm") not in (None, "") else 25) / 100.0      # from how high it falls onto the belt
     lib, sim, label, env = build(ctx, 1, "place", seed=seed, test_objects=True)
     dev = sim.tdev
     env.assist = 0.0
@@ -2722,12 +3196,32 @@ def test_run(ctx):
         trial += 1
         idx = torch.zeros(1, dtype=torch.long, device=dev)
         yaw = None if req["yaw"] is None else math.radians(req["yaw"])
-        env.reset(idx, obj=torch.tensor([req["obj"]], device=dev), mode=req["pose"], yaw=yaw, speed=req["speed"])
+        env.reset(idx, obj=torch.tensor([req["obj"]], device=dev), mode=req["pose"], yaw=yaw, speed=req["speed"], drop=drop)
         sim.refresh()
-        env.perceive()
         o = env.info[req["obj"]]
         pose_txt = ["upright", "on its side", "tumbled"][req["pose"]]
-        ctx.telemetry(ch_ev, {"text": "Trial %d: %s%s, %s, belt at %.0f cm/s" % (trial, o["label"], " (new to it)" if o["test"] else " (seen in training)", pose_txt, float(env.belt_v[0]) * 100)})
+        ctx.telemetry(ch_ev, {"text": "Trial %d: %s%s, dropped %s onto the belt at %.0f cm/s" % (trial, o["label"], " (new to it)" if o["test"] else " (seen in training)", pose_txt, float(env.belt_v[0]) * 100)})
+        # it falls, bounces and settles on the moving belt (the hand waits); then the robot's turn begins
+        wall0 = time.time()
+        if drop:
+            still = 0
+            for k in range(60):
+                env.step(torch.zeros(1, ACT_DIM, device=dev))
+                if k % 2 == 1:
+                    pose.send(ctx, pose.snap(0))
+                ov = sim.qvel[0, env.do_:env.do_ + 6].float()
+                rel = float((ov[0] + env.belt_v[0]).abs() + ov[1:3].abs().sum() + 0.05 * ov[3:].abs().sum())
+                still = still + 1 if rel < 0.03 else 0
+                if pace > 0:
+                    lag = wall0 + (k + 1) * CTRL_DT / pace - time.time()
+                    if lag > 0:
+                        time.sleep(lag)
+                if still >= 5 and k >= 10:
+                    break
+            env.restart_clock(idx)
+            env.z_rest[0] = sim.xpos[0, env.ob, 2].float()
+            ctx.telemetry(ch_ev, {"text": "Landed at %.0f cm along the belt, %.0f cm across, after %.1f s" % (float(sim.xpos[0, env.ob, 0]) * 100, (float(sim.xpos[0, env.ob, 1]) - S.BELT_Y) * 100, (k + 1) * CTRL_DT)})
+        env.perceive()
         wall0 = time.time()
         grasped, maxf, result = False, 0.0, "ran out of time"
         while True:
@@ -2780,22 +3274,26 @@ def models_run(ctx):
     here = os.path.abspath(os.getcwd())
     jobs = os.path.dirname(os.path.dirname(here))
     base = os.path.dirname(jobs) if os.path.basename(jobs).lower() == "jobs" else os.path.dirname(here)
-    viz.write_models(ctx, "models", lib[0], lib[6], os.path.join(base, "cache", "xarm6"))
-    return {"models": [viz.ARM, viz.OBJS]}
+    glb = [f.path for f in (ctx.inputs.get("conveyor") or []) + (ctx.inputs.get("policy") or []) if str(f.name).lower().endswith(".glb")]
+    if not glb:
+        ctx.log("No conveyor 3D file wired in (Conveyor model input): the belt is drawn with boxes.")
+    viz.write_models(ctx, "models", lib[0], lib[6], os.path.join(base, "cache", "xarm6"), glb[0] if glb else None)
+    return {"models": [viz.ARM, viz.OBJS], "conveyor_from_file": bool(glb)}
 
 
 def run(ctx):
     what = str(ctx.params.get("mode") or "Learn to reach").lower()
+    viz.CONVEYOR_DRAWN["value"] = not str(ctx.params.get("belt_drawing") or "From the conveyor's 3D file").lower().startswith("box")
     if "model" in what:
         return models_run(ctx)
     if "see" in what:
         return see_run(ctx)
     if "test" in what:
         return test_run(ctx)
-    for s in STAGES:
-        if s in what:
-            return learn_run(ctx, s)
-    return learn_run(ctx, "reach")
+    stage = next((s for s in STAGES if s in what), "reach")
+    if getattr(getattr(ctx, "task", None), "kind", "run") == "combine":
+        return combine_run(ctx, stage)
+    return learn_run(ctx, stage)
 '''
 
 
