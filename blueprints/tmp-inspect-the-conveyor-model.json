@@ -1,0 +1,47 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 90
+    },
+    "name": "tmp · inspect the conveyor model",
+    "description": "An empty grid: drag blocks from the menu.",
+    "published_version": 1,
+    "updated": "2026-11-19 15:01:30",
+    "graph": {
+        "nodes": [
+            {
+                "id": "a",
+                "type": "project-assets",
+                "x": 40,
+                "y": 40,
+                "params": {
+                    "files": "models/simple_rubber_conveyor.glb"
+                }
+            },
+            {
+                "id": "py",
+                "type": "python-script",
+                "x": 380,
+                "y": 40,
+                "params": []
+            }
+        ],
+        "edges": [
+            {
+                "id": "a.files>py.in",
+                "from": {
+                    "node": "a",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "py",
+                    "port": "in"
+                }
+            }
+        ],
+        "notes": [],
+        "dash": {
+            "items": []
+        }
+    }
+}

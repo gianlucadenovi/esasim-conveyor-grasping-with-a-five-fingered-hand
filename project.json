@@ -46,6 +46,12 @@
             "file": "blueprints/5-test-with-new-objects.json",
             "published_version": 3,
             "nodes": 5
+        },
+        {
+            "name": "tmp · inspect the conveyor model",
+            "file": "blueprints/tmp-inspect-the-conveyor-model.json",
+            "published_version": 1,
+            "nodes": 2
         }
     ],
     "blocks": [
