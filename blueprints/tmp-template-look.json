@@ -6,7 +6,7 @@
     "name": "tmp · template look",
     "description": "Your own Python code that streams values while it runs, with a live chart and its final table.",
     "published_version": 0,
-    "updated": "2026-11-19 15:02:07",
+    "updated": "2026-11-19 19:09:54",
     "graph": {
         "nodes": [
             {
@@ -104,6 +104,28 @@
                 }
             }
         ],
-        "notes": []
+        "notes": [],
+        "dash": {
+            "items": {
+                "chart": {
+                    "x": 0,
+                    "y": 0,
+                    "w": 6,
+                    "h": 7
+                },
+                "table": {
+                    "x": 6,
+                    "y": 0,
+                    "w": 6,
+                    "h": 7
+                },
+                "result": {
+                    "x": 0,
+                    "y": 7,
+                    "w": 12,
+                    "h": 3
+                }
+            }
+        }
     }
 }
