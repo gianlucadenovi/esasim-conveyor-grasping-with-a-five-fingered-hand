@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 2 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 3 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects.
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -2067,6 +2067,61 @@ def _load():
         exec(compile(_SOURCES[name], mod.__file__, "exec"), mod.__dict__)
 
 
+def _gpu_torch(ctx):
+    """This worker's Python may have PyTorch built for the CPU only, though it has an NVIDIA GPU: then a CUDA build of
+    the same PyTorch goes into the worker's data folder once (cache/torch-cuda, about 2.5 GB), used by this block only
+    (the worker's own Python is left as it is)."""
+    import os
+    import shutil
+    import subprocess
+    want = str(ctx.params.get("accelerator") or "auto").lower()
+    if want.startswith("cpu") or "torch" in _sys.modules:
+        return
+    if not shutil.which("nvidia-smi"):
+        return
+    here = os.path.abspath(os.getcwd())
+    jobs = os.path.dirname(os.path.dirname(here))
+    base = os.path.dirname(jobs) if os.path.basename(jobs).lower() == "jobs" else os.path.dirname(here)
+    target = os.path.join(base, "cache", "torch-cuda")
+    probe = "import torch; x = torch.ones(2, device='cuda') * 2; print(torch.__version__, float(x.sum()))"
+
+    def works(path):
+        env = dict(os.environ)
+        if path:
+            env["PYTHONPATH"] = path + os.pathsep + env.get("PYTHONPATH", "")
+        try:
+            r = subprocess.run([_sys.executable, "-c", probe], capture_output=True, text=True, timeout=300, env=env)
+            return r.returncode == 0 and "4.0" in r.stdout
+        except Exception:      # noqa: BLE001
+            return False
+    if os.path.isdir(os.path.join(target, "torch")) and works(target):
+        _sys.path.insert(0, target)
+        return
+    if works(None):
+        return
+    try:
+        ver = subprocess.run([_sys.executable, "-c", "import torch; print(torch.__version__)"], capture_output=True, text=True, timeout=300).stdout.strip()
+    except Exception:          # noqa: BLE001
+        ver = ""
+    ver = ver.split("+")[0]
+    ctx.log("This worker's PyTorch (%s) is built for the CPU only: installing its CUDA build once for this block, in %s "
+            "(about 2.5 GB; the worker's own Python is left as it is)." % (ver or "?", target))
+    tries = [("torch==%s" % ver, cu) for cu in ("cu126", "cu124", "cu128")] if ver else []
+    tries.append(("torch", "cu126"))
+    for spec, cu in tries:
+        cmd = [_sys.executable, "-m", "pip", "install", "--no-deps", "--upgrade", "--target", target, spec,
+               "--index-url", "https://download.pytorch.org/whl/%s" % cu]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode == 0 and works(target):
+            ctx.log("CUDA PyTorch ready (%s %s)." % (spec, cu))
+            _sys.path.insert(0, target)
+            return
+        ctx.log("PyTorch %s for %s did not work here: %s" % (spec, cu, (r.stderr or r.stdout or "")[-300:].strip()))
+        shutil.rmtree(target, ignore_errors=True)
+    ctx.log("No CUDA build of PyTorch would install: this run uses the CPU.")
+
+
 def run(ctx):
+    _gpu_torch(ctx)
     _load()
     return _sys.modules["train"].run(ctx)
