@@ -3,10 +3,10 @@
         "kind": "blueprint",
         "flow_id": 86
     },
-    "name": "0 · Make the 3D models (one-off)",
+    "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 11,
-    "updated": "2026-11-19 18:53:06",
+    "published_version": 12,
+    "updated": "2026-11-19 20:00:42",
     "graph": {
         "nodes": [
             {
@@ -29,7 +29,7 @@
                     "version": "latest",
                     "pattern": "README*"
                 },
-                "title": "(keeps it on the machine with the networks)"
+                "title": "(runs it on the GPU PC, which uploads its results)"
             },
             {
                 "id": "models",
@@ -44,7 +44,7 @@
                 "title": "Make the 3D models",
                 "dest": {
                     "location": 9,
-                    "name": "grasp-3d-models-5",
+                    "name": "grasp-3d-models-6",
                     "folder": "",
                     "live": true,
                     "move": false,

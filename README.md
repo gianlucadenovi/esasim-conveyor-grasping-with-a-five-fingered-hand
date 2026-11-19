@@ -111,12 +111,12 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Blueprints in this repository
 
-- [0 · Make the 3D models (one-off)](blueprints/0-make-the-3d-models-one-off.json) · 3 blocks · version 11
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 8 blocks · version 6
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 9 blocks · version 3
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 8 blocks · version 1
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 8 blocks · version 2
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 7 blocks · version 6
+- [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 3 blocks · version 12
 
 ### Workspace blocks it uses
 
