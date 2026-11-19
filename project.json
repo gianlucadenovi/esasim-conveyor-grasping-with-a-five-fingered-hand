@@ -14,7 +14,7 @@
         {
             "name": "0 · GPU check (temporary)",
             "file": "blueprints/0-gpu-check-temporary.json",
-            "published_version": 1,
+            "published_version": 2,
             "nodes": 1
         },
         {
@@ -33,7 +33,7 @@
     "blocks": [
         {
             "id": "ws-gpu-pytorch-check-grasping",
-            "version": 1,
+            "version": 2,
             "name": "GPU PyTorch check (grasping)"
         },
         {

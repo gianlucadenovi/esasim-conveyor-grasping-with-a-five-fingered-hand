@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# GPU PyTorch check (grasping) (ws-gpu-pytorch-check-grasping) · version 1 · worker block, Python: def run(ctx)
+# GPU PyTorch check (grasping) (ws-gpu-pytorch-check-grasping) · version 2 · worker block, Python: def run(ctx)
 # Checks which CUDA build of PyTorch runs on this worker's NVIDIA GPU (for the conveyor grasping block).
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -11,12 +11,13 @@
 # Settings ctx.params["key"]
 #   spec        text      Torch spec = "torch==2.14.1"
 #   cu          text      CUDA index = "cu126"
-#   install     select    Install = "No" of No | Yes
+#   install     select    Install = "No" of No | Yes | Remove
 # Runs on  NVIDIA GPU. Return a dict to fill the "result" output.
 # EsaSim rewrites these lines from the block's definition each time it is saved: change the definition, not them.
 # ── end of EsaSim block header ────────────────────────────────────────
 
 import os
+import shutil
 import subprocess
 import sys
 
@@ -26,8 +27,13 @@ def run(ctx):
     jobs = os.path.dirname(os.path.dirname(here))
     base = os.path.dirname(jobs) if os.path.basename(jobs).lower() == "jobs" else os.path.dirname(here)
     target = os.path.join(base, "cache", "torch-cuda")
+    mode = str(ctx.params.get("install")).lower()
+    if mode.startswith("r"):
+        shutil.rmtree(target, ignore_errors=True)
+        ctx.log("Removed %s: %s" % (target, not os.path.exists(target)))
+        return {"removed": not os.path.exists(target)}
     ctx.log(subprocess.run(["nvidia-smi"], capture_output=True, text=True).stdout[:1500])
-    if str(ctx.params.get("install")).lower().startswith("y"):
+    if mode.startswith("y"):
         r = subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--upgrade", "--target", target, ctx.params.get("spec") or "torch",
                             "--index-url", "https://download.pytorch.org/whl/%s" % (ctx.params.get("cu") or "cu126")], capture_output=True, text=True)
         ctx.log("pip: %s %s" % (r.returncode, (r.stdout + r.stderr)[-800:]))

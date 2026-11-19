@@ -45,13 +45,13 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Blueprints in this repository
 
-- [0 · GPU check (temporary)](blueprints/0-gpu-check-temporary.json) · 1 block · version 1
+- [0 · GPU check (temporary)](blueprints/0-gpu-check-temporary.json) · 1 block · version 2
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 6 blocks · version 3
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 8 blocks · version 1
 
 ### Workspace blocks it uses
 
-- [GPU PyTorch check (grasping)](blocks/ws-gpu-pytorch-check-grasping) · version 1
+- [GPU PyTorch check (grasping)](blocks/ws-gpu-pytorch-check-grasping) · version 2
 - [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 3
 - [xArm model](blocks/ws-xarm-6-model) · version 2
 - [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 1

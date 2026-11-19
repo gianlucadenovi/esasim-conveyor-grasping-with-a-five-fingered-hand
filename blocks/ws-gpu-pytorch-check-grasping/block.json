@@ -30,7 +30,8 @@
             "default": "No",
             "options": [
                 "No",
-                "Yes"
+                "Yes",
+                "Remove"
             ]
         }
     ],
@@ -38,6 +39,6 @@
         "nvidia"
     ],
     "esasim": {
-        "version": 1
+        "version": 2
     }
 }
