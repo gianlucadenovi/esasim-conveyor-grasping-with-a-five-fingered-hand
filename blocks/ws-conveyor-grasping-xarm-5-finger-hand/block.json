@@ -64,7 +64,8 @@
                 "auto",
                 "NVIDIA GPU",
                 "CPU"
-            ]
+            ],
+            "help": "auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU"
         },
         {
             "key": "worlds",
@@ -141,7 +142,8 @@
         }
     ],
     "hardware": [
-        "cpu"
+        "cpu",
+        "nvidia"
     ],
     "hardware_by": {
         "param": "accelerator",
@@ -166,6 +168,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 1
+        "version": 2
     }
 }

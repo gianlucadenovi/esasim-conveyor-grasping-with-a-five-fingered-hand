@@ -10,7 +10,7 @@
 
 **An xArm with a five-fingered hand learns to see objects coming on a conveyor belt, reach them, grasp them with real contact forces (touch sensors in the fingertips and palm) and put them in a bin; then it is tested on objects it never saw, chosen by you.**
 
-![type](https://img.shields.io/badge/type-Robotics%20%26%20manipulation-blue) ![language](https://img.shields.io/badge/language-Python-3776AB) ![runs on](https://img.shields.io/badge/runs%20on-CPU-6f42c1) [![made with](https://img.shields.io/badge/made%20with-EsaSim-0b7285)](https://esacode.com/)
+![type](https://img.shields.io/badge/type-Robotics%20%26%20manipulation-blue) ![language](https://img.shields.io/badge/language-Python-3776AB) ![runs on](https://img.shields.io/badge/runs%20on-CPU%20%7C%20NVIDIA-6f42c1) [![made with](https://img.shields.io/badge/made%20with-EsaSim-0b7285)](https://esacode.com/)
 
 <!-- More badges: ![licence](https://img.shields.io/badge/licence-MIT-green) — label, value and colour, written in the address. -->
 
@@ -23,7 +23,7 @@
 
 ## What you need
 
-- A computer with the EsaSim worker (Project > Compute).
+- A computer with the EsaSim worker (Project > Compute); it runs on any worker, faster with: NVIDIA GPU.
 - Python packages, installed by the worker the first time: `torch`, `mujoco>=3.3`, `mujoco-warp`, `warp-lang`, `numpy`.
 
 ## How to run it
@@ -49,6 +49,6 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Workspace blocks it uses
 
-- [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 1
+- [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 2
 
 Keys pasted in blocks (secret settings) are not saved here. Datasets, results and the team stay in EsaSim.
