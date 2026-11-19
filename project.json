@@ -9,7 +9,7 @@
     "type": "robotics",
     "cover": "c2",
     "cover_file": "assets/cover.svg",
-    "readme": null,
+    "readme": "README.md",
     "blueprints": [
         {
             "name": "0 · xArm model to EsaSim storage (one-off)",
