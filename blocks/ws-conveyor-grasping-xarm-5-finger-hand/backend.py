@@ -1,11 +1,11 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 6 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 7 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm learns to see objects on a conveyor, reach them, grasp them with real contact forces and put them in a bin (MuJoCo, GPU or CPU); then a test with new objects.
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
-#   policy      Files (pt)                Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves
+#   policy      Files (pt, py)            Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves. A grasp_code_<part>.py here
 # Outputs  ctx.output("id", "name.ext") is the path to write; ctx.write_json / ctx.write_text
 #   policy      Files (pt)                Network · grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used (Learn to reach, grasp, place)
 #   curve       Table (csv)               Learning curve · see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial)
@@ -1198,7 +1198,7 @@ class GraspEnv:
         crush = (f.max(1).values - 25.0).clamp(min=0) / 25.0
         low = (0.004 - (g[:, 2] - 0.0)).clamp(min=0) * 50
         hv = sim.qvel[:, self.dh[0]:self.dh[0] + 2].float()
-        self.hv_avg = 0.75 * self.hv_avg + 0.25 * hv
+        self.hv_avg = 0.85 * self.hv_avg + 0.15 * hv
         match = (self.hv_avg[:, 0] + self.belt_v).abs() + self.hv_avg[:, 1].abs()
         early = self.steps < 12                                            # (the object settling on the belt)
         self.z_rest = torch.where(self.steps == 12, op[:, 2], self.z_rest)
@@ -1207,7 +1207,7 @@ class GraspEnv:
         fail = (op[:, 0] < S.EXIT_X) | (op[:, 2] < -0.08)
         in_bin = ((op[:, 0] - S.BIN_C[0]).abs() < S.BIN_HALF[0]) & ((op[:, 1] - S.BIN_C[1]).abs() < S.BIN_HALF[1]) & (op[:, 2] < S.BIN_H) & (op[:, 2] > -0.02)
         if st == "reach":
-            ok = (dxy < 0.025) & (dz < 0.025) & (level > 0.85) & ((elong < 0.3) | (align > 0.7)) & (match < 0.08) & ~early
+            ok = (dxy < 0.025) & (dz < 0.025) & (level > 0.85) & ((elong < 0.3) | (align > 0.7)) & (match < 0.12) & ~early
             self.ok_cnt = torch.where(ok, self.ok_cnt + 1, torch.zeros_like(self.ok_cnt))
             success = self.ok_cnt >= 3
             r = r + 1.0 * r_reach * (dxy < 0.04).float() * (1 - torch.tanh(15 * dz)) + 10.0 * success.float()
@@ -1236,6 +1236,10 @@ class GraspEnv:
                 r = r + 30.0 * success.float()
                 fail = fail | (self.lifted_ever & ~in_bin & (op[:, 2] < self.z_rest - 0.03))
         r = torch.where(fail, r - 5.0, r)
+        # success ends the episode: it is worth at least what the rest of the episode could have paid step by step
+        # (else the policy learns to hover just short of it, collecting the shaping instead)
+        left = (self.max_steps - self.steps).clamp(min=0).float()
+        r = r + torch.where(success, (2.5 if st == "reach" else 5.0) * left, torch.zeros_like(r))
         timeout = self.steps >= self.max_steps
         done = success | fail | timeout
         info = {"success": success, "fail": fail, "timeout": timeout & ~success & ~fail, "d": d, "lift": lift, "held": held,
@@ -2142,6 +2146,17 @@ def _load():
 
 
 
+def _overrides(ctx):
+    """a newer version of one part of this block, given as grasp_code_<part>.py among the Policies input (in the
+    grasp-networks dataset), replaces that part for the run: a change tried out without saving the block"""
+    import os
+    for f in (ctx.inputs.get("policy") or []):
+        nm = os.path.basename(str(f.name))
+        if nm.startswith("grasp_code_") and nm.endswith(".py") and nm[11:-3] in _SOURCES:
+            _SOURCES[nm[11:-3]] = open(f.path, encoding="utf-8").read()
+            ctx.log("Using %s in place of the block's own %s." % (nm, nm[11:-3]))
+
+
 def _gpu_torch(ctx):
     """This worker's Python may have PyTorch built for the CPU only, though it has an NVIDIA GPU: then a CUDA build of
     the same PyTorch goes into the worker's data folder once (cache/torch-cuda, about 2.5 GB), used by this block only
@@ -2227,5 +2242,6 @@ def _gpu_torch(ctx):
 
 def run(ctx):
     _gpu_torch(ctx)
+    _overrides(ctx)
     _load()
     return _sys.modules["train"].run(ctx)

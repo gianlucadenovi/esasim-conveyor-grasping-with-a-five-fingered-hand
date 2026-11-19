@@ -121,7 +121,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 ### Workspace blocks it uses
 
 - [xArm model](blocks/ws-xarm-6-model) · version 2
-- [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 6
+- [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 7
 - [Conveyor grasping view](blocks/ws-conveyor-grasping-view) · version 3
 
 The data the blueprints read (grasp-networks) stays in EsaSim.

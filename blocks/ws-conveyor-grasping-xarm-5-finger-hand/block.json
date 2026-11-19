@@ -16,9 +16,10 @@
             "many": true,
             "optional": true,
             "formats": [
-                "pt"
+                "pt",
+                "py"
             ],
-            "help": "Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves"
+            "help": "Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from or to test; those left on the machine by earlier runs are found by themselves. A grasp_code_<part>.py here"
         }
     ],
     "outputs": [
@@ -168,6 +169,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 6
+        "version": 7
     }
 }

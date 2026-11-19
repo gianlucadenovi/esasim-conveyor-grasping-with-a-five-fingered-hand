@@ -56,7 +56,7 @@
         },
         {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
-            "version": 6,
+            "version": 7,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
         },
         {
