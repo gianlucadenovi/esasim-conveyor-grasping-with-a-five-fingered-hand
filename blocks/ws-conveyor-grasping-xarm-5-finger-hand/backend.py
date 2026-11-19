@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 14 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 15 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-19
@@ -1740,6 +1740,7 @@ import gzip
 import json
 import math
 import os
+import time
 
 import numpy as np
 
@@ -2375,6 +2376,7 @@ class Pose3D:
         self.n_sent += 1
         a, o = self.items(sn)
         ctx.telemetry("joints", a)
+        time.sleep(0.002)       # (the 3D view takes two items of a channel with the same time stamp for one: the objects' would be lost)
         ctx.telemetry("joints", o)
 
 
