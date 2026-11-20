@@ -5,7 +5,7 @@
     },
     "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 14,
+    "published_version": 15,
     "updated": "2026-11-20 21:42:23",
     "graph": {
         "nodes": [
