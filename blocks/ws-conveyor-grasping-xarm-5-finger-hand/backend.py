@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 28 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 29 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -3004,13 +3004,16 @@ class LiveCell:
                 self.pose.cut(self.ctx)
                 ep += 1
                 t0, k = time.time(), 0
-                cam_err, near = [], 9.0
+                cam_err, near, curl_max, lift_max = [], 9.0, 0.0, 0.0
                 while self.alive:
                     obs, _ = env.obs()
-                    with torch.no_grad():
-                        a = self.ac.actor(self.on(obs))
+                    with torch.no_grad():       # (as it acts while it learns: its moves with their spread; the fingers'
+                        mu = self.ac.actor(self.on(obs))     # commands add up step by step, and that spread is what closes them)
+                        a = mu + self.ac.log_std.exp() * torch.randn_like(mu)
                     _, done, info = env.step(a)
                     k += 1
+                    curl_max = max(curl_max, float(env.curl[0].mean()))
+                    lift_max = max(lift_max, float(info["lift"][0]))
                     c_true = env.truth()[2]
                     if float(env.est_age[0]) < 1e-6:          # (a camera frame that saw it: how far off its box was)
                         cam_err.append(float((env.est_c[0, :2] - c_true[0, :2]).norm()))
@@ -3025,9 +3028,9 @@ class LiveCell:
                         time.sleep(lag)
                     if bool(done[0]):
                         ok, fl = bool(info["success"][0]), bool(info["fail"][0])
-                        txt = "Live, the policy after %d updates: %s, %s after %.1f s (the camera saw it in %d frames, %.1f cm off on average; the hand came within %.1f cm)" % (
+                        txt = "Live, the policy after %d updates: %s, %s after %.1f s (camera %.1f cm off; hand within %.1f cm; fingers closed up to %.0f%%; lifted up to %.1f cm)" % (
                             self.version, obj["label"], results_text(self.stage, ok, fl), k * CTRL_DT,
-                            len(cam_err), 100 * sum(cam_err) / max(1, len(cam_err)), 100 * near)
+                            100 * sum(cam_err) / max(1, len(cam_err)), 100 * near, 100 * curl_max, 100 * lift_max)
                         self.ctx.telemetry("events", {"text": txt})
                         self.ctx.log(txt)
                         self.pose.send(self.ctx, self.pose.snap(0))
@@ -3720,8 +3723,9 @@ def test_run(ctx):
         grasped, maxf, result = False, 0.0, "ran out of time"
         while True:
             obs, _ = env.obs()
-            with torch.no_grad():
-                a = ac.actor(on(obs))
+            with torch.no_grad():       # (as it acted while it learned: its moves with their spread, which is what closes its fingers)
+                mu = ac.actor(on(obs))
+                a = mu + ac.log_std.exp() * torch.randn_like(mu)
             r, done, info = env.step(a)
             grasped = grasped or bool(env.lifted_ever[0]) or bool(env.hold_cnt[0] >= 25) or float(info["lift"][0]) > 0.05
             maxf = max(maxf, float(env.touches()[0].max()))
