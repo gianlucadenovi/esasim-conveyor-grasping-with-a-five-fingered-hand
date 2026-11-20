@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 19 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 20 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -1144,6 +1144,7 @@ class GraspEnv:
         self.prev_a = z(n, ACT_DIM)
         self.steps = torch.zeros(n, dtype=torch.long, device=dev)
         self.ok_cnt, self.hold_cnt, self.bin_cnt = z(n), z(n), z(n)
+        self.assisted = torch.zeros(n, dtype=torch.bool, device=dev)    # (episodes that started with the hand over the object)
         self.hv_avg = z(n, 2)                # the hand's speed over the belt, smoothed (exploration jitters it step to step)
         self.hv = z(n, 6)                    # the hand's speed (linear, angular), measured from its pose step to step
         self.g_prev, self.R_prev = z(n, 3), torch.eye(3, device=dev).repeat(n, 1, 1)
@@ -1234,6 +1235,7 @@ class GraspEnv:
         # a share of the grasp and place episodes start with the hand already over the object, turned across it
         # (the reach it learned before), so that it finds out early what closing the hand on things does
         pa = self.assist if assist is None else float(assist)
+        self.assisted[idx] = False
         if pa > 0:
             cw, ew, yw2 = obb_of(torch, p + torch.stack([x0, y0, -zlow + 0.006], -1)[:, None])
             over = torch.rand(k, generator=g, device=dev) < pa
@@ -1242,6 +1244,7 @@ class GraspEnv:
             hy_a = torch.remainder(hy_a + math.pi / 2, math.pi) - math.pi / 2       # (a turn of pi is the same grasp)
             hp = torch.where(over[:, None], hp_a, hp)
             hy = torch.where(over, hy_a, hy)
+            self.assisted[idx] = over
             # (with the hand already over it, the object rests on the belt: it is not dropped into the hand)
             qpos[:, self.qo + 2] = torch.where(over, z_rest0, qpos[:, self.qo + 2])
             qpos[:, self.qo + 3:self.qo + 7] = torch.where(over[:, None], q_rest0, qpos[:, self.qo + 3:self.qo + 7])
@@ -3171,9 +3174,9 @@ def learn_run(ctx, stage):
                     idx = done.nonzero(as_tuple=False).flatten()
                     sc_, fl_, ln_ = info["success"][idx].tolist(), info["fail"][idx].tolist(), env.steps[idx].tolist()
                     dist_.extend((info["d"][idx] * 100).tolist())
-                    rt_, ob_ = env.ep_ret[idx].tolist(), env.obj[idx].tolist()
-                    for a_, b_, c_, d_, o_ in zip(sc_, fl_, ln_, rt_, ob_):
-                        hist.append((1.0 if a_ else 0.0, 1.0 if b_ else 0.0, c_ * CTRL_DT, d_))
+                    rt_, ob_, as_ = env.ep_ret[idx].tolist(), env.obj[idx].tolist(), env.assisted[idx].tolist()
+                    for a_, b_, c_, d_, o_, h_ in zip(sc_, fl_, ln_, rt_, ob_, as_):
+                        hist.append((1.0 if a_ else 0.0, 1.0 if b_ else 0.0, c_ * CTRL_DT, d_, bool(h_)))
                         per_obj[env.info[o_]["key"]].append(1.0 if a_ else 0.0)
                     ended = done[:len(show)].nonzero(as_tuple=False).flatten().tolist()
                     for i in ended:
@@ -3207,13 +3210,23 @@ def learn_run(ctx, stage):
                 row = {"iteration": it, "minutes": round((time.time() - t0) / 60, 2), "steps_m": round(steps_done / 1e6, 2), "success": round(sc, 1),
                        "failed": round(fail, 1), "episode_s": round(eps, 1), "reward": round(ret, 1), "steps_per_s": round(sps),
                        "std": round(stats["std"], 3), "kl": round(stats["kl"], 4), "end_dist_cm": round(sum(dist_) / max(1, len(dist_)), 1), "restarted": env.n_bad}
+                # the success of the episodes that started with the hand at rest (it had to find the object and reach
+                # it first) apart from those that started with the hand already over it (a share of the grasp and
+                # place episodes, to learn the closing early): the first is what the robot can really do
+                for key, flag in (("success_from_rest", False), ("success_hand_over", True)):
+                    hs = [h[0] for h in hist if h[4] == flag]
+                    if len(hs) >= 20:
+                        row[key] = round(100.0 * sum(hs) / len(hs), 1)
+                if len(hist) < 50:          # (too few episodes ended yet for a rate: the short ones, the failures, end first)
+                    row.pop("success", None)
+                    row.pop("failed", None)
                 ctx.telemetry(ch_train, row)
                 if lead and time.time() - last_scene > 8:        # (the cell itself, for a view opened since: it shows at once)
                     last_scene = time.time()
                     ctx.telemetry("scene", pose.scene)
-                cw.writerow([row["minutes"], it, steps_done, row["success"], row["failed"], row["episode_s"], row["reward"], row["steps_per_s"]])
+                cw.writerow([row["minutes"], it, steps_done, row.get("success", ""), row.get("failed", ""), row["episode_s"], row["reward"], row["steps_per_s"]])
                 curve.flush()
-                ctx.progress(min(99, 100 * (time.time() - t0) / (minutes * 60 + 1)), "%s: %.0f%% success · ends %.1f cm from the object · %.1f M steps" % (STAGE_NAME[stage], sc, row["end_dist_cm"], steps_done / 1e6))
+                ctx.progress(min(99, 100 * (time.time() - t0) / (minutes * 60 + 1)), "%s: %.0f%% success%s · ends %.1f cm from the object · %.1f M steps" % (STAGE_NAME[stage], sc, (" (%.0f%% from rest)" % row["success_from_rest"]) if "success_from_rest" in row and "success_hand_over" in row else "", row["end_dist_cm"], steps_done / 1e6))
     finally:
         curve.close()
         player.stop()
