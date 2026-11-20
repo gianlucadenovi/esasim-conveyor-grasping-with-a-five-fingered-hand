@@ -6,7 +6,7 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 3,
-    "updated": "2026-11-20 00:36:51",
+    "updated": "2026-11-20 01:18:08",
     "graph": {
         "nodes": [
             {
@@ -32,7 +32,7 @@
                     "worlds": 2048,
                     "minutes": 90,
                     "training": "Continue",
-                    "replay_every": 20,
+                    "replay_every": 0,
                     "belt_drawing": "Flat colours (3D file)",
                     "seed": 3
                 },
@@ -93,6 +93,17 @@
                 "title": "The cell (3D)"
             },
             {
+                "id": "camview",
+                "type": "image-view",
+                "x": 1400,
+                "y": -400,
+                "params": {
+                    "size": "large",
+                    "live": "on top"
+                },
+                "title": "What the camera sees"
+            },
+            {
                 "id": "hand",
                 "type": "ws-hand-pressure-map",
                 "x": 1400,
@@ -128,11 +139,11 @@
                 "params": {
                     "kind": "line",
                     "x": "minutes",
-                    "y": "success,failed",
+                    "y": "success,success_from_rest,success_hand_over,failed",
                     "channel": "train",
                     "ymin": "0",
                     "ymax": "100",
-                    "title": "Put in the bin (%) and dropped (%)"
+                    "title": "Put in the bin (%): all, from the hand at rest, from the hand over it; dropped (%)"
                 },
                 "title": "Success"
             },
@@ -156,7 +167,7 @@
                 "x": 760,
                 "y": 320,
                 "params": {
-                    "fields": "train.success,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
+                    "fields": "train.success,train.success_from_rest,train.success_hand_over,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
                     "style": "number",
                     "decimals": 1
                 },
@@ -206,6 +217,17 @@
                 "to": {
                     "node": "view",
                     "port": "scene"
+                }
+            },
+            {
+                "id": "tel_robot.stream>camview.images",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "camview",
+                    "port": "images"
                 }
             },
             {
