@@ -8,8 +8,8 @@
     "assets": [
         {
             "path": "models/belt_objects.robot.json.gz",
-            "size": 99288,
-            "sha256": "908e862e9300c171b19542dea5992d39ef286ef47b7870c62532056838a56c34",
+            "size": 493850,
+            "sha256": "da196cbb4f3a7bd0aedc9bd4a7a89a327d2a8a8afd72225db3c65f03c9b359a3",
             "zip": "assets/models/belt_objects.robot.json.gz",
             "in": "repo"
         },
@@ -23,7 +23,7 @@
         {
             "path": "models/xarm_hand.robot.json.gz",
             "size": 243428,
-            "sha256": "27503e85f8d4e8fb388904b8c8d7be0ce306ee8cc40b1343b1cebeac6fb0e4fd",
+            "sha256": "4234b66bb1f19b3603617751b431756198b2322404ce4aee7a3c27ab6936648b",
             "zip": "assets/models/xarm_hand.robot.json.gz",
             "in": "repo"
         },
@@ -42,5 +42,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-20T21:13:12+00:00"
+    "saved": "2026-11-20T21:46:41+00:00"
 }

@@ -129,7 +129,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 The files the project's views draw with (3D models, textures, sounds), in [assets/](assets/):
 
-- [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 97 KB
+- [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 482 KB
 - [models/simple_rubber_conveyor.glb](assets/models/simple_rubber_conveyor.glb) · 2.9 MB
 - [models/xarm_hand.robot.json.gz](assets/models/xarm_hand.robot.json.gz) · 238 KB
 - [preview (56).webp](assets/preview%20(56).webp) · 46 KB
