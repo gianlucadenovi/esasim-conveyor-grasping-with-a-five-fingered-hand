@@ -5,8 +5,8 @@
     },
     "name": "3 · Learn to grasp",
     "description": "From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.",
-    "published_version": 2,
-    "updated": "2026-11-20 00:37:01",
+    "published_version": 3,
+    "updated": "2026-11-20 00:50:50",
     "graph": {
         "nodes": [
             {
@@ -32,7 +32,7 @@
                     "worlds": 2048,
                     "minutes": 90,
                     "training": "Continue",
-                    "replay_every": 20,
+                    "replay_every": 0,
                     "belt_drawing": "Flat colours (3D file)",
                     "seed": 2
                 },
