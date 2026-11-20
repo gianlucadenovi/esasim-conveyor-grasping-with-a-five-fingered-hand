@@ -6,7 +6,7 @@
     "name": "2 · Learn to reach",
     "description": "The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.",
     "published_version": 4,
-    "updated": "2026-11-20 00:35:06",
+    "updated": "2026-11-20 01:17:40",
     "graph": {
         "nodes": [
             {
@@ -32,7 +32,7 @@
                     "worlds": 2048,
                     "minutes": 60,
                     "training": "Continue",
-                    "replay_every": 20,
+                    "replay_every": 0,
                     "belt_drawing": "Flat colours (3D file)",
                     "seed": 1
                 },
@@ -91,6 +91,17 @@
                     "control_channel": "control"
                 },
                 "title": "The cell (3D)"
+            },
+            {
+                "id": "camview",
+                "type": "image-view",
+                "x": 1440,
+                "y": -400,
+                "params": {
+                    "size": "large",
+                    "live": "on top"
+                },
+                "title": "What the camera sees"
             },
             {
                 "id": "hand",
@@ -206,6 +217,17 @@
                 "to": {
                     "node": "view",
                     "port": "scene"
+                }
+            },
+            {
+                "id": "tel_robot.stream>camview.images",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "camview",
+                    "port": "images"
                 }
             },
             {
