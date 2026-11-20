@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 20 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 21 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -251,7 +251,7 @@ def thumb_flex_axis():
 def hand_xml():
     """the xArm, and on its flange the five-fingered hand: its fingers are real joints with real contacts"""
     px, py, pz = PALM_HALF
-    hg = 'contype="2" conaffinity="1" condim="4" friction="1.2 0.02 0.001" solref="0.004 1"'
+    hg = 'contype="2" conaffinity="1" condim="%d" friction="1.2 0.02 0.001" solref="%s" solimp="%s"' % (HAND_CONDIM, HAND_SOLREF, HAND_SOLIMP)
     s = [arm_open_xml()]
     s.append('<geom name="palm" type="box" size="%s" mass="0.35" rgba="0.82 0.84 0.88 1" %s/>' % (_f(PALM_HALF), hg))
     s.append('<geom name="wrist" type="cylinder" size="0.030 0.022" pos="%s" euler="0 1.5708 0" mass="0.05" rgba="0.25 0.27 0.30 1" contype="0" conaffinity="0"/>' % _f((-px - 0.020, 0, 0.002)))
@@ -295,21 +295,31 @@ HAND_JOINTS = ["j1", "j2", "j3", "j4", "j5", "j6"]           # (the arm's joints
 FINGER_JOINTS = ["thumb_rot", "thumb_j1", "thumb_j2"] + ["%s_j%d" % (f[0], k) for f in FINGERS for k in (1, 2, 3)]
 
 
+# the fingers' strength and the feel of their contacts (see the README: what a human hand does)
+# a human finger presses with some 10 N at its tip at most in a firm grip (0.35 N m about a knuckle 3-5 cm back); the
+# earlier 0.9 N m let the fingertips squeeze 20-60 N and squirt light objects out of the hand
+FINGER_KP, FINGER_KV, FINGER_FORCE = 0.8, 0.03, 0.35       # each finger joint: stiffness (N m/rad), damping, most torque (N m)
+HAND_CONDIM, HAND_SOLREF, HAND_SOLIMP = 4, "0.004 1", "0.95 0.99 0.001 0.5 2"
+OBJ_SOLREF = "0.004 1"
+ARM_KP, ARM_KV = (1500, 500), (60, 15)                    # the shoulder and elbow joints, the wrist joints
+IMPRATIO = 5
+
+
 def actuators_xml():
     a = []
     for i, j in enumerate(HAND_JOINTS):
         lo, hi = XARM6_LIM[i]
         a.append('<position name="a_%s" joint="%s" kp="%g" kv="%g" forcerange="-%g %g" ctrlrange="%g %g"/>'
-                 % (j, j, 1500 if i < 3 else 500, 60 if i < 3 else 15, ARM_TORQUE[i], ARM_TORQUE[i], math.radians(lo), math.radians(hi)))
+                 % (j, j, ARM_KP[0] if i < 3 else ARM_KP[1], ARM_KV[0] if i < 3 else ARM_KV[1], ARM_TORQUE[i], ARM_TORQUE[i], math.radians(lo), math.radians(hi)))
     for j in FINGER_JOINTS:
-        a.append('<position name="a_%s" joint="%s" kp="1.6" kv="0.03" forcerange="-0.9 0.9" ctrlrange="%s"/>' % (j, j, "-0.1 0.8" if j == "thumb_rot" else "-0.2 1.8"))
+        a.append('<position name="a_%s" joint="%s" kp="%g" kv="%g" forcerange="-%g %g" ctrlrange="%s"/>' % (j, j, FINGER_KP, FINGER_KV, FINGER_FORCE, FINGER_FORCE, "-0.1 0.8" if j == "thumb_rot" else "-0.2 1.8"))
     a.append('<velocity name="a_belt" joint="belt" kv="400" ctrlrange="-1 1"/>')
     return "\n".join(a)
 
 
 def object_xml():
     """one object body with geom slots of every kind; each world sizes and places them for its own object"""
-    og = 'contype="1" conaffinity="3" condim="6" friction="0.9 0.01 0.002" solref="0.004 1"'
+    og = 'contype="1" conaffinity="3" condim="6" friction="0.9 0.01 0.002" solref="%s"' % OBJ_SOLREF
     s = ['<body name="obj" pos="0.6 %g 0.05"><freejoint name="obj"/>' % BELT_Y]
     for k, t in enumerate(SLOT_ORDER):
         size = {"box": "0.02 0.02 0.02", "cylinder": "0.02 0.02", "sphere": "0.02", "capsule": "0.02 0.02", "ellipsoid": "0.02 0.02 0.02"}[t]
@@ -324,7 +334,7 @@ def scene_xml(obj_parts=None, rgba=None):
     cam_xy = look_xyaxes(CAM_POS, CAM_LOOK)
     x = ['<mujoco model="belt_grasp">',
          '<compiler angle="radian" autolimits="true"/>',
-         '<option timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="5"/>',
+         '<option timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="%g"/>' % IMPRATIO,
          '<visual><global offwidth="640" offheight="480"/><quality shadowsize="2048"/></visual>',
          '<default><geom solimp="0.95 0.99 0.001 0.5 2"/></default>',
          '<asset><texture name="belt" type="2d" builtin="checker" rgb1="0.12 0.12 0.13" rgb2="0.16 0.16 0.17" width="64" height="64"/>',
@@ -2375,9 +2385,7 @@ def cell_objects(mjm):
                  "forward": [round(float(x), 4) for x in -R[:, 2]], "up": [round(float(x), 4) for x in R[:, 1]],
                  "hfov": round(2 * math.degrees(math.atan(math.tan(math.radians(S.CAM_FOVY) / 2) * S.CAM_W / S.CAM_H)), 1),
                  "aspect": round(S.CAM_W / S.CAM_H, 3), "frustum": 250, "stand_to": -750})
-    # the camera's picture beside it, on a sheet
-    objs.append({"id": "camera_picture", "kind": "quad", "image_channel": "camera_picture",
-                 "corners": [[420, -260, 520], [640, -260, 520], [640, -260, 355], [420, -260, 355]], "lift": 0, "fit": False})
+    # (the camera's picture is shown in a view of its own, beside the 3D view: not on a sheet in the cell)
     # the two robots where the simulation has them: the xArm's base on its pedestal at the origin, the objects' mounts
     # at the origin too (else the view stands robots without a place 0.8 m apart)
     objs.append({"id": ARM, "kind": "robot", "robot": ARM, "pos": [0, 0, 0], "rpy": [0, 0, 0]})
@@ -2405,6 +2413,7 @@ class Pose3D:
         self.n_sent = 0
         self.last_slide = None
         self.last_obj, self.last_eul = None, None
+        self.n_q = None
 
     def snap(self, i=0):
         """what the 3D view needs of cell i, now (kept to be turned into joint items later, off the learning's way)"""
@@ -2443,7 +2452,21 @@ class Pose3D:
             slide = None
         objs = [slide] + [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0] * self.nobj      # (every item complete: the objects not in play under the floor)
         objs[1 + 6 * o:7 + 6 * o] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000, 1), round(y, 4), round(p, 4), round(r, 4)]
+        self.n_q = (len(arm), len(objs))
         return ({"robot": ARM, "units": "rad", "q": arm}, {"robot": OBJS, "units": "rad", "q": objs})
+
+    def cut(self, ctx):
+        """a break between two episodes: the 3D view eases from one item to the next, so without it the arm and the
+        object would glide from where one episode ended to where the next begins (an object flying across the cell,
+        or up from under the floor where the objects not in play wait). An item with no values in it is not eased
+        to or from: the view holds the last pose, then jumps to the next episode's first one"""
+        self.last_slide, self.last_obj, self.last_eul = None, None, None
+        if not self.n_q:
+            return
+        ctx.telemetry("joints", {"robot": ARM, "units": "rad", "q": [None] * self.n_q[0]})
+        time.sleep(0.002)
+        ctx.telemetry("joints", {"robot": OBJS, "units": "rad", "q": [None] * self.n_q[1]})
+        time.sleep(0.03)
 
     def send(self, ctx, sn):
         if self.n_sent % 40 == 0:
@@ -2515,6 +2538,7 @@ class Replayer:
                     self.ctx.telemetry("events", {"text": text})
                 if picture:
                     self.ctx.telemetry("camera_picture", {"image": picture})
+                self.pose.cut(self.ctx)
                 t0 = time.time()
                 for k, sn in enumerate(frames):
                     if not self.alive:
@@ -3430,6 +3454,7 @@ def test_run(ctx):
         sim.refresh()
         o = env.info[req["obj"]]
         pose_txt = ["upright", "on its side", "tumbled"][req["pose"]]
+        pose.cut(ctx)           # (the new object appears where it is dropped: it does not glide there in the view)
         ctx.telemetry(ch_ev, {"text": "Trial %d: %s%s, dropped %s onto the belt at %.0f cm/s" % (trial, o["label"], " (new to it)" if o["test"] else " (seen in training)", pose_txt, float(env.belt_v[0]) * 100)})
         # it falls, bounces and settles on the moving belt (the hand waits); then the robot's turn begins
         wall0 = time.time()
