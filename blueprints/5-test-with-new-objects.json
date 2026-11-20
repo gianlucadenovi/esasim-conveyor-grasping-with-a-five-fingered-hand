@@ -5,7 +5,7 @@
     },
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
-    "published_version": 8,
+    "published_version": 9,
     "updated": "2026-11-20 21:16:37",
     "graph": {
         "nodes": [
