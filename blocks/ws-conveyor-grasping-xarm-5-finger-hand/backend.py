@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 32 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 33 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -695,7 +695,7 @@ class CpuSim:
         self.n = n
         self.obj = np.zeros(n, dtype=np.int64)
         self.datas = [mujoco.MjData(models[0]) for _ in range(n)]
-        nt = max(1, min(n, threads or (os.cpu_count() or 2)))
+        nt = max(1, min(n, threads or cpu_threads()))
         self.ex = ThreadPoolExecutor(nt)
         self.parts = [list(range(i * n // nt, (i + 1) * n // nt)) for i in range(nt)]
         z = lambda *s: np.zeros(s)   # noqa: E731
@@ -820,6 +820,37 @@ def camera_dirs():
     return d.reshape(-1, 3)
 
 
+def cpu_threads():
+    """the threads the simulation may use on the CPU: all but two, so that the machine (and its EsaSim worker, which
+    must keep reporting) is never starved"""
+    c = os.cpu_count() or 2
+    return max(1, c - 2 if c > 4 else c - 1)
+
+
+_NEIGHBOUR = {"done": False}
+
+
+def be_a_good_neighbour(log=None):
+    """(learning on the CPU) the run's process below normal priority, and PyTorch's own threads few: the simulation's
+    threads take the machine's cores, and PyTorch's would only fight them for the same cores"""
+    if _NEIGHBOUR["done"]:
+        return
+    _NEIGHBOUR["done"] = True
+    import torch
+    torch.set_num_threads(max(1, min(4, cpu_threads() // 8)))
+    try:
+        if os.name == "nt":
+            import ctypes
+            k = ctypes.windll.kernel32
+            k.SetPriorityClass(k.GetCurrentProcess(), 0x00004000)      # BELOW_NORMAL_PRIORITY_CLASS
+        else:
+            os.nice(5)
+    except Exception:      # noqa: BLE001
+        pass
+    if log:
+        log("On the CPU: %d threads for the simulation, %d for the networks, below normal priority (the machine stays responsive)." % (cpu_threads(), torch.get_num_threads()))
+
+
 def make_sim(mjm, lib, n, want, log=None, cam=True):
     """(sim, label): the GPU through MuJoCo Warp when it can, else the CPU"""
     import torch
@@ -842,8 +873,9 @@ def make_sim(mjm, lib, n, want, log=None, cam=True):
             log("On the CPU instead: " + err)
     # (on the CPU each thread steps its share of the cells: about 32 cells a thread keep every thread busy and spread
     # Python's own time per step over enough of them; more only make each update slower)
-    import os
-    n = min(n, max(64, min(768, 32 * (os.cpu_count() or 2))))
+    if n > 1:              # (not the one live cell a GPU run plays beside its learning)
+        be_a_good_neighbour(log)
+    n = min(n, max(64, min(768, 32 * cpu_threads())))
     return CpuSim(mjm, lib, n, log=log, cam=cam), "CPU (MuJoCo, %d worlds)" % n
 '''
 _SOURCES['grasp_env'] = r'''# ── the task: see the object coming on the belt, reach it, grasp it well, put it in the bin ─────────────────────────
