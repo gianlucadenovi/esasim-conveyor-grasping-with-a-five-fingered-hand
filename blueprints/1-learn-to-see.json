@@ -6,7 +6,7 @@
     "name": "1 · Learn to see",
     "description": "The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.",
     "published_version": 8,
-    "updated": "2026-11-20 01:17:52",
+    "updated": "2026-11-20 01:55:11",
     "graph": {
         "nodes": [
             {
@@ -261,6 +261,12 @@
                     "y": 0,
                     "w": 6,
                     "h": 21
+                },
+                "camview": {
+                    "x": 0,
+                    "y": 21,
+                    "w": 6,
+                    "h": 8
                 }
             }
         }
