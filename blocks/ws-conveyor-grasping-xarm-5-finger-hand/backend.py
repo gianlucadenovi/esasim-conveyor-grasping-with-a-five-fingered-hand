@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 27 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 28 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -3004,12 +3004,18 @@ class LiveCell:
                 self.pose.cut(self.ctx)
                 ep += 1
                 t0, k = time.time(), 0
+                cam_err, near = [], 9.0
                 while self.alive:
                     obs, _ = env.obs()
                     with torch.no_grad():
                         a = self.ac.actor(self.on(obs))
                     _, done, info = env.step(a)
                     k += 1
+                    c_true = env.truth()[2]
+                    if float(env.est_age[0]) < 1e-6:          # (a camera frame that saw it: how far off its box was)
+                        cam_err.append(float((env.est_c[0, :2] - c_true[0, :2]).norm()))
+                    g, _ = env.hand_state()
+                    near = min(near, float((g[0] - c_true[0]).norm()))
                     if k % 2 == 0:
                         self.pose.send(self.ctx, self.pose.snap(0))
                     if k % PIC_EVERY == 0:
@@ -3019,8 +3025,11 @@ class LiveCell:
                         time.sleep(lag)
                     if bool(done[0]):
                         ok, fl = bool(info["success"][0]), bool(info["fail"][0])
-                        self.ctx.telemetry("events", {"text": "Live, the policy after %d updates: %s, %s after %.1f s" % (
-                            self.version, obj["label"], results_text(self.stage, ok, fl), k * CTRL_DT)})
+                        txt = "Live, the policy after %d updates: %s, %s after %.1f s (the camera saw it in %d frames, %.1f cm off on average; the hand came within %.1f cm)" % (
+                            self.version, obj["label"], results_text(self.stage, ok, fl), k * CTRL_DT,
+                            len(cam_err), 100 * sum(cam_err) / max(1, len(cam_err)), 100 * near)
+                        self.ctx.telemetry("events", {"text": txt})
+                        self.ctx.log(txt)
                         self.pose.send(self.ctx, self.pose.snap(0))
                         time.sleep(0.8)          # (a moment to see how it ended)
                         break
