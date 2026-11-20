@@ -6,7 +6,7 @@
     "name": "2 · Learn to reach",
     "description": "The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.",
     "published_version": 5,
-    "updated": "2026-11-20 02:40:40",
+    "updated": "2026-11-20 02:41:35",
     "graph": {
         "nodes": [
             {
@@ -297,13 +297,13 @@
                 },
                 "success": {
                     "x": 6,
-                    "y": 15,
+                    "y": 21,
                     "w": 6,
                     "h": 6
                 },
                 "dist": {
                     "x": 6,
-                    "y": 21,
+                    "y": 15,
                     "w": 6,
                     "h": 6
                 },
@@ -326,10 +326,10 @@
                     "h": 12
                 },
                 "hand": {
-                    "x": 6,
-                    "y": 33,
-                    "w": 6,
-                    "h": 7
+                    "x": 9,
+                    "y": 3,
+                    "w": 3,
+                    "h": 12
                 }
             }
         }
