@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 23 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 24 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -52,16 +52,25 @@ import math
 
 import numpy as np
 
-BELT_Y, BELT_W, BELT_TOP = 0.42, 0.30, 0.0       # belt centre line (y), width, top surface height
-RAIL_HW, RAIL_HH = 0.037, 0.0185                # the side rails' half width and half height (the conveyor model's: 7.4 cm wide, 3.7 cm above the belt)
+# the conveyor is the project's 3D file (models/simple_rubber_conveyor.glb) at its own proportions: in the file it is
+# 2.00 m long, 0.94 m wide overall, its rubber belt 0.65 m wide with its top 0.714 m above the floor; it is scaled
+# alike in every direction (CONV_S) so that the belt's top is level with the top of the xArm's 75 cm pedestal
+CONV_S = 0.75 / 0.714
+BELT_TOP = 0.0                                   # the belt's top surface (the world's z = 0: the pedestal's top)
+BELT_CY = 0.63                                   # the conveyor's centre line (y): its frame clears the pedestal by 3 cm
+BELT_W = 0.650 * CONV_S                          # the rubber belt's width (0.68 m)
+BELT_Y = 0.42                                    # the lane the objects are put in (y), on the robot's side of the belt
+RAIL_NEAR = (-0.486 * CONV_S, -0.329 * CONV_S)   # the side frames beside the belt (y, from the centre line), as in the file:
+RAIL_FAR = (0.329 * CONV_S, 0.457 * CONV_S)      # their tops 3.7 cm above the belt
+RAIL_TOP = 0.035 * CONV_S
 BELT_X0 = 0.2                                    # belt centre (x): the conveyor runs from BELT_START_X to BELT_END_X
-BELT_HALF_LEN = 1.25
+BELT_HALF_LEN = 1.0 * CONV_S
 BELT_START_X, BELT_END_X = BELT_X0 + BELT_HALF_LEN, BELT_X0 - BELT_HALF_LEN
 SPAWN_X = (0.35, 1.0)                            # (training) where objects are put on the belt, upstream of the robot
-TEST_SPAWN_X = 1.30                              # (the test) dropped near the start of the belt: it travels the whole way
+TEST_SPAWN_X = BELT_START_X - 0.10               # (the test) dropped near the start of the belt: it travels the whole way
 EXIT_X = BELT_END_X - 0.10                       # past here an object has gone off the end of the belt (and falls)
 BELT_V = (0.05, 0.10)                            # the belt's speed (m/s) in training
-BIN_C = np.array([-0.40, 0.10, 0.0])             # bin floor centre
+BIN_C = np.array([-0.42, -0.02, 0.0])            # bin floor centre: beside the robot, downstream, clear of the conveyor
 BIN_HALF = (0.12, 0.09)                          # inner half sizes
 BIN_WALL, BIN_H = 0.010, 0.10
 CAM_POS = np.array([0.30, 0.02, 0.80])           # the camera on its pole
@@ -209,17 +218,35 @@ def mat_quat(R):
     return (w, x, y, z)
 
 
+# the xArm's own link meshes for the camera, {name: (vertices (m), faces)}: set by the block (viz.camera_arm_meshes) from
+# UFACTORY's files before the cell is built; without them the camera sees the contact capsules instead
+ARM_MESHES = None
+
+
+def arm_meshes_xml():
+    """the xArm's link meshes, inline"""
+    out = []
+    for name, (v, f) in (ARM_MESHES or {}).items():
+        out.append('<mesh name="xarm_%s" inertia="shell" vertex="%s" face="%s"/>' % (name, " ".join("%.4f" % x for x in v.reshape(-1)), " ".join(str(int(x)) for x in f.reshape(-1))))
+    return "\n".join(out)
+
+
 def arm_open_xml():
     """the xArm 6: six links on its six joints (position servos, stiff, with the torques its motors have, gravity
     compensated as its controller does), each with collision capsules from its joint to the next; then the hand on
     the flange. The arm and the hand collide with the belt, its rails, the bin, the pedestal and the object."""
-    ag = 'contype="2" conaffinity="1" condim="3" friction="0.6 0.01 0.001"'
+    # (its contacts: capsules, in geom group 3, which the camera does not see; the camera sees the arm's own meshes)
+    meshes = bool(ARM_MESHES)
+    ag = 'contype="2" conaffinity="1" condim="3" friction="0.6 0.01 0.001" group="%d"' % (3 if meshes else 0)
+    vis = 'contype="0" conaffinity="0" group="1" density="0" rgba="0.93 0.94 0.95 1"'
     s = []
     for i, ((xyz, rpy), lim) in enumerate(zip(XARM6, XARM6_LIM)):
         p = np.array(xyz) / 1000.0
         s.append('<body name="link%d" pos="%s" quat="%s" gravcomp="1">' % (i + 1, _f(p), _f(rpy_quat(*rpy))))
         s.append('<joint name="j%d" type="hinge" axis="0 0 1" range="%g %g" armature="0.25" damping="2"/>' % (i + 1, math.radians(lim[0]), math.radians(lim[1])))
         s.append('<inertial pos="0 0 0" mass="%g" diaginertia="0.008 0.008 0.006"/>' % ARM_MASS[i])
+        if meshes:
+            s.append('<geom name="arm%d_vis" type="mesh" mesh="xarm_link%d" %s/>' % (i + 1, i + 1, vis))
         r = ARM_R[i]
         s.append('<geom name="arm%d_j" type="sphere" size="%g" rgba="0.94 0.95 0.96 1" %s/>' % (i + 1, r * 1.05, ag))
         if i + 1 < len(XARM6):
@@ -338,21 +365,22 @@ def scene_xml(obj_parts=None, rgba=None):
          '<visual><global offwidth="640" offheight="480"/><quality shadowsize="2048"/></visual>',
          '<default><geom solimp="0.95 0.99 0.001 0.5 2"/></default>',
          '<asset><texture name="belt" type="2d" builtin="checker" rgb1="0.12 0.12 0.13" rgb2="0.16 0.16 0.17" width="64" height="64"/>',
-         '<material name="belt" texture="belt" texrepeat="40 2"/></asset>',
+         '<material name="belt" texture="belt" texrepeat="40 2"/>', arm_meshes_xml(), '</asset>',
          '<worldbody>',
          '<light pos="0.2 0.3 1.6" dir="0 0 -1" diffuse="0.9 0.9 0.9" castshadow="false"/>',
          '<light pos="-0.6 -0.4 1.2" dir="0.4 0.4 -1" diffuse="0.35 0.35 0.35" castshadow="false"/>',
          '<geom name="floor" type="plane" size="3 3 0.1" pos="0 0 -0.75" rgba="0.55 0.56 0.58 1" contype="1" conaffinity="1"/>',
          '<geom name="pedestal" type="box" size="0.09 0.09 0.375" pos="0 0 -0.375" rgba="0.3 0.3 0.33 1" contype="1" conaffinity="2"/>',
-         '<geom name="belt_frame" type="box" size="%s" pos="%s" rgba="0.35 0.37 0.40 1" contype="1" conaffinity="2"/>' % (_f((1.25, BELT_W / 2 + 0.074, 0.36)), _f((0.2, BELT_Y, -0.39))),
+         # the conveyor's frame under the belt (its legs stand on the floor below it)
+         '<geom name="belt_frame" type="box" size="%s" pos="%s" rgba="0.35 0.37 0.40 1" contype="1" conaffinity="2"/>' % (_f((BELT_HALF_LEN, (RAIL_FAR[1] - RAIL_NEAR[0]) / 2, 0.07)), _f((BELT_X0, BELT_CY + (RAIL_FAR[1] + RAIL_NEAR[0]) / 2, -0.024 - 0.07))),
          # the belt: a slab as long as the conveyor, moving at the belt's speed (the task puts it back in its place every
          # step, keeping its speed): what lies on it is carried by friction, and what goes past its end falls to the floor
-         '<body name="belt" pos="%s"><joint name="belt" type="slide" axis="1 0 0" damping="5"/>' % _f((BELT_X0, BELT_Y, 0)),
+         '<body name="belt" pos="%s"><joint name="belt" type="slide" axis="1 0 0" damping="5"/>' % _f((BELT_X0, BELT_CY, 0)),
          '<geom name="belt" type="box" size="%s" pos="0 0 -0.012" mass="40" material="belt" contype="1" conaffinity="2" condim="3" friction="1.0 0.01 0.001"/>' % _f((BELT_HALF_LEN, BELT_W / 2, 0.012)),
          '</body>',
          # side rails, so round things stay on the belt
-         '<geom name="rail_l" type="box" size="%s" pos="%s" rgba="0.55 0.58 0.62 1" contype="1" conaffinity="2" friction="0.3"/>' % (_f((1.25, RAIL_HW, RAIL_HH)), _f((0.2, BELT_Y + BELT_W / 2 + RAIL_HW, RAIL_HH))),
-         '<geom name="rail_r" type="box" size="%s" pos="%s" rgba="0.55 0.58 0.62 1" contype="1" conaffinity="2" friction="0.3"/>' % (_f((1.25, RAIL_HW, RAIL_HH)), _f((0.2, BELT_Y - BELT_W / 2 - RAIL_HW, RAIL_HH))),
+         '<geom name="rail_l" type="box" size="%s" pos="%s" rgba="0.55 0.58 0.62 1" contype="1" conaffinity="2" friction="0.3"/>' % (_f((BELT_HALF_LEN, (RAIL_FAR[1] - RAIL_FAR[0]) / 2, (RAIL_TOP + 0.03) / 2)), _f((BELT_X0, BELT_CY + (RAIL_FAR[0] + RAIL_FAR[1]) / 2, (RAIL_TOP - 0.03) / 2))),
+         '<geom name="rail_r" type="box" size="%s" pos="%s" rgba="0.55 0.58 0.62 1" contype="1" conaffinity="2" friction="0.3"/>' % (_f((BELT_HALF_LEN, (RAIL_NEAR[1] - RAIL_NEAR[0]) / 2, (RAIL_TOP + 0.03) / 2)), _f((BELT_X0, BELT_CY + (RAIL_NEAR[0] + RAIL_NEAR[1]) / 2, (RAIL_TOP - 0.03) / 2))),
          # the bin
          '<body name="bin" pos="%s">' % _f(BIN_C),
          '<geom name="bin_floor" type="box" size="%s" pos="0 0 -0.006" rgba="0.20 0.42 0.70 1" contype="1" conaffinity="2"/>' % _f((bx + BIN_WALL, by + BIN_WALL, 0.006)),
@@ -368,7 +396,8 @@ def scene_xml(obj_parts=None, rgba=None):
          '<camera name="overview" pos="%s" xyaxes="%s" fovy="45"/>' % (_f((0.95, -0.75, 0.75)), _f(look_xyaxes((0.95, -0.75, 0.75), (0.05, 0.25, 0.02)))),
          '<camera name="closeup" pos="%s" xyaxes="%s" fovy="40"/>' % (_f((0.45, -0.05, 0.42)), _f(look_xyaxes((0.45, -0.05, 0.42), (0.12, 0.30, 0.12)))),
          '<body name="arm_mount" pos="0 0 0">',
-         '<geom name="arm_base" type="cylinder" size="0.066 0.06" pos="0 0 0.06" rgba="0.17 0.18 0.2 1" contype="1" conaffinity="2"/>',
+         '<geom name="arm_base" type="cylinder" size="0.066 0.06" pos="0 0 0.06" rgba="0.17 0.18 0.2 1" contype="1" conaffinity="2" group="%d"/>' % (3 if ARM_MESHES else 0),
+         '<geom name="arm_base_vis" type="mesh" mesh="xarm_link_base" contype="0" conaffinity="0" group="1" density="0" rgba="0.93 0.94 0.95 1"/>' if ARM_MESHES else '',
          hand_xml(), '</body>',
          object_xml(),
          '</worldbody>',
@@ -756,7 +785,7 @@ class CpuSim:
             vec = (self._dirs @ R.T).reshape(-1).copy()
             dist = np.zeros(self._nr)
             gid = np.zeros(self._nr, np.int32)
-            mj.mj_multiRay(m, d, pnt, vec, None, 1, -1, gid, dist, None, self._nr, 10.0)
+            mj.mj_multiRay(m, d, pnt, vec, CAM_GROUPS, 1, -1, gid, dist, None, self._nr, 10.0)
             self.depth_np[i] = np.where(gid >= 0, np.minimum(dist * self._pl, DEPTH_MAX), DEPTH_MAX).reshape(S.CAM_H, S.CAM_W)   # planar, as the GPU's
             self.seg_np[i] = gid.reshape(S.CAM_H, S.CAM_W)
 
@@ -770,6 +799,9 @@ class CpuSim:
 
     def sync(self):
         pass
+
+
+CAM_GROUPS = np.array([1, 1, 1, 0, 0, 0], np.uint8)     # (the geom groups the camera sees, as the GPU's renderer: 0-2)
 
 
 def camera_dirs():
@@ -1998,6 +2030,28 @@ def xarm_links(cache, log):
         return None
 
 
+def camera_arm_meshes(cache, log):
+    """the xArm's link meshes for the simulation's camera (simplified to 1 cm: its pictures are 96 x 72), or None"""
+    import urllib.request
+    out = {}
+    try:
+        os.makedirs(cache, exist_ok=True)
+        for name in ["link_base"] + ["link%d" % (i + 1) for i in range(6)]:
+            path = os.path.join(cache, name + ".stl")
+            if not os.path.exists(path) or os.path.getsize(path) < 1000:
+                with urllib.request.urlopen(MESH_URL % name, timeout=60) as r:
+                    data = r.read()
+                with open(path + ".part", "wb") as fh:
+                    fh.write(data)
+                os.replace(path + ".part", path)
+            v, f = decimate(read_stl(open(path, "rb").read()) * 1000.0, 10.0)
+            out[name] = (np.round(v) / 1000.0, f)
+        return out
+    except Exception as e:      # noqa: BLE001
+        log("The xArm's meshes could not be had (%s): the camera sees the arm as its contact capsules." % e)
+        return None
+
+
 def simple_xarm_links():
     """the xArm 6 drawn from its kinematics: a rounded link from each joint to the next"""
     out = []
@@ -2159,7 +2213,7 @@ def glb_meshes(data):
 
 
 CONVEYOR = {"mode": "flat", "fit": None, "asset": None}   # mode: textured (the 3D view draws the file), flat (baked in colours), boxes
-CONVEYOR_LEN = 2.5                # (m) the length the conveyor's 3D file is drawn at (the simulated belt's frame)
+CONVEYOR_LEN = 2 * S.BELT_HALF_LEN   # (m) the simulated conveyor's length (its 3D file at its own proportions)
 FLOOR_Z = -0.75                   # the floor (the xArm's pedestal is 75 cm tall)
 
 
@@ -2175,9 +2229,9 @@ def part_colour(c, name):
 
 
 def conveyor_mesh(path, log):
-    """the conveyor's 3D file, fitted to the simulated one: its long side along the belt (CONVEYOR_LEN long, centred on
-    the belt), its belt (the part named belt) as wide as the simulated belt and its top surface on it, its feet on the
-    floor. The proportions across and up are kept as far as that allows; the parts coloured by their names."""
+    """the conveyor's 3D file at its own proportions: scaled alike in every direction so that its belt's top is on the
+    simulated belt (its feet then on the floor), its long side along the belt, its belt centred on the simulated one.
+    The simulated belt was measured from this file (scene.py): a file of other proportions is said so in the log."""
     parts = glb_meshes(open(path, "rb").read())
     if not parts:
         return None
@@ -2197,15 +2251,17 @@ def conveyor_mesh(path, log):
         b_lo, b_hi = bv.min(0), bv.max(0)
     else:                                          # (no part named belt: the belt is taken as the whole width, under the top)
         b_lo, b_hi = lo.copy(), hi.copy()
-    sx = CONVEYOR_LEN / max(ext[0], 1e-6)
-    sy = S.BELT_W / max(b_hi[1] - b_lo[1], 1e-6)
-    sz = (S.BELT_TOP - FLOOR_Z) / max(b_hi[2] - lo[2], 1e-6)
-    sc = np.array([sx, sy, sz])
-    shift = np.array([0.2, S.BELT_Y, S.BELT_TOP]) - np.array([(lo[0] + hi[0]) / 2, (b_lo[1] + b_hi[1]) / 2, b_hi[2]]) * sc
+    k = (S.BELT_TOP - FLOOR_Z) / max(b_hi[2] - lo[2], 1e-6)       # (one scale for every direction)
+    sc = np.array([k, k, k])
+    shift = np.array([S.BELT_X0, S.BELT_CY, S.BELT_TOP]) - np.array([(b_lo[0] + b_hi[0]) / 2, (b_lo[1] + b_hi[1]) / 2, b_hi[2]]) * sc
+    blen, bw = (b_hi[0] - b_lo[0]) * k, (b_hi[1] - b_lo[1]) * k
     log("Conveyor model: %d parts, %d triangles; %.2f m long, %.2f m wide, %.2f m high in its file%s, its belt %.2f m wide with its top at %.2f m. "
-        "Drawn %.2f m long, its belt %.2f m wide (the simulated one), its top on the belt and its feet on the floor (scaled %.2f along, %.2f across, %.2f up)."
+        "Drawn at its own proportions, scaled %.3f: %.2f m long, its belt %.2f m wide, its top on the belt and its feet on the floor."
         % (len(parts), sum(len(p[1]) for p in parts), ext[0], ext[1], ext[2], ", turned a quarter" if turn else "", b_hi[1] - b_lo[1], b_hi[2] - lo[2],
-           CONVEYOR_LEN, S.BELT_W, sx, sy, sz))
+           k, ext[0] * k, bw))
+    if abs(blen - CONVEYOR_LEN) > 0.03 or abs(bw - S.BELT_W) > 0.03:
+        log("Note: the simulated belt is %.2f m long and %.2f m wide (scene.py), this file's %.2f m and %.2f m: the objects ride "
+            "on the simulated one." % (CONVEYOR_LEN, S.BELT_W, blen, bw))
     CONVEYOR["fit"] = {"kind": "model", "id": "conveyor", "asset": os.path.basename(path), "model_units": "m", "up": "y",
                        "rpy": [0, 0, round(math.pi / 2, 6) if turn else 0], "scale": [round(float(x), 5) for x in sc],
                        "pos": [round(float(x) * 1000, 1) for x in shift]}
@@ -2223,14 +2279,14 @@ def conveyor_mesh(path, log):
 
 
 SLAT_GAP = 0.10                   # the belt's slats, every 10 cm: they move with the simulated belt
-SLAT_X = (-1.03, 1.33)            # (along the drawn belt: CONVEYOR_LEN centred on x = 0.2)
+SLAT_X = (S.BELT_END_X + 0.03, S.BELT_START_X - 0.02)     # (along the belt)
 
 
 def slats_mesh():
     m = Mesh()
     v, f = _box(0.004, S.BELT_W / 2 - 0.008, 0.0008)
     for x in np.arange(SLAT_X[0], SLAT_X[1], SLAT_GAP):
-        m.add(v, f, p=(x, S.BELT_Y, 0.0008))
+        m.add(v, f, p=(x, S.BELT_CY, 0.0008))
     return m
 
 
@@ -2372,8 +2428,8 @@ def cell_objects(mjm):
         objs.append({"id": nm, "kind": "box", "center": [round(float(x) * 1000, 1) for x in d.geom_xpos[g]],
                      "size": [round(float(x) * 2000, 1) for x in mjm.geom_size[g]], "color": col})
     if not CONVEYOR_DRAWN["value"]:
-        objs.append({"id": "belt", "kind": "box", "center": [200.0, round(S.BELT_Y * 1000, 1), -12.0],
-                     "size": [2500.0, S.BELT_W * 1000, 24.0], "color": 0x1d1f23, "roughness": 0.95})
+        objs.append({"id": "belt", "kind": "box", "center": [round(S.BELT_X0 * 1000, 1), round(S.BELT_CY * 1000, 1), -12.0],
+                     "size": [round(CONVEYOR_LEN * 1000, 1), round(S.BELT_W * 1000, 1), 24.0], "color": 0x1d1f23, "roughness": 0.95})
     if CONVEYOR["mode"] == "textured" and CONVEYOR["fit"]:
         fit = dict(CONVEYOR["fit"])
         fit["asset"] = CONVEYOR.get("asset") or fit["asset"]
@@ -2543,7 +2599,12 @@ class Replayer:
                 for k, sn in enumerate(frames):
                     if not self.alive:
                         break
+                    pic = None
+                    if len(sn) == 2:            # (a frame with the camera's picture of that moment)
+                        sn, pic = sn
                     self.pose.send(self.ctx, sn)
+                    if pic is not None:
+                        self.ctx.telemetry("camera_picture", {"image": rgb_png(pic)})
                     lag = t0 + (k + 1) * self.dt - time.time()
                     if lag > 0:
                         time.sleep(lag)
@@ -2555,6 +2616,14 @@ class Replayer:
 
     def stop(self):
         self.alive = False
+
+
+def rgb_png(pic):
+    """a camera picture kept with a replay (rgb (h, w, 3) uint8, its background mask) as a PNG, twice its size"""
+    rgb, bg = pic
+    rgb = np.where(bg[..., None], np.array([28, 30, 34], np.uint8), rgb)
+    rgb = np.repeat(np.repeat(rgb, 2, 0), 2, 1)
+    return png_rgb(np.ascontiguousarray(rgb))
 
 
 def png_rgb(rgb):
@@ -2830,6 +2899,18 @@ def object_item(env, i):
         parts.append({"t": t, "s": [round(float(x), 5) for x in size], "p": [round(float(x), 5) for x in pos],
                       "q": [round(float(x), 6) for x in S.part_quat(eul)]})
     return {"key": o["key"], "label": o["label"], "test": bool(o["test"]), "rgba": [round(float(x), 3) for x in o["rgba"]], "parts": parts}
+
+
+PIC_EVERY = 12                    # steps between the camera pictures kept with a replay (0.5 s)
+
+
+def camera_pics(env, n):
+    """the camera's pictures of cells 0..n-1 now, as the network sees them (rgb uint8, background mask), for replays"""
+    img = env.last_img[:n]
+    rgb = (img[:, 3:6].clamp(0, 1) * 255).byte().permute(0, 2, 3, 1).cpu().numpy()
+    bg = (env.last_seg[:n] < 0)
+    bg = (bg[..., 0] if bg.dim() == 4 else bg).cpu().numpy()
+    return [(rgb[i], bg[i]) for i in range(n)]
 
 
 def camera_png(env, i):
@@ -3189,11 +3270,13 @@ def learn_run(ctx, stage):
                 o2, p2 = env.obs()
                 algo.record(t, rew, done, info["timeout"], p2)
                 if lead:
-                    par = (env.steps[:len(show)] % 2 == 0).tolist()
+                    st_ = env.steps[:len(show)]
+                    par = (st_ % 2 == 0).tolist()
                     sn = pose.snap_many(show)
+                    pics = camera_pics(env, len(show)) if env.k % PIC_EVERY == 0 else None
                     for i in show:
-                        if par[i]:
-                            recs[i].append(sn[i])
+                        if par[i] or pics is not None:
+                            recs[i].append((sn[i], pics[i]) if pics is not None else sn[i])
                 if bool(done.any()):
                     idx = done.nonzero(as_tuple=False).flatten()
                     sc_, fl_, ln_ = info["success"][idx].tolist(), info["fail"][idx].tolist(), env.steps[idx].tolist()
@@ -3209,7 +3292,7 @@ def learn_run(ctx, stage):
                             rec_ep += 1
                             ok, fl = bool(info["success"][i]), bool(info["fail"][i])
                             lab = "Episode %d (%s, cell %d): %s, %s after %.1f s" % (rec_ep, STAGE_NAME[stage], i + 1, rec_objs[i]["label"], results_text(stage, ok, fl), float(env.steps[i]) * CTRL_DT)
-                            player.play(recs[i], lab, camera_png(env, i))
+                            player.play(recs[i], lab)        # (the camera's pictures go with the frames they were taken at)
                         recs[i] = []
                     env.reset(idx)
                     sim.refresh()
@@ -3475,7 +3558,7 @@ def test_run(ctx):
                     break
             env.restart_clock(idx)
             env.z_rest[0] = sim.xpos[0, env.ob, 2].float()
-            ctx.telemetry(ch_ev, {"text": "Landed at %.0f cm along the belt, %.0f cm across, after %.1f s" % (float(sim.xpos[0, env.ob, 0]) * 100, (float(sim.xpos[0, env.ob, 1]) - S.BELT_Y) * 100, (k + 1) * CTRL_DT)})
+            ctx.telemetry(ch_ev, {"text": "Landed at %.0f cm along the belt, %.0f cm from its middle, after %.1f s" % (float(sim.xpos[0, env.ob, 0]) * 100, (float(sim.xpos[0, env.ob, 1]) - S.BELT_CY) * 100, (k + 1) * CTRL_DT)})
         env.perceive()
         wall0 = time.time()
         grasped, maxf, result = False, 0.0, "ran out of time"
@@ -3532,18 +3615,24 @@ def models_run(ctx):
     import mujoco
     import cell
     lib = cell.compile_library(mujoco)
-    here = os.path.abspath(os.getcwd())
-    jobs = os.path.dirname(os.path.dirname(here))
-    base = os.path.dirname(jobs) if os.path.basename(jobs).lower() == "jobs" else os.path.dirname(here)
     glb = [f.path for f in (ctx.inputs.get("conveyor") or []) + (ctx.inputs.get("policy") or []) if str(f.name).lower().endswith(".glb")]
     if not glb:
         ctx.log("No conveyor 3D file wired in (Conveyor model input): the belt is drawn with boxes.")
-    viz.write_models(ctx, "models", lib[0], lib[6], os.path.join(base, "cache", "xarm6"), glb[0] if glb else None)
+    viz.write_models(ctx, "models", lib[0], lib[6], mesh_cache(), glb[0] if glb else None)
     return {"models": [viz.ARM, viz.OBJS], "conveyor_from_file": bool(glb)}
+
+
+def mesh_cache():
+    """the folder where the xArm's meshes are kept on this machine, from one job to the next"""
+    here = os.path.abspath(os.getcwd())
+    jobs = os.path.dirname(os.path.dirname(here))
+    base = os.path.dirname(jobs) if os.path.basename(jobs).lower() == "jobs" else os.path.dirname(here)
+    return os.path.join(base, "cache", "xarm6")
 
 
 def run(ctx):
     what = str(ctx.params.get("mode") or "Learn to reach").lower()
+    S.ARM_MESHES = viz.camera_arm_meshes(mesh_cache(), ctx.log)     # (the camera sees the xArm as it is)
     bd = str(ctx.params.get("belt_drawing") or "flat").lower()
     viz.CONVEYOR["mode"] = "boxes" if bd.startswith("box") else "textured" if ("material" in bd or "textur" in bd) else "flat"
     glb = [f for f in (ctx.inputs.get("conveyor") or []) if str(f.name).lower().endswith(".glb")]
