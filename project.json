@@ -61,14 +61,14 @@
             "name": "Conveyor grasping (xArm + 5-finger hand)"
         },
         {
-            "id": "ws-hand-pressure-map",
-            "version": 2,
-            "name": "Hand pressure map"
-        },
-        {
             "id": "ws-camera-picture",
             "version": 1,
             "name": "Camera picture"
+        },
+        {
+            "id": "ws-hand-pressure-map",
+            "version": 2,
+            "name": "Hand pressure map"
         }
     ]
 }
