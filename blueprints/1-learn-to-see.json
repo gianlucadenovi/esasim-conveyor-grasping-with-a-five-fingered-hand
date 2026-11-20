@@ -6,7 +6,7 @@
     "name": "1 · Learn to see",
     "description": "The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.",
     "published_version": 7,
-    "updated": "2026-11-19 19:15:41",
+    "updated": "2026-11-20 01:17:52",
     "graph": {
         "nodes": [
             {
@@ -89,7 +89,18 @@
                     "controls": "button Finish now",
                     "control_channel": "control"
                 },
-                "title": "What the camera sees (3D)"
+                "title": "The cell (3D)"
+            },
+            {
+                "id": "camview",
+                "type": "image-view",
+                "x": 1100,
+                "y": -200,
+                "params": {
+                    "size": "large",
+                    "live": "on top"
+                },
+                "title": "What the camera sees"
             },
             {
                 "id": "err",
@@ -177,6 +188,17 @@
                 "to": {
                     "node": "view",
                     "port": "scene"
+                }
+            },
+            {
+                "id": "tel_robot.stream>camview.images",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "camview",
+                    "port": "images"
                 }
             },
             {
