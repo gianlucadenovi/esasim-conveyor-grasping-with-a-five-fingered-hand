@@ -1,0 +1,49 @@
+{
+    "id": "ws-camera-picture",
+    "version": "1",
+    "name": "Camera picture",
+    "category": "Visualizers",
+    "icon": "camera",
+    "side": "frontend",
+    "customizable": true,
+    "summary": "The newest picture of a live camera, filling its panel (no margins, no grid), with how long ago it came.",
+    "help": "Wire a live stream (a Telemetry block, or a block's telemetry) whose items, on the channel named below, carry {\"image\": \"data:image/png;base64,...\"}. The newest picture fills the whole panel, its proportions kept (resize the panel to change its size); a badge says Live and how long ago it came, grey when no picture has come for a while. Pixels: smooth, or sharp to see the camera's own pixels.",
+    "inputs": [
+        {
+            "id": "images",
+            "label": "Pictures",
+            "type": "stream",
+            "many": true,
+            "help": "Live items with an image (a data URL)"
+        }
+    ],
+    "outputs": [],
+    "params": [
+        {
+            "key": "channel",
+            "label": "Channel",
+            "type": "text",
+            "default": "camera_picture",
+            "help": "The stream channel with the pictures (empty: any item with an image)"
+        },
+        {
+            "key": "pixels",
+            "label": "Pixels",
+            "type": "select",
+            "default": "smooth",
+            "options": [
+                "smooth",
+                "sharp"
+            ],
+            "help": "sharp: the camera's own pixels, as squares"
+        }
+    ],
+    "view": {
+        "w": 6,
+        "h": 7,
+        "resize": "both"
+    },
+    "esasim": {
+        "version": 1
+    }
+}

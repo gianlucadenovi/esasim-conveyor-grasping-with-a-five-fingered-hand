@@ -64,6 +64,11 @@
             "id": "ws-hand-pressure-map",
             "version": 2,
             "name": "Hand pressure map"
+        },
+        {
+            "id": "ws-camera-picture",
+            "version": 1,
+            "name": "Camera picture"
         }
     ]
 }

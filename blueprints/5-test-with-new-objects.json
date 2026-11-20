@@ -6,7 +6,7 @@
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
     "published_version": 8,
-    "updated": "2026-11-20 21:11:04",
+    "updated": "2026-11-20 21:14:11",
     "graph": {
         "nodes": [
             {
@@ -40,7 +40,7 @@
                     "mode": "Test with new objects",
                     "accelerator": "auto",
                     "worlds": 1,
-                    "minutes": 60,
+                    "minutes": 20,
                     "pace": 1,
                     "drop_cm": 25,
                     "autoplay": "Yes",
@@ -85,12 +85,12 @@
             },
             {
                 "id": "camview",
-                "type": "image-view",
+                "type": "ws-camera-picture",
                 "x": 1180,
                 "y": -400,
                 "params": {
-                    "size": "large",
-                    "live": "on top"
+                    "channel": "camera_picture",
+                    "pixels": "smooth"
                 },
                 "title": "What the camera sees"
             },
