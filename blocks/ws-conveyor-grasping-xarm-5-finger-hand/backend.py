@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 31 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 32 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -840,7 +840,10 @@ def make_sim(mjm, lib, n, want, log=None, cam=True):
             raise RuntimeError("NVIDIA GPU asked, but " + err)
         if log:
             log("On the CPU instead: " + err)
-    n = min(n, 256)
+    # (on the CPU each thread steps its share of the cells: about 32 cells a thread keep every thread busy and spread
+    # Python's own time per step over enough of them; more only make each update slower)
+    import os
+    n = min(n, max(64, min(768, 32 * (os.cpu_count() or 2))))
     return CpuSim(mjm, lib, n, log=log, cam=cam), "CPU (MuJoCo, %d worlds)" % n
 '''
 _SOURCES['grasp_env'] = r'''# ── the task: see the object coming on the belt, reach it, grasp it well, put it in the bin ─────────────────────────
