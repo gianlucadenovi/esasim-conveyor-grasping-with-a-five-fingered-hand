@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 33 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 34 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -2607,6 +2607,81 @@ def touch_row(f):
     return row
 
 
+class TelemetryBudget:
+    """EsaSim keeps the first 20 000 live items of a run and drops the rest without a word: sent as fast as the cell
+    moves (two poses, the touch and pictures, 30 a second), the 3D view, the gauges and the charts all stop after
+    11 minutes. This takes the place of ctx.telemetry and spreads the run's items over its minutes:
+    - the learning curve, the events and the scene always go (they are few), until the very end of the allowance;
+    - the live items (the poses, the touch, the camera's pictures) share the rest, evenly over the run: whole
+      episodes are bought before they are played (afford), so what is shown is shown smoothly, and the view waits
+      between them rather than stuttering through all of them"""
+    CAP = 20000
+    LIVE = ("joints", "touch", "camera_picture")
+
+    def __init__(self, send, seconds, cap=19400, reserve=3000, log=None):
+        import threading
+        self.send, self.cap, self.reserve, self.log = send, cap, reserve, log
+        self.t0, self.seconds = time.time(), max(120.0, float(seconds))
+        self.used, self.live_used, self.pool, self.dropped = 0, 0, 0, 0
+        self.lock = threading.Lock()
+
+    def _allowance(self):
+        frac = min(1.0, (time.time() - self.t0) / self.seconds)
+        return (self.cap - self.reserve) * frac + 400 - self.live_used        # (400: the first episode at once)
+
+    def afford(self, n):
+        """n live items for an episode about to be played: True and kept for it, or False (not yet: try later)"""
+        with self.lock:
+            if self._allowance() >= n and self.used + n <= self.cap - 300:
+                self.pool += n
+                self.live_used += n
+                return True
+            return False
+
+    def settle(self):
+        """the episode is over: what it did not use goes back"""
+        with self.lock:
+            self.live_used -= self.pool
+            self.pool = 0
+
+    def __call__(self, channel, data):
+        with self.lock:
+            if self.used >= self.cap:
+                return
+            if channel in self.LIVE:
+                if self.pool > 0:
+                    self.pool -= 1
+                elif self._allowance() >= 1 and self.used < self.cap - 300:
+                    self.live_used += 1
+                else:
+                    self.dropped += 1
+                    return
+            self.used += 1
+        self.send(channel, data)
+
+
+def budget_telemetry(ctx, seconds):
+    """ctx.telemetry from now on within EsaSim's 20 000 items of a run (see TelemetryBudget)"""
+    b = TelemetryBudget(ctx.telemetry, seconds, log=ctx.log)
+    try:
+        ctx.telemetry = b
+    except Exception:      # noqa: BLE001
+        pass
+    return b
+
+
+def afford(ctx, n):
+    """(the live cell, the replays) may an episode of about n live items be shown now?"""
+    f = getattr(ctx.telemetry, "afford", None)
+    return True if f is None else f(n)
+
+
+def settle(ctx):
+    f = getattr(ctx.telemetry, "settle", None)
+    if f is not None:
+        f()
+
+
 class Replayer:
     """plays the episodes of one cell in the 3D view in real time, on a thread of its own (learning goes on meanwhile)"""
 
@@ -2641,6 +2716,8 @@ class Replayer:
                 frames, text, picture = self.q.get(timeout=0.5)
             except Exception:      # noqa: BLE001
                 continue
+            if not afford(self.ctx, int(len(frames) * 2.6) + 6):
+                continue            # (the run's live items would run out: this episode is not shown)
             self.playing = True
             try:
                 if text:
@@ -2664,6 +2741,7 @@ class Replayer:
             except Exception as e:  # noqa: BLE001
                 self.ctx.log("3D view: %s" % e)
             finally:
+                settle(self.ctx)
                 time.sleep(0.4)     # (a breath between episodes)
                 self.playing = False
 
@@ -3043,6 +3121,12 @@ class LiveCell:
                 if not self.ready:
                     time.sleep(0.2)
                     continue
+                # (the episode's live items, at most: a pose every 3 steps (2 items, the touch every 3rd), the pictures)
+                cost = int(env.max_steps / 3 * 2.4 + env.max_steps / PIC_EVERY) + 8
+                if not viz.afford(self.ctx, cost):
+                    self.waited = getattr(self, "waited", 0) + 1
+                    time.sleep(1.0)     # (the run's live items are spread over its minutes: the next episode in a moment)
+                    continue
                 env.reset_all()
                 sim.refresh()
                 env.perceive()
@@ -3065,7 +3149,7 @@ class LiveCell:
                         cam_err.append(float((env.est_c[0, :2] - c_true[0, :2]).norm()))
                     g, _ = env.hand_state()
                     near = min(near, float((g[0] - c_true[0]).norm()))
-                    if k % 2 == 0:
+                    if k % 3 == 0:
                         self.pose.send(self.ctx, self.pose.snap(0))
                     if k % PIC_EVERY == 0:
                         self.ctx.telemetry("camera_picture", {"image": camera_png(env, 0)})
@@ -3081,6 +3165,7 @@ class LiveCell:
                         self.ctx.log(txt)
                         self.pose.send(self.ctx, self.pose.snap(0))
                         time.sleep(0.8)          # (a moment to see how it ended)
+                        viz.settle(self.ctx)
                         break
             except Exception as e:      # noqa: BLE001
                 self.ctx.log("Live cell: %s" % e)
@@ -3527,7 +3612,7 @@ def learn_run(ctx, stage):
                         rec_objs[i] = object_item(env, i)
                     o2, p2 = env.obs()
                 a_obs, a_priv = o2, p2
-                if time.time() - last_tel > 5.0 and hist:      # (between the updates too: the numbers move as episodes end)
+                if time.time() - last_tel > 10.0 and hist:     # (between the updates too: the numbers move as episodes end)
                     last_tel = time.time()
                     ctx.telemetry(ch_train, tel_row(it + (t + 1) / algo.T, steps_done + (t + 1) * n))
             stats = algo.update(a_priv, critic_only=it < warm)
@@ -3754,7 +3839,17 @@ def test_run(ctx):
         sim.refresh()
         o = env.info[req["obj"]]
         pose_txt = ["upright", "on its side", "tumbled"][req["pose"]]
-        pose.cut(ctx)           # (the new object appears where it is dropped: it does not glide there in the view)
+        # (the trial's live items, bought before it is played: a pose every 3 steps, every 6 when the run's items run
+        # short, none (the trial still runs, the view waits) when they have run out)
+        every = 0
+        for e in (3, 6):
+            if viz.afford(ctx, int((env.max_steps + 105) / e * 2.4 + env.max_steps / 12) + 8):
+                every = e
+                break
+        if every:
+            pose.cut(ctx)       # (the new object appears where it is dropped: it does not glide there in the view)
+        else:
+            ctx.telemetry(ch_ev, {"text": "(The 3D view sits this trial out: the run's live items are spread over its minutes.)"})
         ctx.telemetry(ch_ev, {"text": "Trial %d: %s%s, dropped %s onto the belt at %.0f cm/s" % (trial, o["label"], " (new to it)" if o["test"] else " (seen in training)", pose_txt, float(env.belt_v[0]) * 100)})
         # it falls, bounces and settles on the moving belt (the hand waits); then the robot's turn begins
         wall0 = time.time()
@@ -3762,7 +3857,7 @@ def test_run(ctx):
             still = 0
             for k in range(60):
                 env.step(torch.zeros(1, ACT_DIM, device=dev))
-                if k % 2 == 1:
+                if every and k % every == 0:
                     pose.send(ctx, pose.snap(0))
                 ov = sim.qvel[0, env.do_:env.do_ + 6].float()
                 rel = float((ov[0] + env.belt_v[0]).abs() + ov[1:3].abs().sum() + 0.05 * ov[3:].abs().sum())
@@ -3788,9 +3883,9 @@ def test_run(ctx):
             grasped = grasped or bool(env.lifted_ever[0]) or bool(env.hold_cnt[0] >= 25) or float(info["lift"][0]) > 0.05
             maxf = max(maxf, float(env.touches()[0].max()))
             ts = float(env.steps[0]) * CTRL_DT
-            if int(env.steps[0]) % 2 == 0:
+            if every and int(env.steps[0]) % every == 0:
                 pose.send(ctx, pose.snap(0))
-            if int(env.steps[0]) % 12 == 0:
+            if every and int(env.steps[0]) % 12 == 0:
                 ctx.telemetry("camera_picture", {"image": camera_png(env, 0)})
             if pace > 0:
                 lag = wall0 + ts / pace - time.time()
@@ -3803,7 +3898,7 @@ def test_run(ctx):
                     result = "dropped" if grasped else "missed it: it went off the end of the belt"
                     for k2 in range(45):       # (it falls to the floor, in the view)
                         env.step(torch.zeros(1, ACT_DIM, device=dev))
-                        if k2 % 2 == 1:
+                        if every and k2 % every == 0:
                             pose.send(ctx, pose.snap(0))
                         if pace > 0:
                             time.sleep(CTRL_DT / pace)
@@ -3813,6 +3908,7 @@ def test_run(ctx):
                 break
         placed = result == "in the bin"
         rows.append((o["key"], grasped, placed))
+        viz.settle(ctx)
         ctx.telemetry(ch_ev, {"text": "Trial %d, %s: %s%s (%.1f s, grip up to %.1f N)" % (trial, o["label"], result, "" if placed or not grasped else ", it had grasped it", ts, maxf)})
         ctx.telemetry("test", {"trials": len(rows), "grasped": sum(r[1] for r in rows), "placed": sum(r[2] for r in rows),
                                "placed_pct": round(100.0 * sum(r[2] for r in rows) / len(rows), 1)})
@@ -3850,6 +3946,7 @@ def mesh_cache():
 
 def run(ctx):
     what = str(ctx.params.get("mode") or "Learn to reach").lower()
+    viz.budget_telemetry(ctx, 60.0 * float(ctx.params.get("minutes") or 60))      # (EsaSim keeps 20 000 live items a run)
     S.ARM_MESHES = viz.camera_arm_meshes(mesh_cache(), ctx.log)     # (the camera sees the xArm as it is)
     bd = str(ctx.params.get("belt_drawing") or "flat").lower()
     viz.CONVEYOR["mode"] = "boxes" if bd.startswith("box") else "textured" if ("material" in bd or "textur" in bd) else "flat"
