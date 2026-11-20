@@ -111,7 +111,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Blueprints in this repository
 
-- [1 · Learn to see](blueprints/1-learn-to-see.json) · 9 blocks · version 7
+- [1 · Learn to see](blueprints/1-learn-to-see.json) · 9 blocks · version 8
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 11 blocks · version 4
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 11 blocks · version 5
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 11 blocks · version 3
@@ -127,7 +127,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 The files the project's views draw with (3D models, textures, sounds), in [assets/](assets/):
 
-- [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 97 KB
+- [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 98 KB
 - [models/simple_rubber_conveyor.glb](assets/models/simple_rubber_conveyor.glb) · 2.9 MB
 - [models/xarm_hand.robot.json.gz](assets/models/xarm_hand.robot.json.gz) · 238 KB
 - [textures/esacode-logo.png](assets/textures/esacode-logo.png) · 25 KB
