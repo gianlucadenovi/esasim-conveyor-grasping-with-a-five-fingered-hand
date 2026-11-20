@@ -5,8 +5,8 @@
     },
     "name": "3 · Learn to grasp",
     "description": "From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.",
-    "published_version": 4,
-    "updated": "2026-11-20 01:11:16",
+    "published_version": 5,
+    "updated": "2026-11-20 01:16:55",
     "graph": {
         "nodes": [
             {
@@ -91,6 +91,17 @@
                     "control_channel": "control"
                 },
                 "title": "The cell (3D)"
+            },
+            {
+                "id": "camview",
+                "type": "image-view",
+                "x": 1100,
+                "y": -400,
+                "params": {
+                    "size": "large",
+                    "live": "on top"
+                },
+                "title": "What the camera sees"
             },
             {
                 "id": "hand",
@@ -206,6 +217,17 @@
                 "to": {
                     "node": "view",
                     "port": "scene"
+                }
+            },
+            {
+                "id": "tel_robot.stream>camview.images",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "camview",
+                    "port": "images"
                 }
             },
             {
