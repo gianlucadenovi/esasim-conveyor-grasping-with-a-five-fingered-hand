@@ -6,7 +6,7 @@
     "name": "Learn on all my machines (a round)",
     "description": "Three Learn nodes, each on its own worker (GPU or CPU, whichever it has), start from the same policy; their policies are averaged into one. Set the same stage on the three, run, repeat.",
     "published_version": 0,
-    "updated": "2026-11-20 15:59:36",
+    "updated": "2026-11-20 21:15:06",
     "graph": {
         "nodes": [
             {
@@ -145,12 +145,12 @@
             },
             {
                 "id": "camview",
-                "type": "image-view",
+                "type": "ws-camera-picture",
                 "x": 1100,
                 "y": -460,
                 "params": {
-                    "size": "large",
-                    "live": "on top"
+                    "channel": "camera_picture",
+                    "pixels": "smooth"
                 },
                 "title": "What the camera sees"
             },
