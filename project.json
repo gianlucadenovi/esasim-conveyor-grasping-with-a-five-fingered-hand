@@ -42,6 +42,12 @@
             "nodes": 10
         },
         {
+            "name": "Learn on all my machines (a round)",
+            "file": "blueprints/learn-on-all-my-machines-a-round.json",
+            "published_version": 0,
+            "nodes": 0
+        },
+        {
             "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
             "file": "blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json",
             "published_version": 13,
