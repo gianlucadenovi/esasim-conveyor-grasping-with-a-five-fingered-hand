@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 25 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 26 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -2940,6 +2940,95 @@ def results_text(stage, ok, fail):
     return "dropped it or let it go by" if fail else "ran out of time"
 
 
+# ── the live cell: the policy as it is now, playing in real time while it learns ──────────────────────────────
+class LiveCell:
+    """one cell of its own, on the CPU, where the policy being learned plays episode after episode in real time (its
+    mean action, the hand starting at rest), for the 3D view, the camera's picture and the hand's sensors: the
+    thousands of learning cells each advance far slower than real time, so they cannot be watched. After every
+    update of the learning its newest weights come here, so what the view shows is the robot as it is now."""
+
+    def __init__(self, ctx, stage, seed, dt):
+        import threading
+        import torch
+        import mujoco
+        import cell
+        self.ctx, self.stage, self.dt, self.t = ctx, stage, dt, torch
+        lib = cell.compile_library(mujoco)
+        self.sim, _ = make_sim(lib[0], lib, 1, "CPU", lambda *a: None, cam=True)
+        self.env = GraspEnv(torch, self.sim, lib, stage=stage, seed=seed + 7919)
+        self.env.assist = 0.0
+        see, _ = load_see(ctx, "cpu")
+        if see is not None:
+            self.env.see = see
+        self.ac = make_ac(torch, OBS_DIM, PRIV_DIM, ACT_DIM)
+        self.ac.eval()
+        self.on = Norm(torch, OBS_DIM, "cpu")
+        self.pose = viz.Pose3D(self.env)
+        self.lock = threading.Lock()
+        self.pending, self.version, self.ready = None, 0, False
+        self.alive = True
+        self.th = threading.Thread(target=self._run, daemon=True)
+        self.th.start()
+
+    def update(self, algo, it):
+        """the learning's newest weights (copied: the learning goes on changing its own)"""
+        sd = {k: v.detach().to("cpu", copy=True) for k, v in algo.ac.state_dict().items()}
+        st = {k: v.detach().to("cpu", copy=True) for k, v in algo.on.state().items()}
+        with self.lock:
+            self.pending = (sd, st, it)
+
+    def stop(self):
+        self.alive = False
+
+    def _take(self):
+        with self.lock:
+            p, self.pending = self.pending, None
+        if p is not None:
+            self.ac.load_state_dict(p[0])
+            self.on.load(p[1], "cpu")
+            self.version, self.ready = p[2], True
+
+    def _run(self):
+        torch, env, sim = self.t, self.env, self.sim
+        ep = 0
+        while self.alive:
+            try:
+                self._take()
+                if not self.ready:
+                    time.sleep(0.2)
+                    continue
+                env.reset_all()
+                sim.refresh()
+                env.perceive()
+                obj = object_item(env, 0)
+                self.pose.cut(self.ctx)
+                ep += 1
+                t0, k = time.time(), 0
+                while self.alive:
+                    obs, _ = env.obs()
+                    with torch.no_grad():
+                        a = self.ac.actor(self.on(obs))
+                    _, done, info = env.step(a)
+                    k += 1
+                    if k % 2 == 0:
+                        self.pose.send(self.ctx, self.pose.snap(0))
+                    if k % PIC_EVERY == 0:
+                        self.ctx.telemetry("camera_picture", {"image": camera_png(env, 0)})
+                    lag = t0 + k * CTRL_DT - time.time()
+                    if lag > 0:
+                        time.sleep(lag)
+                    if bool(done[0]):
+                        ok, fl = bool(info["success"][0]), bool(info["fail"][0])
+                        self.ctx.telemetry("events", {"text": "Live, the policy after %d updates: %s, %s after %.1f s" % (
+                            self.version, obj["label"], results_text(self.stage, ok, fl), k * CTRL_DT)})
+                        self.pose.send(self.ctx, self.pose.snap(0))
+                        time.sleep(0.8)          # (a moment to see how it ended)
+                        break
+            except Exception as e:      # noqa: BLE001
+                self.ctx.log("Live cell: %s" % e)
+                time.sleep(2.0)
+
+
 # ── checkpoints to carry on from ────────────────────────────────────────────────────────────────────────────────
 def find_files(ctx, port, checkpoint, fmt):
     import torch
@@ -3226,11 +3315,19 @@ def learn_run(ctx, stage):
             (" (task %d of this round: its policy is averaged with the others' when they are done)" % (t_idx + 1)) if n_tasks > 1 else ""))
     steps_start = steps_done
     pose = viz.Pose3D(env)
+    live = None
     if lead:
         ctx.telemetry("scene", viz.cell_objects(lib[0]))
+        try:
+            live = LiveCell(ctx, stage, seed, CTRL_DT)
+            live.update(algo, 0)
+        except Exception as e:      # noqa: BLE001
+            ctx.log("No live cell (%s): the 3D view replays episodes of the learning cells instead." % e)
+            live = None
+    if live is None and lead:
         player = viz.Replayer(ctx, pose, 2 * CTRL_DT)
     else:
-        player = viz.Replayer.__new__(viz.Replayer)          # (a silent one: only the first task shows its episodes)
+        player = viz.Replayer.__new__(viz.Replayer)          # (a silent one: only the first task, without a live cell, shows replays)
         player.play = lambda *a, **k: None
         player.waiting = lambda: 10 ** 6
         player.stop = lambda: None
@@ -3248,7 +3345,7 @@ def learn_run(ctx, stage):
     # the 3D view replays whole episodes: many cells are recorded at once (with thousands of cells each one advances
     # slowly: a few seconds of its time take a minute or so), and the episodes they finish wait in a queue to be
     # shown one after the other, so that the view keeps playing between the learning's updates
-    show = list(range(min(SHOW_CELLS, n)))
+    show = list(range(min(SHOW_CELLS, n))) if live is None else []
     recs = {i: [] for i in show}
     rec_objs = {i: object_item(env, i) for i in show}
     rec_ep = 0
@@ -3276,7 +3373,7 @@ def learn_run(ctx, stage):
                 rew, done, info = env.step(act)
                 o2, p2 = env.obs()
                 algo.record(t, rew, done, info["timeout"], p2)
-                if lead:
+                if lead and show:
                     st_ = env.steps[:len(show)]
                     par = (st_ % 2 == 0).tolist()
                     sn = pose.snap_many(show)
@@ -3309,6 +3406,8 @@ def learn_run(ctx, stage):
                 a_obs, a_priv = o2, p2
             stats = algo.update(a_priv, critic_only=it < warm)
             it += 1
+            if live is not None:
+                live.update(algo, it)
             steps_done += algo.T * n
             sps = algo.T * n / max(1e-6, time.time() - tt)
             sc = score()
@@ -3344,6 +3443,8 @@ def learn_run(ctx, stage):
     finally:
         curve.close()
         player.stop()
+        if live is not None:
+            live.stop()
     if best < 0 or score() >= best or n_tasks > 1:
         save("final")
     final = torch.load(out_path, map_location="cpu", weights_only=False)
