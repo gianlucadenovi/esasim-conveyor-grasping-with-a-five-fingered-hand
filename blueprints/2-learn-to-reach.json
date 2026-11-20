@@ -6,7 +6,7 @@
     "name": "2 · Learn to reach",
     "description": "The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.",
     "published_version": 4,
-    "updated": "2026-11-19 19:15:28",
+    "updated": "2026-11-20 00:35:06",
     "graph": {
         "nodes": [
             {
@@ -55,7 +55,7 @@
                 "y": -60,
                 "params": {
                     "interval": 0.5,
-                    "channels": "joints,scene,events,camera_picture,train",
+                    "channels": "joints,scene,events,camera_picture,train,touch",
                     "keep": 300
                 },
                 "title": "Episodes for the view"
@@ -91,6 +91,19 @@
                     "control_channel": "control"
                 },
                 "title": "The cell (3D)"
+            },
+            {
+                "id": "hand",
+                "type": "ws-hand-pressure-map",
+                "x": 1440,
+                "y": -160,
+                "params": {
+                    "channel": "touch",
+                    "max": 30,
+                    "scale": "log",
+                    "hand": "right"
+                },
+                "title": "Hand pressure map"
             },
             {
                 "id": "success",
@@ -193,6 +206,17 @@
                 "to": {
                     "node": "view",
                     "port": "scene"
+                }
+            },
+            {
+                "id": "tel_robot.stream>hand.data",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "hand",
+                    "port": "data"
                 }
             },
             {
