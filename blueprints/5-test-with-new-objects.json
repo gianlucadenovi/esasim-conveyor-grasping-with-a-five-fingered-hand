@@ -6,7 +6,7 @@
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
     "published_version": 7,
-    "updated": "2026-11-19 20:00:55",
+    "updated": "2026-11-20 00:34:54",
     "graph": {
         "nodes": [
             {
@@ -58,7 +58,7 @@
                 "y": -60,
                 "params": {
                     "interval": 0.5,
-                    "channels": "joints,scene,events,camera_picture,test",
+                    "channels": "joints,scene,events,camera_picture,test,touch",
                     "keep": 300
                 },
                 "title": "Live cell"
@@ -82,6 +82,34 @@
                     "control_channel": "control"
                 },
                 "title": "The test (3D)"
+            },
+            {
+                "id": "hand",
+                "type": "ws-hand-pressure-map",
+                "x": 1180,
+                "y": 60,
+                "params": {
+                    "channel": "touch",
+                    "max": 30,
+                    "scale": "log",
+                    "hand": "right"
+                },
+                "title": "Hand pressure map"
+            },
+            {
+                "id": "touchg",
+                "type": "gauge-view",
+                "x": 1180,
+                "y": 420,
+                "params": {
+                    "fields": "touch.thumb_n,touch.index_n,touch.middle_n,touch.ring_n,touch.little_n,touch.palm_n,touch.grip_n",
+                    "style": "bar",
+                    "min": 0,
+                    "max": 40,
+                    "unit": "N",
+                    "decimals": 1
+                },
+                "title": "Pressure per digit"
             },
             {
                 "id": "score",
@@ -157,6 +185,28 @@
                 },
                 "to": {
                     "node": "score",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel.stream>hand.data",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "hand",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel.stream>touchg.data",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "touchg",
                     "port": "data"
                 }
             },

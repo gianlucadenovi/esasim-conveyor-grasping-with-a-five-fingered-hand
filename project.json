@@ -33,13 +33,13 @@
             "name": "4 · Learn to place",
             "file": "blueprints/4-learn-to-place.json",
             "published_version": 3,
-            "nodes": 8
+            "nodes": 10
         },
         {
             "name": "5 · Test with new objects",
             "file": "blueprints/5-test-with-new-objects.json",
             "published_version": 7,
-            "nodes": 7
+            "nodes": 9
         },
         {
             "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
