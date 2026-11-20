@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 26 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 27 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -3061,6 +3061,48 @@ def find_files(ctx, port, checkpoint, fmt):
     return out
 
 
+def cell_signature():
+    """a short fingerprint of the cell the policies learn in (its geometry, the arm, the hand, the belt, the bin): a
+    policy learned in another version of the cell is not carried on from"""
+    import hashlib
+    keep = S.ARM_MESHES
+    S.ARM_MESHES = None         # (whether the camera has the arm's meshes does not change the cell)
+    try:
+        return hashlib.md5(S.scene_xml().encode()).hexdigest()[:12]
+    finally:
+        S.ARM_MESHES = keep
+
+
+def pick_policy(ctx, found, stage):
+    """the policy to carry on from for a stage: the furthest stage there is up to this one, but never one older than a
+    policy of an earlier stage (a place policy from before the grasp was learned again belongs to the old grasp),
+    nor one learned in another version of the cell; among those the newest"""
+    order = {s: k for k, s in enumerate(STAGES)}
+    sig = cell_signature()
+    ok = []
+    for f in found:
+        if order.get(f["stage"], 9) > order[stage]:
+            continue
+        cs = f["st"].get("cell")
+        if cs and cs != sig:
+            ctx.log("Not carrying on from %s: it learned in another version of the cell." % f["name"])
+            continue
+        ok.append(f)
+    newest = {}
+    for f in ok:
+        newest[f["stage"]] = max(newest.get(f["stage"], 0), f["stamp"])
+    cur = []
+    for f in ok:
+        later_before = [newest[s] for s in newest if order.get(s, 9) < order.get(f["stage"], 9)]
+        if later_before and f["stamp"] < max(later_before):
+            ctx.log("Not carrying on from %s (%s): a %s policy was learned after it." % (
+                f["name"], STAGE_NAME.get(f["stage"], f["stage"]), STAGE_NAME[[s for s in STAGES if newest.get(s) == max(later_before)][0]].lower()))
+            continue
+        cur.append(f)
+    cur.sort(key=lambda f: (order.get(f["stage"], 0), f["stamp"]), reverse=True)
+    return cur
+
+
 def load_see(ctx, dev, need=False):
     import torch
     found = find_files(ctx, "see", "see_checkpoint.pt", SEE_FORMAT)
@@ -3295,8 +3337,7 @@ def learn_run(ctx, stage):
     found = [] if str(p.get("training") or "").lower().startswith("start") else find_files(ctx, "policy", "policy_checkpoint.pt", FORMAT)
     if n_tasks > 1:        # every task of a parallel round starts from the same policy: the newest given as input
         found = [f for f in found if f["where"] == "dataset"]
-    found = [f for f in found if order.get(f["stage"], 9) <= order[stage]]
-    found.sort(key=lambda f: (order.get(f["stage"], 0), f["steps"], f["stamp"]), reverse=True)
+    found = pick_policy(ctx, found, stage)
     if found:
         pick = found[0]
         st = pick["st"]
@@ -3356,7 +3397,7 @@ def learn_run(ctx, stage):
 
     def save(note):
         st = algo.state()
-        st.update({"format": FORMAT, "stage": stage, "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": ACT_DIM, "score": score(), "note": note,
+        st.update({"format": FORMAT, "stage": stage, "cell": cell_signature(), "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": ACT_DIM, "score": score(), "note": note,
                    "steps": steps_done, "round_steps": steps_done - steps_start, "device": label, "minutes": (time.time() - t0) / 60, "ctrl_dt": CTRL_DT,
                    "episodes": len(hist), "arm": "xarm6-in-physics", "round_task": (t_idx + 1) if n_tasks > 1 else 0,
                    "per_object": {k: round(100 * sum(v) / max(1, len(v))) for k, v in per_obj.items()}})
@@ -3552,9 +3593,7 @@ def test_run(ctx):
     env.assist = 0.0
     see, sp = load_see(ctx, dev, need=True)
     env.see = see
-    pols = find_files(ctx, "policy", "policy_checkpoint.pt", FORMAT)
-    order = {s: k for k, s in enumerate(STAGES)}
-    pols.sort(key=lambda f: (order.get(f["stage"], 0), f["stamp"]), reverse=True)
+    pols = pick_policy(ctx, find_files(ctx, "policy", "policy_checkpoint.pt", FORMAT), "place")
     if not pols:
         raise RuntimeError("No policy yet: run Learn to reach, Learn to grasp and Learn to place first.")
     pol = pols[0]
