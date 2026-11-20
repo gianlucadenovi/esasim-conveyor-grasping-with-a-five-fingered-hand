@@ -2,19 +2,216 @@
     "id": "ws-conveyor-grasping-xarm-5-finger-hand",
     "version": "1",
     "name": "Conveyor grasping (xArm + 5-finger hand)",
-    "category": "My blocks",
+    "category": "Simulation",
     "icon": "code",
     "side": "backend",
     "customizable": true,
     "summary": "A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr",
-    "help": "",
-    "inputs": [],
-    "outputs": [],
-    "params": [],
+    "help": "Modes. Learn to see: the camera beside the robot (96x72, depth and colour) feeds a small convolutional network that learns which pixels are the object, where it is, how big and which way it lies (18 training objects, checked on 12 kept for the test). Learn to reach / grasp / place: PPO over thousands of cells (MuJoCo Warp on an NVIDIA GPU, or MuJoCo on the CPU). The xArm 6 is simulated: six position servos with torque limits follow the hand target through inverse kinematics, and the arm, the hand and the fingers collide with the pedestal, the conveyor (frame and side rails), the bin and its stand. Objects are dropped onto the moving belt so where they land varies. Each stage carries on from the one before. Multi-worker rounds: put several Learn nodes in a flow, each with its own Task in a round (1, 2, 3...) and its own Run on (GPU or CPU), all fed the same start policy; wire their Network outputs into a node in Combine a round mode, which averages their policies (weighted by the steps each gathered) into the round's policy; chain rounds for distributed training. Test with new objects: the policy runs live; pick the object, its pose, its turn and the belt speed in the 3D view; the object falls from Drop height onto the moving belt. Make the 3D models: writes the xArm-with-hand and objects robot files for the project's assets; a conveyor .glb wired to Conveyor model is fitted to the belt and baked in. Telemetry channels: joints, scene, events, camera_picture, train (train_1.. for the other tasks), rounds, test.",
+    "inputs": [
+        {
+            "id": "policy",
+            "label": "Policies",
+            "type": "files",
+            "many": true,
+            "optional": true,
+            "formats": [
+                "pt",
+                "py"
+            ],
+            "help": "Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from, test or combine; those left on the machine by earlier runs are found by themselves (not in a round, which"
+        },
+        {
+            "id": "conveyor",
+            "label": "Conveyor model",
+            "type": "files",
+            "optional": true,
+            "formats": [
+                "glb"
+            ],
+            "help": "Make the 3D models: a conveyor 3D file (.glb), fitted to the simulated belt and drawn in place of the boxes"
+        }
+    ],
+    "outputs": [
+        {
+            "id": "policy",
+            "label": "Network",
+            "type": "files",
+            "formats": [
+                "pt"
+            ],
+            "help": "grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; Combine a round: the combined policy"
+        },
+        {
+            "id": "curve",
+            "label": "Learning curve",
+            "type": "table",
+            "formats": [
+                "csv"
+            ],
+            "help": "see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial)"
+        },
+        {
+            "id": "models",
+            "label": "3D models",
+            "type": "files",
+            "formats": [
+                "gz"
+            ],
+            "help": "Make the 3D models: xarm_hand.robot.json.gz and belt_objects.robot.json.gz (with the conveyor's 3D file when one is wired in), for the project's assets"
+        }
+    ],
+    "params": [
+        {
+            "key": "mode",
+            "label": "What to do",
+            "type": "select",
+            "default": "Learn to reach",
+            "options": [
+                "Learn to see",
+                "Learn to reach",
+                "Learn to grasp",
+                "Learn to place",
+                "Combine a round",
+                "Test with new objects",
+                "Make the 3D models"
+            ]
+        },
+        {
+            "key": "accelerator",
+            "label": "Run on",
+            "type": "select",
+            "default": "auto",
+            "options": [
+                "auto",
+                "NVIDIA GPU",
+                "CPU"
+            ],
+            "help": "auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU"
+        },
+        {
+            "key": "round_task",
+            "label": "Task in a round",
+            "type": "number",
+            "default": 0,
+            "min": 0,
+            "max": 32,
+            "help": "0: learns alone. 1, 2, 3...: one of the Learn nodes of a multi-worker round (all start from the policy wired in; task 1 drives the 3D view); a Combine a round node averages them"
+        },
+        {
+            "key": "worlds",
+            "label": "Cells learning at once",
+            "type": "number",
+            "default": 2048,
+            "min": 1,
+            "max": 16384,
+            "help": "Each cell is a belt, an object, the arm with the hand and the camera (CPU: at most 256)"
+        },
+        {
+            "key": "minutes",
+            "label": "Minutes",
+            "type": "number",
+            "default": 60,
+            "min": 1,
+            "max": 1440
+        },
+        {
+            "key": "training",
+            "label": "Training",
+            "type": "select",
+            "default": "Continue",
+            "options": [
+                "Continue",
+                "Start over"
+            ],
+            "help": "Continue carries on from the newest network or policy (of this stage, or of the stage before)"
+        },
+        {
+            "key": "replay_every",
+            "label": "Replay every (s)",
+            "type": "number",
+            "default": 20
+        },
+        {
+            "key": "pace",
+            "label": "Test pace (1 = real time)",
+            "type": "number",
+            "default": 1,
+            "help": "0: as fast as it can"
+        },
+        {
+            "key": "drop_cm",
+            "label": "Test: drop height (cm)",
+            "type": "number",
+            "default": 25,
+            "min": 0,
+            "max": 80,
+            "help": "How high above the belt the chosen object is let go"
+        },
+        {
+            "key": "autoplay",
+            "label": "Test: pick objects when idle",
+            "type": "select",
+            "default": "Yes",
+            "options": [
+                "Yes",
+                "No"
+            ]
+        },
+        {
+            "key": "idle",
+            "label": "Test: idle before it picks (s)",
+            "type": "number",
+            "default": 8
+        },
+        {
+            "key": "objects",
+            "label": "Test objects",
+            "type": "select",
+            "default": "New objects only",
+            "options": [
+                "New objects only",
+                "All objects"
+            ]
+        },
+        {
+            "key": "belt_drawing",
+            "label": "Belt drawn",
+            "type": "select",
+            "default": "Flat colours (3D file)",
+            "options": [
+                "Its own materials (3D file)",
+                "Flat colours (3D file)",
+                "Boxes"
+            ],
+            "help": "Its own materials: the 3D view draws the conveyor's file itself, textures and all (wire it to Conveyor model; needs a 3D view with scene models). Flat colours: baked into the objects model by Make the 3D models."
+        },
+        {
+            "key": "belt_texture",
+            "label": "Belt texture",
+            "type": "text",
+            "default": "",
+            "help": "A picture of the project's assets (such as textures/belt.webp) laid on the belt and scrolled with it: its width along the belt, its height across it. Empty: the conveyor file's own picture. Used by Make the 3D models (Flat colours)."
+        },
+        {
+            "key": "seed",
+            "label": "Seed",
+            "type": "number",
+            "default": 1
+        }
+    ],
     "hardware": [
-        "cpu"
+        "cpu",
+        "nvidia"
+    ],
+    "packages": [
+        "torch",
+        "mujoco>=3.3",
+        "mujoco-warp",
+        "warp-lang",
+        "numpy"
     ],
     "esasim": {
-        "version": 41
+        "version": 42
     }
 }

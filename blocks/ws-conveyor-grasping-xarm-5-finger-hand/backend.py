@@ -1,16 +1,35 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 41 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 42 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
-#   (none)
+#   policy      Files (pt, py)            Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from, test or combine; those left on the machine by earlier runs are found by themselves (not in a round, which
+#   conveyor    Files (glb)               Conveyor model · optional · Make the 3D models: a conveyor 3D file (.glb), fitted to the simulated belt and drawn in place of the boxes
 # Outputs  ctx.output("id", "name.ext") is the path to write; ctx.write_json / ctx.write_text
+#   policy      Files (pt)                Network · grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; Combine a round: the combined policy
+#   curve       Table (csv)               Learning curve · see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial)
+#   models      Files (gz)                3D models · Make the 3D models: xarm_hand.robot.json.gz and belt_objects.robot.json.gz (with the conveyor's 3D file when one is wired in), for the project's assets
 #   telemetry   Live telemetry            ctx.telemetry("channel", data) while it runs
 # Settings ctx.params["key"]
-#   (none)
-# Runs on  Any worker. Return a dict to fill the "result" output.
+#   mode        select    What to do = "Learn to reach" of Learn to see | Learn to reach | Learn to grasp | Learn to place | …
+#   accelerator select    Run on = "auto" of auto | NVIDIA GPU | CPU
+#   round_task  number    Task in a round = 0
+#   worlds      number    Cells learning at once = 2048
+#   minutes     number    Minutes = 60
+#   training    select    Training = "Continue" of Continue | Start over
+#   replay_every number    Replay every (s) = 20
+#   pace        number    Test pace (1 = real time) = 1
+#   drop_cm     number    Test: drop height (cm) = 25
+#   autoplay    select    Test: pick objects when idle = "Yes" of Yes | No
+#   idle        number    Test: idle before it picks (s) = 8
+#   objects     select    Test objects = "New objects only" of New objects only | All objects
+#   belt_drawing select    Belt drawn = "Flat colours (3D file)" of Its own materials (3D file) | Flat colours (3D file) | Box…
+#   belt_texture text      Belt texture = ""
+#   seed        number    Seed = 1
+# Runs on  Any worker, NVIDIA GPU. Return a dict to fill the "result" output.
+# Packages torch, mujoco>=3.3, mujoco-warp, warp-lang, numpy (installed by the worker with pip when missing)
 # EsaSim rewrites these lines from the block's definition each time it is saved: change the definition, not them.
 # ── end of EsaSim block header ────────────────────────────────────────
 
