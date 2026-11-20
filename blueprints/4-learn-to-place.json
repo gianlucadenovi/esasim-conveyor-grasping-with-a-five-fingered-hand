@@ -6,14 +6,14 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 5,
-    "updated": "2026-11-20 15:59:03",
+    "updated": "2026-11-20 20:04:09",
     "graph": {
         "nodes": [
             {
                 "id": "nets",
                 "type": "dataset",
-                "x": -520,
-                "y": -73,
+                "x": -580,
+                "y": -383,
                 "params": {
                     "dataset": "36",
                     "version": "latest",
@@ -25,7 +25,7 @@
                 "id": "learn",
                 "type": "ws-conveyor-grasping-xarm-5-finger-hand",
                 "x": -140,
-                "y": -73,
+                "y": -383,
                 "params": {
                     "mode": "Learn to place",
                     "accelerator": "auto",
@@ -52,7 +52,7 @@
                 "id": "tel_robot",
                 "type": "telemetry",
                 "x": 280,
-                "y": -154,
+                "y": -580,
                 "params": {
                     "interval": 0.5,
                     "channels": "joints,scene,events,camera_picture,train,touch",
@@ -75,8 +75,8 @@
             {
                 "id": "view",
                 "type": "viewer-3d",
-                "x": 1080,
-                "y": -154,
+                "x": 760,
+                "y": -480,
                 "params": {
                     "environment": "outdoor",
                     "quality": "high",
@@ -95,8 +95,8 @@
             {
                 "id": "camview",
                 "type": "image-view",
-                "x": 1400,
-                "y": -400,
+                "x": 760,
+                "y": -740,
                 "params": {
                     "size": "large",
                     "live": "on top"
@@ -106,8 +106,8 @@
             {
                 "id": "hand",
                 "type": "ws-hand-pressure-map",
-                "x": 1400,
-                "y": -154,
+                "x": 1120,
+                "y": -580,
                 "params": {
                     "channel": "touch",
                     "max": 30,
@@ -119,8 +119,8 @@
             {
                 "id": "touchg",
                 "type": "gauge-view",
-                "x": 1400,
-                "y": 320,
+                "x": 760,
+                "y": -246,
                 "params": {
                     "fields": "touch.thumb_n,touch.index_n,touch.middle_n,touch.ring_n,touch.little_n,touch.palm_n,touch.grip_n",
                     "style": "bar",
