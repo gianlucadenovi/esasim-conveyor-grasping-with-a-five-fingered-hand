@@ -44,7 +44,7 @@
         {
             "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
             "file": "blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json",
-            "published_version": 12,
+            "published_version": 13,
             "nodes": 3
         }
     ],
