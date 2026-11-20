@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 18 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 19 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -2479,7 +2479,7 @@ class Replayer:
         import queue
         import threading
         self.ctx, self.pose, self.dt = ctx, pose, dt
-        self.q = queue.Queue(maxsize=2)
+        self.q = queue.Queue(maxsize=64)
         self.alive = True
         self.playing = False
         self.th = threading.Thread(target=self._run, daemon=True)
@@ -2488,6 +2488,10 @@ class Replayer:
     def idle(self):
         """nothing playing nor waiting: the next episode can be shown at once"""
         return not self.playing and self.q.empty()
+
+    def waiting(self):
+        """episodes in the queue, not yet shown"""
+        return self.q.qsize()
 
     def play(self, frames, text=None, picture=None):
         try:
@@ -2785,7 +2789,8 @@ import viz
 FORMAT = "esasim.grasp-policy/1"
 SEE_FORMAT = "esasim.grasp-see/2"          # (2: the network finds the object's pixels, then its box)
 VIEW = "esasim.grasp/1"
-SHOW_CELLS = 16                   # cells recorded for the 3D view's replays
+SHOW_CELLS = 64                   # cells recorded for the 3D view's replays
+REPLAY_QUEUE = 12                 # episodes waiting their turn in the 3D view (they come in bursts: the cells advance together)
 
 STAGE_NAME = {"reach": "Reach", "grasp": "Grasp", "place": "Place"}
 
@@ -3112,7 +3117,7 @@ def learn_run(ctx, stage):
     else:
         player = viz.Replayer.__new__(viz.Replayer)          # (a silent one: only the first task shows its episodes)
         player.play = lambda *a, **k: None
-        player.idle = lambda: False
+        player.waiting = lambda: 10 ** 6
         player.stop = lambda: None
     env.reset_all()
     env.perceive()
@@ -3125,9 +3130,9 @@ def learn_run(ctx, stage):
     t0, last_tel, last_replay, it, best, stop = time.time(), 0.0, -1e9, 0, -1.0, "time"
     last_scene = 0.0
     out_path = os.path.join(os.getcwd(), "policy_checkpoint.pt")
-    # the 3D view replays whole episodes: a few cells are recorded at once (with thousands of cells each one advances
-    # slowly, so one cell alone would finish an episode only every minute or so), and the first of them to finish
-    # one when a replay is due is shown
+    # the 3D view replays whole episodes: many cells are recorded at once (with thousands of cells each one advances
+    # slowly: a few seconds of its time take a minute or so), and the episodes they finish wait in a queue to be
+    # shown one after the other, so that the view keeps playing between the learning's updates
     show = list(range(min(SHOW_CELLS, n)))
     recs = {i: [] for i in show}
     rec_objs = {i: object_item(env, i) for i in show}
@@ -3170,9 +3175,9 @@ def learn_run(ctx, stage):
                     for a_, b_, c_, d_, o_ in zip(sc_, fl_, ln_, rt_, ob_):
                         hist.append((1.0 if a_ else 0.0, 1.0 if b_ else 0.0, c_ * CTRL_DT, d_))
                         per_obj[env.info[o_]["key"]].append(1.0 if a_ else 0.0)
-                    ended = [i for i in show if bool(done[i])]
+                    ended = done[:len(show)].nonzero(as_tuple=False).flatten().tolist()
                     for i in ended:
-                        if lead and len(recs[i]) > 10 and player.idle() and time.time() - last_replay > replay_every:
+                        if lead and len(recs[i]) > 10 and player.waiting() < REPLAY_QUEUE and time.time() - last_replay > replay_every:
                             last_replay = time.time()
                             rec_ep += 1
                             ok, fl = bool(info["success"][i]), bool(info["fail"][i])
