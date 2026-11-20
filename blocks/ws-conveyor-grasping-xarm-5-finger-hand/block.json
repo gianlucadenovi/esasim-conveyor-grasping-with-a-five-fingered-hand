@@ -3,7 +3,7 @@
     "version": "1",
     "name": "Conveyor grasping (xArm + 5-finger hand)",
     "category": "Simulation",
-    "icon": "robot-arm",
+    "icon": "code",
     "side": "backend",
     "customizable": true,
     "summary": "A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr",
@@ -187,6 +187,13 @@
             "help": "Its own materials: the 3D view draws the conveyor's file itself, textures and all (wire it to Conveyor model; needs a 3D view with scene models). Flat colours: baked into the objects model by Make the 3D models."
         },
         {
+            "key": "belt_texture",
+            "label": "Belt texture",
+            "type": "text",
+            "default": "",
+            "help": "A picture of the project's assets (such as textures/belt.webp) laid on the belt and scrolled with it: its width along the belt, its height across it. Empty: the conveyor file's own picture. Used by Make the 3D models (Flat colours)."
+        },
+        {
             "key": "seed",
             "label": "Seed",
             "type": "number",
@@ -205,6 +212,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 39
+        "version": 40
     }
 }

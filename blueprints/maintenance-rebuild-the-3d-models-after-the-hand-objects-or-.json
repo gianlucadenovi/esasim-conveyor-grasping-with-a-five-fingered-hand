@@ -6,7 +6,7 @@
     "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
     "published_version": 15,
-    "updated": "2026-11-20 21:42:23",
+    "updated": "2026-11-20 22:03:49",
     "graph": {
         "nodes": [
             {
@@ -39,7 +39,8 @@
                 "params": {
                     "mode": "Make the 3D models",
                     "accelerator": "CPU",
-                    "belt_drawing": "Flat colours (3D file)"
+                    "belt_drawing": "Flat colours (3D file)",
+                    "belt_texture": "textures/preview (56).webp"
                 },
                 "title": "Make the 3D models",
                 "dest": {

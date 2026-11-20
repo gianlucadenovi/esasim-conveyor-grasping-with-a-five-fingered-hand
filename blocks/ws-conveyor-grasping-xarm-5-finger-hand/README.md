@@ -8,7 +8,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 
 | | |
 |---|---|
-| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 39 |
+| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 40 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any worker, NVIDIA GPU |
@@ -45,6 +45,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 | `idle` Test: idle before it picks (s) | number | `8` |  |
 | `objects` Test objects | select | `"New objects only"` |  |
 | `belt_drawing` Belt drawn | select | `"Flat colours (3D file)"` | Its own materials: the 3D view draws the conveyor's file itself, textures and all (wire it to Conveyor model; needs a 3D view with scene models). Flat colours: baked into the objects model by Make the 3D models. |
+| `belt_texture` Belt texture | text | `""` | A picture of the project's assets (such as textures/belt.webp) laid on the belt and scrolled with it: its width along the belt, its height across it. Empty: the conveyor file's own picture. Used by Make the 3D models (Flat colours). |
 | `seed` Seed | number | `1` |  |
 
 ## Use it in EsaSim

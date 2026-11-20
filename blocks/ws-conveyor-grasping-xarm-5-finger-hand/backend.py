@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 39 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 40 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -26,6 +26,7 @@
 #   idle        number    Test: idle before it picks (s) = 8
 #   objects     select    Test objects = "New objects only" of New objects only | All objects
 #   belt_drawing select    Belt drawn = "Flat colours (3D file)" of Its own materials (3D file) | Flat colours (3D file) | Box…
+#   belt_texture text      Belt texture = ""
 #   seed        number    Seed = 1
 # Runs on  Any worker, NVIDIA GPU. Return a dict to fill the "result" output.
 # Packages torch, mujoco>=3.3, mujoco-warp, warp-lang, numpy (installed by the worker with pip when missing)
