@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 38 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 39 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -2201,6 +2201,55 @@ def _under(mjm, b, top):
 
 
 # ── a 3D file of the conveyor (glTF binary), baked into the cell model ────────────────────────────────────────────
+def glb_part_picture(data, word="belt"):
+    """the picture of the first part of a .glb whose name has word in it (its material's colour texture, a data URL),
+    with the size one picture covers on it, (along its length, across it) in m, from its texture coordinates; or None"""
+    import base64
+    import struct
+    try:
+        n = struct.unpack("<I", data[12:16])[0]
+        js = json.loads(data[20:20 + n])
+        off = 20 + n
+        bl = struct.unpack("<I", data[off:off + 4])[0]
+        binc = data[off + 8:off + 8 + bl]
+
+        def acc(i):
+            a = js["accessors"][i]
+            bv = js["bufferViews"][a["bufferView"]]
+            k = {"VEC2": 2, "VEC3": 3}[a["type"]]
+            st = bv.get("byteStride") or 4 * k
+            o = bv.get("byteOffset", 0) + a.get("byteOffset", 0)
+            return np.frombuffer(binc[o:o + st * a["count"]], dtype=np.float32).reshape(a["count"], st // 4)[:, :k].astype(float)
+        for m in js.get("meshes", []):
+            if word not in str(m.get("name", "")).lower():
+                continue
+            pr = m["primitives"][0]
+            mat = js["materials"][pr["material"]]
+            t = (mat.get("pbrMetallicRoughness", {}).get("baseColorTexture")
+                 or mat.get("extensions", {}).get("KHR_materials_pbrSpecularGlossiness", {}).get("diffuseTexture"))
+            if not t or "TEXCOORD_0" not in pr["attributes"]:
+                return None
+            im = js["images"][js["textures"][t["index"]]["source"]]
+            bv = js["bufferViews"][im["bufferView"]]
+            raw = binc[bv.get("byteOffset", 0):bv.get("byteOffset", 0) + bv["byteLength"]]
+            P, U = acc(pr["attributes"]["POSITION"]), acc(pr["attributes"]["TEXCOORD_0"])
+            ext = P.max(0) - P.min(0)
+            lng, wid = int(np.argmax(ext)), int(np.argsort(ext)[1])     # (its length, its width: in the file's axes)
+            # metres per whole picture, along and across: from how far the coordinates run over the part
+            def per(ax):
+                c = [abs(np.corrcoef(U[:, j], P[:, ax])[0, 1]) for j in range(2)]
+                j = int(np.argmax(c))
+                du = U[:, j].max() - U[:, j].min()
+                return j, ext[ax] / max(du, 1e-6)
+            ja, along = per(lng)
+            _, across = per(wid)
+            return {"image": "data:%s;base64,%s" % (im.get("mimeType", "image/png"), base64.b64encode(raw).decode()),
+                    "along": float(along), "across": float(across), "along_uv": "uv"[ja]}
+    except Exception:      # noqa: BLE001
+        return None
+    return None
+
+
 def glb_meshes(data):
     """the triangles of a .glb: [(vertices (m, Z up), faces, colour)] with every node's transform applied"""
     import struct
@@ -2289,9 +2338,11 @@ def conveyor_mesh(path, log):
     """the conveyor's 3D file at its own proportions: scaled alike in every direction so that its belt's top is on the
     simulated belt (its feet then on the floor), its long side along the belt, its belt centred on the simulated one.
     The simulated belt was measured from this file (scene.py): a file of other proportions is said so in the log."""
-    parts = glb_meshes(open(path, "rb").read())
+    data = open(path, "rb").read()
+    parts = glb_meshes(data)
     if not parts:
         return None
+    pic = glb_part_picture(data)
     allv = np.concatenate([p[0] for p in parts])
     lo, hi = allv.min(0), allv.max(0)
     ext = hi - lo
@@ -2332,19 +2383,29 @@ def conveyor_mesh(path, log):
         for v, f, _ in items:
             vv, ff = decimate(v[f] * 1000.0, 2.0) if len(f) > 3000 else (v * 1000.0, f)
             m.add(vv / 1000.0, ff)
-        links.append((items[0][2], m, BELT_TEXTURE if key == ("belt",) else None))
+        tex = None
+        if key == ("belt",):
+            tex = dict(BELT_TEXTURE)
+            if pic:            # (the belt's own picture, from the file, at the file's own scale on the belt)
+                # (one picture every BELT_PERIOD along the belt, its proportions kept across: within a few % of the
+                # file's own scale, and the belt's position is sent within that period, so it scrolls without a seam)
+                across = BELT_PERIOD * pic["across"] / pic["along"]
+                tex.update({"pattern": "image", "image": pic["image"], "along_uv": pic["along_uv"],
+                            "period": round(BELT_PERIOD * 1000, 1), "across": round(across * 1000, 1)})
+                log("The belt's own texture: one picture every %.2f m along the belt (%.2f m in the file), %.2f m across; it "
+                    "scrolls with the belt (a 3D view that draws link textures)." % (BELT_PERIOD, pic["along"] * float(sc[0]), across))
+        links.append((items[0][2], m, tex))
     return links
 
 
 # the texture of the belt's surface, for the 3D view: rubber with a fine grain and chevrons pointing the way the belt
 # runs (towards -x), one every BELT_PERIOD, laid along x over the belt part and scrolled with the objects model's
 # joint 0 (belt_x: where the belt is within a period, in mm)
-BELT_PERIOD = 0.10
-BELT_TEXTURE = {"pattern": "belt", "period": BELT_PERIOD * 1000, "axis": "x", "direction": -1, "follow_joint": 0,
+BELT_PERIOD = 2.0                 # (m) the belt's texture repeats every BELT_PERIOD along it; its position is sent within it
+BELT_TEXTURE = {"pattern": "belt", "period": BELT_PERIOD * 1000, "marks": 20, "axis": "x", "direction": -1, "follow_joint": 0,
                 "color": 0x1d1f23, "mark_color": 0x3a3f47}
 
 
-SLAT_GAP = 0.10                   # the period the belt's position is sent within (the belt's texture repeats every BELT_PERIOD)
 def objects_model(info, conveyor=None):
     """belt_objects.robot.json: the belt's slide (along x: its value, where the belt is within BELT_PERIOD, scrolls the
     texture of the conveyor's belt), each object on its own free mount, then the conveyor (its 3D file, if given, as
@@ -2558,10 +2619,11 @@ class Pose3D:
             self.last_eul = None
         self.last_obj = o
         r, p, y = self.last_eul = rpy_near(quat_R(oq), self.last_eul)
-        slide = round((belt % SLAT_GAP) * 1000, 1)          # (the slats repeat every SLAT_GAP: where in the gap the belt is)
+        gap = BELT_PERIOD
+        slide = round((belt % gap) * 1000, 1)               # (the texture repeats every gap: where in it the belt is)
         # when the slats wrap round to the start of a gap, the view must not slide them back across it (it eases
         # between items): that item carries no value for them, so they jump, unseen, to where the next one puts them
-        wrap = self.last_slide is not None and slide > self.last_slide + 0.5 * SLAT_GAP * 1000
+        wrap = self.last_slide is not None and slide > self.last_slide + 0.5 * gap * 1000
         self.last_slide = slide
         if wrap:
             slide = None
