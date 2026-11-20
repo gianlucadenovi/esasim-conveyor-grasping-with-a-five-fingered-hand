@@ -20,7 +20,7 @@
         {
             "name": "2 · Learn to reach",
             "file": "blueprints/2-learn-to-reach.json",
-            "published_version": 5,
+            "published_version": 6,
             "nodes": 11
         },
         {
@@ -45,7 +45,7 @@
             "name": "Learn on all my machines (a round)",
             "file": "blueprints/learn-on-all-my-machines-a-round.json",
             "published_version": 0,
-            "nodes": 0
+            "nodes": 14
         },
         {
             "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
