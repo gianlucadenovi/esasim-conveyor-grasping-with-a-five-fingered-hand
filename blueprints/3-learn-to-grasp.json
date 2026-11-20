@@ -5,8 +5,8 @@
     },
     "name": "3 · Learn to grasp",
     "description": "From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.",
-    "published_version": 3,
-    "updated": "2026-11-20 00:50:50",
+    "published_version": 4,
+    "updated": "2026-11-20 00:59:03",
     "graph": {
         "nodes": [
             {
@@ -128,11 +128,11 @@
                 "params": {
                     "kind": "line",
                     "x": "minutes",
-                    "y": "success,failed",
+                    "y": "success,success_from_rest,success_hand_over,failed",
                     "channel": "train",
                     "ymin": "0",
                     "ymax": "100",
-                    "title": "Grasped and held (%) and dropped (%)"
+                    "title": "Grasped and held (%): all, from the hand at rest, from the hand over it; dropped (%)"
                 },
                 "title": "Success"
             },
@@ -156,7 +156,7 @@
                 "x": 760,
                 "y": 420,
                 "params": {
-                    "fields": "train.success,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
+                    "fields": "train.success,train.success_from_rest,train.success_hand_over,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
                     "style": "number",
                     "decimals": 1
                 },
