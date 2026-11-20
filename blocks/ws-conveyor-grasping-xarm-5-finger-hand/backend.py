@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 17 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 18 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -2411,6 +2411,19 @@ class Pose3D:
                 sim.xpos[i, env.ob].float().cpu().numpy().astype(float), sim.xquat[i, env.ob].float().cpu().numpy().astype(float),
                 -float(env.belt_travel[i]))
 
+    def snap_many(self, cells):
+        """snap() for several cells, read from the simulation in one go"""
+        env, sim = self.env, self.env.sim
+        ix = env.t.as_tensor(cells, device=env.dev)
+        q = sim.qpos[ix][:, env.qh].float().cpu().numpy().astype(float)
+        f = env.touches()[ix].cpu().numpy().astype(float)
+        fq = sim.qpos[ix][:, self.fq_t].float().cpu().numpy().astype(float)
+        ob = env.obj[ix].tolist()
+        op = sim.xpos[ix, env.ob].float().cpu().numpy().astype(float)
+        oq = sim.xquat[ix, env.ob].float().cpu().numpy().astype(float)
+        bt = (-env.belt_travel[ix].float()).tolist()
+        return {c: (q[k], f[k], fq[k], int(ob[k]), op[k], oq[k], float(bt[k])) for k, c in enumerate(cells)}
+
     def items(self, sn):
         q, _, fq, o, op, oq, belt = sn            # (the arm's angles are the simulated arm's own)
         arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq]
@@ -2468,8 +2481,13 @@ class Replayer:
         self.ctx, self.pose, self.dt = ctx, pose, dt
         self.q = queue.Queue(maxsize=2)
         self.alive = True
+        self.playing = False
         self.th = threading.Thread(target=self._run, daemon=True)
         self.th.start()
+
+    def idle(self):
+        """nothing playing nor waiting: the next episode can be shown at once"""
+        return not self.playing and self.q.empty()
 
     def play(self, frames, text=None, picture=None):
         try:
@@ -2484,6 +2502,7 @@ class Replayer:
                 frames, text, picture = self.q.get(timeout=0.5)
             except Exception:      # noqa: BLE001
                 continue
+            self.playing = True
             try:
                 if text:
                     self.ctx.telemetry("events", {"text": text})
@@ -2499,6 +2518,9 @@ class Replayer:
                         time.sleep(lag)
             except Exception as e:  # noqa: BLE001
                 self.ctx.log("3D view: %s" % e)
+            finally:
+                time.sleep(0.4)     # (a breath between episodes)
+                self.playing = False
 
     def stop(self):
         self.alive = False
@@ -2763,6 +2785,8 @@ import viz
 FORMAT = "esasim.grasp-policy/1"
 SEE_FORMAT = "esasim.grasp-see/2"          # (2: the network finds the object's pixels, then its box)
 VIEW = "esasim.grasp/1"
+SHOW_CELLS = 16                   # cells recorded for the 3D view's replays
+
 STAGE_NAME = {"reach": "Reach", "grasp": "Grasp", "place": "Place"}
 
 
@@ -3037,7 +3061,7 @@ def learn_run(ctx, stage):
     n = int(p.get("worlds") or 2048)
     minutes = time_budget(ctx, float(p.get("minutes") or 60))
     seed = int(p.get("seed") or 1)
-    replay_every = float(p.get("replay_every") or 20)
+    replay_every = float(p.get("replay_every") or 0)     # (at least this many seconds between replays; 0: one after the other)
     ch_bot, ch_train, ch_ctl = p.get("robot_channel") or "robot", p.get("channel") or "train", p.get("control_channel") or "control"
     torch.manual_seed(seed)
     lib, sim, label, env = build(ctx, n, stage, seed=seed)
@@ -3088,6 +3112,7 @@ def learn_run(ctx, stage):
     else:
         player = viz.Replayer.__new__(viz.Replayer)          # (a silent one: only the first task shows its episodes)
         player.play = lambda *a, **k: None
+        player.idle = lambda: False
         player.stop = lambda: None
     env.reset_all()
     env.perceive()
@@ -3098,8 +3123,15 @@ def learn_run(ctx, stage):
     hist = collections.deque(maxlen=max(300, min(3000, n)))
     per_obj = collections.defaultdict(lambda: collections.deque(maxlen=60))
     t0, last_tel, last_replay, it, best, stop = time.time(), 0.0, -1e9, 0, -1.0, "time"
+    last_scene = 0.0
     out_path = os.path.join(os.getcwd(), "policy_checkpoint.pt")
-    rec, rec_ep, rec_obj = [], 0, object_item(env, 0)
+    # the 3D view replays whole episodes: a few cells are recorded at once (with thousands of cells each one advances
+    # slowly, so one cell alone would finish an episode only every minute or so), and the first of them to finish
+    # one when a replay is due is shown
+    show = list(range(min(SHOW_CELLS, n)))
+    recs = {i: [] for i in show}
+    rec_objs = {i: object_item(env, i) for i in show}
+    rec_ep = 0
     dist_ = collections.deque(maxlen=3000)          # how far the grasp point ended from where it should be (cm)
 
     def score():
@@ -3124,8 +3156,12 @@ def learn_run(ctx, stage):
                 rew, done, info = env.step(act)
                 o2, p2 = env.obs()
                 algo.record(t, rew, done, info["timeout"], p2)
-                if int(env.steps[0]) % 2 == 0:
-                    rec.append(pose.snap(0))
+                if lead:
+                    par = (env.steps[:len(show)] % 2 == 0).tolist()
+                    sn = pose.snap_many(show)
+                    for i in show:
+                        if par[i]:
+                            recs[i].append(sn[i])
                 if bool(done.any()):
                     idx = done.nonzero(as_tuple=False).flatten()
                     sc_, fl_, ln_ = info["success"][idx].tolist(), info["fail"][idx].tolist(), env.steps[idx].tolist()
@@ -3134,18 +3170,19 @@ def learn_run(ctx, stage):
                     for a_, b_, c_, d_, o_ in zip(sc_, fl_, ln_, rt_, ob_):
                         hist.append((1.0 if a_ else 0.0, 1.0 if b_ else 0.0, c_ * CTRL_DT, d_))
                         per_obj[env.info[o_]["key"]].append(1.0 if a_ else 0.0)
-                    if bool(done[0]):
-                        if rec and time.time() - last_replay > replay_every and len(rec) > 10:
+                    ended = [i for i in show if bool(done[i])]
+                    for i in ended:
+                        if lead and len(recs[i]) > 10 and player.idle() and time.time() - last_replay > replay_every:
                             last_replay = time.time()
                             rec_ep += 1
-                            ok, fl = bool(info["success"][0]), bool(info["fail"][0])
-                            lab = "Episode %d (%s): %s, %s after %.1f s" % (rec_ep, STAGE_NAME[stage], rec_obj["label"], results_text(stage, ok, fl), float(env.steps[0]) * CTRL_DT)
-                            player.play(rec, lab, camera_png(env, 0))
-                        rec = []
+                            ok, fl = bool(info["success"][i]), bool(info["fail"][i])
+                            lab = "Episode %d (%s, cell %d): %s, %s after %.1f s" % (rec_ep, STAGE_NAME[stage], i + 1, rec_objs[i]["label"], results_text(stage, ok, fl), float(env.steps[i]) * CTRL_DT)
+                            player.play(recs[i], lab, camera_png(env, i))
+                        recs[i] = []
                     env.reset(idx)
                     sim.refresh()
-                    if bool(done[0]):
-                        rec_obj = object_item(env, 0)
+                    for i in ended:
+                        rec_objs[i] = object_item(env, i)
                     o2, p2 = env.obs()
                 a_obs, a_priv = o2, p2
             stats = algo.update(a_priv, critic_only=it < warm)
@@ -3166,6 +3203,9 @@ def learn_run(ctx, stage):
                        "failed": round(fail, 1), "episode_s": round(eps, 1), "reward": round(ret, 1), "steps_per_s": round(sps),
                        "std": round(stats["std"], 3), "kl": round(stats["kl"], 4), "end_dist_cm": round(sum(dist_) / max(1, len(dist_)), 1), "restarted": env.n_bad}
                 ctx.telemetry(ch_train, row)
+                if lead and time.time() - last_scene > 8:        # (the cell itself, for a view opened since: it shows at once)
+                    last_scene = time.time()
+                    ctx.telemetry("scene", pose.scene)
                 cw.writerow([row["minutes"], it, steps_done, row["success"], row["failed"], row["episode_s"], row["reward"], row["steps_per_s"]])
                 curve.flush()
                 ctx.progress(min(99, 100 * (time.time() - t0) / (minutes * 60 + 1)), "%s: %.0f%% success · ends %.1f cm from the object · %.1f M steps" % (STAGE_NAME[stage], sc, row["end_dist_cm"], steps_done / 1e6))
