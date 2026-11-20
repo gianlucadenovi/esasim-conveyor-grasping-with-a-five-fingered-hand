@@ -6,7 +6,7 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 4,
-    "updated": "2026-11-20 05:04:53",
+    "updated": "2026-11-20 15:59:03",
     "graph": {
         "nodes": [
             {
@@ -28,7 +28,7 @@
                 "y": -73,
                 "params": {
                     "mode": "Learn to place",
-                    "accelerator": "NVIDIA GPU",
+                    "accelerator": "auto",
                     "worlds": 2048,
                     "minutes": 90,
                     "training": "Continue",
