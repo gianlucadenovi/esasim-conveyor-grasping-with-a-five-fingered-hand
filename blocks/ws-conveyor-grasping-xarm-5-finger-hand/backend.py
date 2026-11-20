@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 36 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 37 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -2352,7 +2352,7 @@ def objects_model(info, conveyor=None):
     belt's surface in the scene follows it), then each object on its own free mount"""
     joints, links = [], [{}]
     joints.append({"name": "belt_x", "type": "prismatic", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [1, 0, 0]})
-    links.append({})       # (the slats are a texture on the belt's surface, a scene object the 3D view scrolls with this joint)
+    links.append(slats_mesh().link(0x6b7078))   # (also drawn as stripes on the belt's surface, where the 3D view scrolls them)
     for k, o in enumerate(info):
         par = "base"
         for nm, typ, axis in (("x", "prismatic", [1, 0, 0]), ("y", "prismatic", [0, 1, 0]), ("z", "prismatic", [0, 0, 1]),
@@ -2490,8 +2490,10 @@ def cell_objects(mjm):
     # the belt's surface: a thin sheet with the slats as a texture, scrolled by the 3D view with the belt's slide joint
     # (the objects model's belt_x: where in a gap the belt is), the lines every SLAT_GAP
     objs.append({"id": "belt_surface", "kind": "box", "shadow": False, "roughness": 0.95, "color": 0x1d1f23,
-                 "center": [round((SLAT_X[0] + SLAT_X[1]) * 500, 1), round(S.BELT_CY * 1000, 1), 1.0],
-                 "size": [round((SLAT_X[1] - SLAT_X[0]) * 1000, 1), round((S.BELT_W - 0.016) * 1000, 1), 2.0],
+                 "center": [round((SLAT_X[0] + SLAT_X[1]) * 500, 1), round(S.BELT_CY * 1000, 1), 0.3],
+                 "size": [round((SLAT_X[1] - SLAT_X[0]) * 1000, 1), round((S.BELT_W - 0.016) * 1000, 1), 0.6],
+                 # (0.6 mm thin: the slats of the objects model, 1.6 mm high, still show through it in a 3D view without
+                 # stripes, moving with the same joint as the stripes)
                  "stripes": {"period": round(SLAT_GAP * 1000, 1), "width": 8.0, "color": 0x1d1f23, "line_color": 0x6b7078,
                              "follow": {"robot": OBJS, "joint": 0}}})
     if CONVEYOR["mode"] == "textured" and CONVEYOR["fit"]:
