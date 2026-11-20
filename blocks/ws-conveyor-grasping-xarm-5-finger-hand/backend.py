@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 37 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 38 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -2324,35 +2324,34 @@ def conveyor_mesh(path, log):
                        "pos": [round(float(x) * 1000, 1) for x in shift]}
     by_col = {}
     for v, f, c, nm in parts:
-        by_col.setdefault(part_colour(c, nm), []).append((v * sc + shift, f))
+        key = ("belt",) if "belt" in nm else part_colour(c, nm)     # (the belt apart: it carries the moving texture)
+        by_col.setdefault(key, []).append((v * sc + shift, f, part_colour(c, nm)))
     links = []
-    for col, items in by_col.items():
+    for key, items in by_col.items():
         m = Mesh()
-        for v, f in items:
+        for v, f, _ in items:
             vv, ff = decimate(v[f] * 1000.0, 2.0) if len(f) > 3000 else (v * 1000.0, f)
             m.add(vv / 1000.0, ff)
-        links.append((col, m))
+        links.append((items[0][2], m, BELT_TEXTURE if key == ("belt",) else None))
     return links
 
 
-SLAT_GAP = 0.10                   # the belt's slats, every 10 cm: they move with the simulated belt
-SLAT_X = (S.BELT_END_X + 0.03, S.BELT_START_X - 0.02)     # (along the belt)
+# the texture of the belt's surface, for the 3D view: rubber with a fine grain and chevrons pointing the way the belt
+# runs (towards -x), one every BELT_PERIOD, laid along x over the belt part and scrolled with the objects model's
+# joint 0 (belt_x: where the belt is within a period, in mm)
+BELT_PERIOD = 0.10
+BELT_TEXTURE = {"pattern": "belt", "period": BELT_PERIOD * 1000, "axis": "x", "direction": -1, "follow_joint": 0,
+                "color": 0x1d1f23, "mark_color": 0x3a3f47}
 
 
-def slats_mesh():
-    m = Mesh()
-    v, f = _box(0.004, S.BELT_W / 2 - 0.008, 0.0008)
-    for x in np.arange(SLAT_X[0], SLAT_X[1], SLAT_GAP):
-        m.add(v, f, p=(x, S.BELT_CY, 0.0008))
-    return m
-
-
+SLAT_GAP = 0.10                   # the period the belt's position is sent within (the belt's texture repeats every BELT_PERIOD)
 def objects_model(info, conveyor=None):
-    """belt_objects.robot.json: the conveyor (its 3D file, if given, as fixed parts), the belt's slide (along x: the
-    belt's surface in the scene follows it), then each object on its own free mount"""
+    """belt_objects.robot.json: the belt's slide (along x: its value, where the belt is within BELT_PERIOD, scrolls the
+    texture of the conveyor's belt), each object on its own free mount, then the conveyor (its 3D file, if given, as
+    fixed parts; its belt a part of its own, with that texture)"""
     joints, links = [], [{}]
     joints.append({"name": "belt_x", "type": "prismatic", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [1, 0, 0]})
-    links.append(slats_mesh().link(0x6b7078))   # (also drawn as stripes on the belt's surface, where the 3D view scrolls them)
+    links.append({})       # (no slats: the belt's own surface carries a texture that the 3D view scrolls with this joint)
     for k, o in enumerate(info):
         par = "base"
         for nm, typ, axis in (("x", "prismatic", [1, 0, 0]), ("y", "prismatic", [0, 1, 0]), ("z", "prismatic", [0, 0, 1]),
@@ -2369,9 +2368,12 @@ def objects_model(info, conveyor=None):
             m.add(v, f, quat_R(S.part_quat(eul)), pos)
         links[-1] = m.link(hexcol(o["rgba"]))
     # the conveyor's parts last: the 3D view gives the joint items' values to the joints in their order, fixed ones too
-    for k, (col, m) in enumerate(conveyor or []):
+    for k, (col, m, tex) in enumerate(conveyor or []):
         joints.append({"name": "conveyor_%d" % k, "type": "fixed", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [0, 0, 1]})
-        links.append(m.link(col))
+        lk = m.link(col)
+        if tex and lk:
+            lk["texture"] = tex
+        links.append(lk)
     return {"kind": "esasim.robot/1", "robot": OBJS, "units": "mm", "scale": 0.1, "angle_units": "rad", "joints": joints, "links": links,
             "base": {"xyz": [0, 0, 0], "rpy": [0, 0, 0]}}
 
@@ -2487,15 +2489,6 @@ def cell_objects(mjm):
     if not CONVEYOR_DRAWN["value"]:
         objs.append({"id": "belt", "kind": "box", "center": [round(S.BELT_X0 * 1000, 1), round(S.BELT_CY * 1000, 1), -12.0],
                      "size": [round(CONVEYOR_LEN * 1000, 1), round(S.BELT_W * 1000, 1), 24.0], "color": 0x1d1f23, "roughness": 0.95})
-    # the belt's surface: a thin sheet with the slats as a texture, scrolled by the 3D view with the belt's slide joint
-    # (the objects model's belt_x: where in a gap the belt is), the lines every SLAT_GAP
-    objs.append({"id": "belt_surface", "kind": "box", "shadow": False, "roughness": 0.95, "color": 0x1d1f23,
-                 "center": [round((SLAT_X[0] + SLAT_X[1]) * 500, 1), round(S.BELT_CY * 1000, 1), 0.3],
-                 "size": [round((SLAT_X[1] - SLAT_X[0]) * 1000, 1), round((S.BELT_W - 0.016) * 1000, 1), 0.6],
-                 # (0.6 mm thin: the slats of the objects model, 1.6 mm high, still show through it in a 3D view without
-                 # stripes, moving with the same joint as the stripes)
-                 "stripes": {"period": round(SLAT_GAP * 1000, 1), "width": 8.0, "color": 0x1d1f23, "line_color": 0x6b7078,
-                             "follow": {"robot": OBJS, "joint": 0}}})
     if CONVEYOR["mode"] == "textured" and CONVEYOR["fit"]:
         fit = dict(CONVEYOR["fit"])
         fit["asset"] = CONVEYOR.get("asset") or fit["asset"]
