@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 34 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 35 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -1475,8 +1475,12 @@ class GraspEnv:
         self.tgt_e = self.tgt_e + de
         self.tgt_e[:, 0] = self.tgt_e[:, 0].clamp(-YAW_MAX, YAW_MAX)
         self.tgt_e[:, 1:] = self.tgt_e[:, 1:].clamp(-0.7, 0.7)
-        self.curl = (self.curl + a[:, 6:11] * CURL_RATE).clamp(0, 1)
-        self.opp = (self.opp + a[:, 11] * CURL_RATE).clamp(0, 1)
+        # the fingers and the thumb as a servo hand moves them: the action is where each one is to be (0 open, 1 closed;
+        # below 0 open too) and it goes there no faster than CURL_RATE a step. (As a speed added up step by step, the
+        # spread of the actions while it learns cancels out and the fingers almost never close on the object at the
+        # right moment: at a realistic speed it never found out what closing the hand does.)
+        self.curl = self.curl + (a[:, 6:11].clamp(0, 1) - self.curl).clamp(-CURL_RATE, CURL_RATE)
+        self.opp = self.opp + (a[:, 11].clamp(0, 1) - self.opp).clamp(-CURL_RATE, CURL_RATE)
         ctrl = sim.ctrl.clone().float()
         self._fill_ctrl(ctrl, self.tgt_p, self.tgt_e, self.curl, self.opp)
         ctrl[:, self.a_belt] = -self.belt_v
