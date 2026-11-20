@@ -1,5 +1,5 @@
 // ── EsaSim block ──────────────────────────────────────────────────────
-// Hand pressure map (ws-hand-pressure-map) · version 1 · view, JavaScript: function render(ctx)
+// Hand pressure map (ws-hand-pressure-map) · version 2 · view, JavaScript: function render(ctx)
 // A five-fingered hand seen from the palm: each touch sensor where it is on the hand, coloured from black to white by its pressure, with its reading.
 // Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 // Saved: 2026-11-20
@@ -22,7 +22,6 @@ function render(ctx) {
   var hi = +p.max > 0 ? +p.max : 30;
   var logScale = String(p.scale || 'log').toLowerCase().indexOf('lin') !== 0;
   var mirror = String(p.hand || 'right').toLowerCase().indexOf('left') === 0;
-  var DIG = ['thumb', 'index', 'middle', 'ring', 'little'];
 
   // the colour scale: black, blue, cyan, green, yellow, red, white
   var STOPS = [[0, 0, 0, 0], [0.18, 20, 50, 230], [0.34, 0, 190, 230], [0.5, 30, 200, 60], [0.66, 245, 225, 30], [0.82, 235, 40, 30], [1, 255, 255, 255]];
@@ -41,38 +40,47 @@ function render(ctx) {
   }
   function ink(f) { return (f > 0.42 && f < 0.75) || f > 0.9 ? '#111' : '#f4f4f4'; }
 
-  // the hand's layout (in a 300 x 330 box, palm side, fingers up): every sensor a rounded shape
-  var S = [];      // {name, x, y, w, h, rot, cx, cy}
-  function seg(name, x, y, w, h, rot) { S.push({ name: name, x: x, y: y, w: w, h: h, rot: rot || 0 }); }
-  var fingers = [  // x of the finger's centre, the length of its three phalanges (prox, mid, tip), its width
-    ['index', 112, [46, 30, 26], 26], ['middle', 146, [50, 33, 27], 27], ['ring', 180, [47, 31, 26], 26], ['little', 212, [38, 24, 22], 23]];
-  var palmTop = 160, palmL = 96, palmR = 228, palmBot = 290;
-  fingers.forEach(function (f) {
-    var y = palmTop - 4 + (f[0] === 'little' ? 14 : f[0] === 'index' ? 4 : f[0] === 'ring' ? 2 : 0), w = f[3];
-    ['prox', 'mid', 'tip'].forEach(function (s, k) {
-      var L = f[2][k];
-      y -= L + 3;
-      seg(f[0] + '_' + s, f[1] - w / 2, y, w, L, 0);
+  // the hand's layout (palm side, fingers up, in a 250 x 335 box): every sensor a rounded shape, never touching another
+  // (a gap of at least 4 between any two: the segments of a finger, the fingers, the palm's zones, the thumb)
+  function handLayout() {
+    var S = [];      // {name, x, y, w, h, rot, cx, cy}
+    function seg(name, x, y, w, h, rot) { S.push({ name: name, x: x, y: y, w: w, h: h, rot: rot || 0 }); }
+    var GAP = 4;
+    var palmTop = 172, palmL = 98, palmR = 226, palmBot = 300;
+    var fingers = [  // the finger, the x of its centre, its phalanges from the palm out (first, middle, tip), its width,
+                     // how far above the palm it starts
+      ['index', 113, [44, 30, 26], 26, 6], ['middle', 146, [48, 32, 27], 27, 6], ['ring', 179, [45, 30, 26], 26, 6], ['little', 211, [34, 23, 21], 22, 6]];
+    fingers.forEach(function (f) {
+      var y = palmTop - f[4], w = f[3];
+      ['prox', 'mid', 'tip'].forEach(function (s, k) {
+        var L = f[2][k];
+        y -= L;
+        seg(f[0] + '_' + s, f[1] - w / 2, y, w, L, 0);
+        y -= GAP;
+      });
     });
-  });
-  // the palm's four zones: palm_1 fingers' side by the index, palm_2 fingers' side by the little finger,
-  // palm_3 wrist side by the index, palm_4 wrist side by the little finger
-  var midX = (palmL + palmR) / 2, midY = (palmTop + palmBot) / 2;
-  seg('palm_1', palmL, palmTop, midX - palmL - 2, midY - palmTop - 2);
-  seg('palm_2', midX + 2, palmTop, palmR - midX - 2, midY - palmTop - 2);
-  seg('palm_3', palmL, midY + 2, midX - palmL - 2, palmBot - midY - 2);
-  seg('palm_4', midX + 2, midY + 2, palmR - midX - 2, palmBot - midY - 2);
-  // the thumb, from the wrist side of the palm by the index, angled out
-  (function () {
-    var bx = palmL - 6, by = palmBot - 40, ang = -40, w = 28, lens = [44, 32, 28], d = 0;
-    ['prox', 'mid', 'tip'].forEach(function (s, k) {
-      var L = lens[k], a = ang * Math.PI / 180;
-      var cx = bx + Math.sin(a) * (d + L / 2), cy = by - Math.cos(a) * (d + L / 2);
-      seg('thumb_' + s, cx - w / 2, cy - L / 2, w, L, ang);
-      d += L + 3;
-    });
-  })();
-  S.forEach(function (s) { s.cx = s.x + s.w / 2; s.cy = s.y + s.h / 2; });
+    // the palm's four zones: palm_1 fingers' side by the index, palm_2 fingers' side by the little finger,
+    // palm_3 wrist side by the index, palm_4 wrist side by the little finger
+    var midX = (palmL + palmR) / 2, midY = (palmTop + palmBot) / 2, h2 = GAP / 2;
+    seg('palm_1', palmL, palmTop, midX - palmL - h2, midY - palmTop - h2);
+    seg('palm_2', midX + h2, palmTop, palmR - midX - h2, midY - palmTop - h2);
+    seg('palm_3', palmL, midY + h2, midX - palmL - h2, palmBot - midY - h2);
+    seg('palm_4', midX + h2, midY + h2, palmR - midX - h2, palmBot - midY - h2);
+    // the thumb: from beside the palm's wrist end, by the index, angled up and out (its metacarpal, then two phalanges)
+    (function () {
+      var bx = palmL - 15, by = palmBot - 34, ang = -36, w = 26, lens = [40, 30, 26], d = 0;
+      var a = ang * Math.PI / 180;
+      lens.forEach(function (L, k) {
+        var cx = bx + Math.sin(a) * (d + L / 2), cy = by - Math.cos(a) * (d + L / 2);
+        seg('thumb_' + ['prox', 'mid', 'tip'][k], cx - w / 2, cy - L / 2, w, L, ang);
+        d += L + GAP;
+      });
+    })();
+    S.forEach(function (s) { s.cx = s.x + s.w / 2; s.cy = s.y + s.h / 2; });
+    return S;
+  }
+
+  var S = handLayout();
 
   var LABEL = { tip: 'tip', mid: 'middle', prox: 'first' };
   function title(n) {
@@ -93,15 +101,15 @@ function render(ctx) {
   var grad = STOPS.map(function (s) { return '<stop offset="' + s[0] + '" stop-color="rgb(' + s[1] + ',' + s[2] + ',' + s[3] + ')"/>'; }).join('');
   var ticks = (logScale ? [0, 1, 3, 10, hi] : [0, hi / 4, hi / 2, 3 * hi / 4, hi]).filter(function (v, i, a) { return v <= hi && a.indexOf(v) === i; });
   var bar = '<defs><linearGradient id="hm-g" x1="0" x2="0" y1="1" y2="0">' + grad + '</linearGradient></defs>'
-    + '<rect x="262" y="40" width="12" height="240" rx="3" fill="url(#hm-g)" stroke="var(--line)"/>'
-    + ticks.map(function (v) { var y = 280 - frac(v) * 240; return '<line x1="274" x2="279" y1="' + y + '" y2="' + y + '" stroke="var(--ink-3)"/><text x="282" y="' + (y + 3) + '" font-size="9" fill="var(--ink-3)">' + (v >= 10 ? Math.round(v) : +v.toFixed(1)) + '</text>'; }).join('')
-    + '<text x="268" y="30" text-anchor="middle" font-size="9" fill="var(--ink-3)">N</text>';
+    + '<rect x="262" y="52" width="12" height="248" rx="3" fill="url(#hm-g)" stroke="var(--line)"/>'
+    + ticks.map(function (v) { var y = 300 - frac(v) * 248; return '<line x1="274" x2="279" y1="' + y + '" y2="' + y + '" stroke="var(--ink-3)"/><text x="282" y="' + (y + 3) + '" font-size="9" fill="var(--ink-3)">' + (v >= 10 ? Math.round(v) : +v.toFixed(1)) + '</text>'; }).join('')
+    + '<text x="268" y="42" text-anchor="middle" font-size="9" fill="var(--ink-3)">N</text>';
 
   ctx.el.innerHTML = '<div class="viz-pad" style="height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:6px">'
     + '<div style="display:flex;gap:14px;align-items:baseline;flex-wrap:wrap"><span class="hm-hold" style="font-weight:700;padding:2px 8px;border-radius:9px;background:var(--line)">–</span>'
     + '<span class="viz-muted viz-small">grip <b class="hm-grip" style="color:var(--ink)">–</b> N</span>'
     + '<span class="viz-muted viz-small">sensors pressed <b class="hm-n" style="color:var(--ink)">–</b> of ' + S.length + '</span></div>'
-    + '<svg viewBox="0 0 305 335" style="flex:1;min-height:0;width:100%"><g transform="' + (mirror ? 'translate(250 0) scale(-1 1)' : '') + '">' + shapes + '</g>' + bar + '</svg></div>';
+    + '<svg viewBox="0 40 305 270" style="flex:1;min-height:0;width:100%"><g transform="' + (mirror ? 'translate(250 0) scale(-1 1)' : '') + '">' + shapes + '</g>' + bar + '</svg></div>';
   if (mirror) ctx.el.querySelectorAll('.sn text').forEach(function (t) { t.setAttribute('transform', 'translate(' + (2 * +t.getAttribute('x')) + ' 0) scale(-1 1)'); });
   var nodes = {};
   ctx.el.querySelectorAll('.sn').forEach(function (g) { nodes[g.getAttribute('data-n')] = { rect: g.querySelector('rect'), text: g.querySelector('text') }; });

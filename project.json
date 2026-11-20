@@ -62,7 +62,7 @@
         },
         {
             "id": "ws-hand-pressure-map",
-            "version": 1,
+            "version": 2,
             "name": "Hand pressure map"
         }
     ]

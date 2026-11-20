@@ -3,7 +3,7 @@
     "version": "1",
     "name": "Hand pressure map",
     "category": "Visualizers",
-    "icon": "activity",
+    "icon": "chart",
     "side": "frontend",
     "customizable": true,
     "summary": "A five-fingered hand seen from the palm: each touch sensor where it is on the hand, coloured from black to white by its pressure, with its reading.",
@@ -62,6 +62,6 @@
         "resize": "both"
     },
     "esasim": {
-        "version": 1
+        "version": 2
     }
 }
