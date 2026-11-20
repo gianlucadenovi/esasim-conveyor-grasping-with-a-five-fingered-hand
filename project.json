@@ -27,7 +27,7 @@
             "name": "3 · Learn to grasp",
             "file": "blueprints/3-learn-to-grasp.json",
             "published_version": 1,
-            "nodes": 8
+            "nodes": 10
         },
         {
             "name": "4 · Learn to place",
@@ -53,6 +53,11 @@
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
             "version": 17,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
+        },
+        {
+            "id": "ws-hand-pressure-map",
+            "version": 1,
+            "name": "Hand pressure map"
         }
     ]
 }

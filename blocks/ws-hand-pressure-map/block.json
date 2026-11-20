@@ -1,0 +1,67 @@
+{
+    "id": "ws-hand-pressure-map",
+    "version": "1",
+    "name": "Hand pressure map",
+    "category": "Visualizers",
+    "icon": "activity",
+    "side": "frontend",
+    "customizable": true,
+    "summary": "A five-fingered hand seen from the palm: each touch sensor where it is on the hand, coloured from black to white by its pressure, with its reading.",
+    "help": "Wire a live stream (a Telemetry block, or a block's telemetry) whose items, on the channel named below, carry one number per sensor in newtons: thumb_tip, thumb_mid, thumb_prox (the thumb's metacarpal), index_tip, index_mid, index_prox ... little_prox, and palm_1 to palm_4 (palm_1 the fingers' side by the index, palm_2 the fingers' side by the little finger, palm_3 and palm_4 the wrist side). Optional: grip_n (the grip in all) and holding (1 when holding). Colours go black, blue, cyan, green, yellow, red, white as the pressure grows to the highest value; hover a sensor for its name.",
+    "inputs": [
+        {
+            "id": "data",
+            "label": "Sensors",
+            "type": "stream",
+            "many": true,
+            "help": "Items with one field per sensor (N)"
+        }
+    ],
+    "outputs": [],
+    "params": [
+        {
+            "key": "channel",
+            "label": "Channel",
+            "type": "text",
+            "default": "touch",
+            "help": "The stream channel with the sensors' readings"
+        },
+        {
+            "key": "max",
+            "label": "Highest pressure (N)",
+            "type": "number",
+            "default": 30,
+            "min": 0.1,
+            "help": "White from here up"
+        },
+        {
+            "key": "scale",
+            "label": "Colour scale",
+            "type": "select",
+            "default": "log",
+            "options": [
+                "log",
+                "linear"
+            ],
+            "help": "log: light touches still show"
+        },
+        {
+            "key": "hand",
+            "label": "Hand",
+            "type": "select",
+            "default": "right",
+            "options": [
+                "right",
+                "left"
+            ]
+        }
+    ],
+    "view": {
+        "w": 6,
+        "h": 7,
+        "resize": "both"
+    },
+    "esasim": {
+        "version": 1
+    }
+}

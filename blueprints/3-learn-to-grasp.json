@@ -6,7 +6,7 @@
     "name": "3 · Learn to grasp",
     "description": "From the reach it learned: close the fingers and the thumb on the object, lift it 8 cm and hold it for a second while it is pushed about.",
     "published_version": 1,
-    "updated": "2026-11-19 19:15:28",
+    "updated": "2026-11-20 00:34:31",
     "graph": {
         "nodes": [
             {
@@ -55,7 +55,7 @@
                 "y": -60,
                 "params": {
                     "interval": 0.5,
-                    "channels": "joints,scene,events,camera_picture,train",
+                    "channels": "joints,scene,events,camera_picture,train,touch",
                     "keep": 300
                 },
                 "title": "Episodes for the view"
@@ -91,6 +91,34 @@
                     "control_channel": "control"
                 },
                 "title": "The cell (3D)"
+            },
+            {
+                "id": "hand",
+                "type": "ws-hand-pressure-map",
+                "x": 1100,
+                "y": -160,
+                "params": {
+                    "channel": "touch",
+                    "max": 30,
+                    "scale": "log",
+                    "hand": "right"
+                },
+                "title": "Hand pressure map"
+            },
+            {
+                "id": "touchg",
+                "type": "gauge-view",
+                "x": 1100,
+                "y": 420,
+                "params": {
+                    "fields": "touch.thumb_n,touch.index_n,touch.middle_n,touch.ring_n,touch.little_n,touch.palm_n,touch.grip_n",
+                    "style": "bar",
+                    "min": 0,
+                    "max": 40,
+                    "unit": "N",
+                    "decimals": 1
+                },
+                "title": "Pressure per digit"
             },
             {
                 "id": "success",
@@ -178,6 +206,28 @@
                 "to": {
                     "node": "view",
                     "port": "scene"
+                }
+            },
+            {
+                "id": "tel_robot.stream>hand.data",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "hand",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel_robot.stream>touchg.data",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "touchg",
+                    "port": "data"
                 }
             },
             {
