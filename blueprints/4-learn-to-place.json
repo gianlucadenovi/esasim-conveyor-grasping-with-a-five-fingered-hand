@@ -6,14 +6,14 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 3,
-    "updated": "2026-11-19 19:15:29",
+    "updated": "2026-11-20 00:32:39",
     "graph": {
         "nodes": [
             {
                 "id": "nets",
                 "type": "dataset",
-                "x": -460,
-                "y": 40,
+                "x": -520,
+                "y": -73,
                 "params": {
                     "dataset": "36",
                     "version": "latest",
@@ -25,7 +25,7 @@
                 "id": "learn",
                 "type": "ws-conveyor-grasping-xarm-5-finger-hand",
                 "x": -140,
-                "y": 20,
+                "y": -73,
                 "params": {
                     "mode": "Learn to place",
                     "accelerator": "NVIDIA GPU",
@@ -52,7 +52,7 @@
                 "id": "tel_robot",
                 "type": "telemetry",
                 "x": 280,
-                "y": -60,
+                "y": -154,
                 "params": {
                     "interval": 0.5,
                     "channels": "joints,scene,events,camera_picture,train",
@@ -75,8 +75,8 @@
             {
                 "id": "view",
                 "type": "viewer-3d",
-                "x": 760,
-                "y": -160,
+                "x": 1080,
+                "y": -154,
                 "params": {
                     "environment": "outdoor",
                     "quality": "high",
@@ -95,8 +95,8 @@
             {
                 "id": "success",
                 "type": "chart",
-                "x": 760,
-                "y": 200,
+                "x": 1080,
+                "y": 157,
                 "params": {
                     "kind": "line",
                     "x": "minutes",
@@ -111,8 +111,8 @@
             {
                 "id": "reward",
                 "type": "chart",
-                "x": 1100,
-                "y": 200,
+                "x": 760,
+                "y": -4,
                 "params": {
                     "kind": "line",
                     "x": "minutes",
@@ -126,7 +126,7 @@
                 "id": "numbers",
                 "type": "gauge-view",
                 "x": 760,
-                "y": 420,
+                "y": 320,
                 "params": {
                     "fields": "train.success,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
                     "style": "number",

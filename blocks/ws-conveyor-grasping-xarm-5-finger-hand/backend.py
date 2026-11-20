@@ -1,8 +1,8 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 16 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 17 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
-# Saved: 2026-11-19
+# Saved: 2026-11-20
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
 #   policy      Files (pt, py)            Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from, test or combine; those left on the machine by earlier runs are found by themselves (not in a round, which
@@ -102,6 +102,11 @@ THUMB_FLEX = np.array([0.0, 0.0, 1.0])            # (set below) its knuckle's an
 CURL_MAX = (1.57, 1.75, 1.22)                    # MCP, PIP, DIP at a full fist (rad)
 THUMB_MAX = (0.95, 1.40)                         # the thumb's MCP and IP at full flexion (rad)
 TOUCH_NAMES = ["thumb_tip", "index_tip", "middle_tip", "ring_tip", "little_tip", "palm_1", "palm_2", "palm_3", "palm_4"]
+# and along each digit, its middle and its first phalanx (the thumb: its proximal phalanx and its metacarpal): a hand wrapped
+# round an object holds it with the whole of its fingers, not only their tips (these came after the first nine, so the
+# networks that learned with nine sensors carry on: the new ones are added at the end of what they are given)
+DIGITS = ["thumb", "index", "middle", "ring", "little"]
+TOUCH_NAMES += [d + seg for d in DIGITS for seg in ("_mid", "_prox")]
 N_SLOT = {"box": 3, "cylinder": 3, "sphere": 2, "capsule": 3, "ellipsoid": 1}
 SLOT_ORDER = [t for t in ("box", "cylinder", "sphere", "capsule", "ellipsoid") for _ in range(N_SLOT[t])]
 
@@ -259,8 +264,10 @@ def hand_xml():
         s.append('<body name="%s_1" pos="%s" euler="0 0 %g">' % (name, _f((px, y0, -0.002)), splay))
         s.append('<joint name="%s_j1" type="hinge" axis="0 1 0" range="-0.17 %g" damping="0.02" armature="0.002"/>' % (name, CURL_MAX[0]))
         s.append('<geom type="capsule" fromto="0 0 0 %g 0 0" size="%g" mass="0.012" rgba="0.70 0.72 0.76 1" %s/>' % (L1, r, hg))
+        s.append('<site name="%s_prox" type="capsule" fromto="%g 0 0 %g 0 0" size="%g" rgba="0 0 0 0"/>' % (name, L1 * 0.15, L1 * 0.85, r * 1.45))
         s.append('<body name="%s_2" pos="%g 0 0"><joint name="%s_j2" type="hinge" axis="0 1 0" range="0 %g" damping="0.015" armature="0.002"/>' % (name, L1, name, CURL_MAX[1]))
         s.append('<geom type="capsule" fromto="0 0 0 %g 0 0" size="%g" mass="0.008" rgba="0.74 0.76 0.80 1" %s/>' % (L2, r * 0.95, hg))
+        s.append('<site name="%s_mid" type="capsule" fromto="%g 0 0 %g 0 0" size="%g" rgba="0 0 0 0"/>' % (name, L2 * 0.15, L2 * 0.85, r * 1.4))
         s.append('<body name="%s_3" pos="%g 0 0"><joint name="%s_j3" type="hinge" axis="0 1 0" range="0 %g" damping="0.01" armature="0.002"/>' % (name, L2, name, CURL_MAX[2]))
         s.append('<geom type="capsule" fromto="0 0 0 %g 0 0" size="%g" mass="0.006" rgba="0.30 0.32 0.36 1" %s/>' % (L3, r * 0.9, hg))
         s.append('<site name="%s_tip" pos="%g 0 -0.002" size="%g" rgba="0 0 0 0"/>' % (name, L3 * 0.75, r * 1.45))
@@ -272,8 +279,10 @@ def hand_xml():
     s.append('<body name="thumb_0" pos="%s">' % _f(tb))
     s.append('<joint name="thumb_rot" type="hinge" axis="%s" range="-0.1 0.8" damping="0.02" armature="0.002"/>' % _f(o))
     s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.016" rgba="0.70 0.72 0.76 1" %s/>' % (_f(u * T1), tr * 1.15, hg))
+    s.append('<site name="thumb_prox" type="capsule" fromto="%s %s" size="%g" rgba="0 0 0 0"/>' % (_f(u * T1 * 0.2), _f(u * T1 * 0.85), tr * 1.6))
     s.append('<body name="thumb_1" pos="%s"><joint name="thumb_j1" type="hinge" axis="%s" range="-0.1 %g" damping="0.015" armature="0.002"/>' % (_f(u * T1), _f(a), THUMB_MAX[0]))
     s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.009" rgba="0.74 0.76 0.80 1" %s/>' % (_f(u * T2), tr * 0.95, hg))
+    s.append('<site name="thumb_mid" type="capsule" fromto="%s %s" size="%g" rgba="0 0 0 0"/>' % (_f(u * T2 * 0.15), _f(u * T2 * 0.85), tr * 1.4))
     s.append('<body name="thumb_2" pos="%s"><joint name="thumb_j2" type="hinge" axis="%s" range="-0.15 %g" damping="0.01" armature="0.002"/>' % (_f(u * T2), _f(a), THUMB_MAX[1]))
     s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.007" rgba="0.30 0.32 0.36 1" %s/>' % (_f(u * T3), tr * 0.9, hg))
     s.append('<site name="thumb_tip" pos="%s" size="%g" rgba="0 0 0 0"/>' % (_f(u * T3 * 0.75), tr * 1.45))
@@ -789,7 +798,7 @@ def make_sim(mjm, lib, n, want, log=None, cam=True):
 '''
 _SOURCES['grasp_env'] = r'''# ── the task: see the object coming on the belt, reach it, grasp it well, put it in the bin ─────────────────────────
 # What the policy senses (as the robot itself could): its hand's pose and speed, its fingers' angles and commands, the
-# touch sensors (four fingertips, the thumb tip and four zones of the palm), the conveyor's speed (the cell knows it),
+# 19 touch sensors (each digit's tip, middle and first phalanx, four zones of the palm), the conveyor's speed (it is known),
 # where the bin is, and what the camera network says of the object (where it is, how big, which way it lies), carried
 # along at the belt speed between camera frames. What it does: says where its hand should go (x, y, z, yaw, pitch,
 # roll), which the xArm's six servos do through inverse kinematics, and moves its fingers (each finger's curl and the
@@ -803,8 +812,8 @@ import scene as S
 from sims import CTRL_DT
 
 ACT_DIM = 12
-OBS_DIM = 79
-PRIV_DIM = 112
+OBS_DIM = 89
+PRIV_DIM = 132
 CAM_EVERY = 4                      # a camera frame every 4 control steps (6 per second)
 STAGES = ("reach", "grasp", "place")
 EP_SECONDS = {"reach": 12.0, "grasp": 15.0, "place": 20.0}
@@ -1453,10 +1462,12 @@ class GraspEnv:
         elong = ((e[:, 0] - e[:, 1]) / e[:, 0].clamp(min=1e-3)).clamp(0, 1)
         r_align = elong * (align + 1) / 2
         f = self.touches()
-        thumb, fing, palm = f[:, 0], f[:, 1:5], f[:, 5:9]
-        tn = torch.log1p(f) / math.log1p(10.0)
+        dig = f[:, 0:5] + f[:, 9::2] + f[:, 10::2]                         # (each digit: its tip, middle and first phalanx)
+        thumb, fing, palm = dig[:, 0], dig[:, 1:5], f[:, 5:9]
+        tn = torch.log1p(f[:, :5]) / math.log1p(10.0)
+        dn = torch.log1p(dig) / math.log1p(10.0)
         pinch = torch.min(tn[:, 0], tn[:, 1:5].max(1).values).clamp(0, 1)
-        wrap = (tn[:, 1:5].clamp(0, 1).sum(1) / 4) * (tn[:, 0].clamp(0, 1) + tn[:, 5:9].max(1).values.clamp(0, 1)).clamp(0, 1)
+        wrap = (dn[:, 1:5].clamp(0, 1).sum(1) / 4) * (dn[:, 0].clamp(0, 1) + (torch.log1p(palm) / math.log1p(10.0)).max(1).values.clamp(0, 1)).clamp(0, 1)
         held = ((thumb > 0.3) | (palm.max(1).values > 0.3)) & ((fing > 0.3).sum(1) >= 1)
         lift = op[:, 2] - self.z_rest
         lifted = (lift > LIFT_OK) & held
@@ -1542,18 +1553,20 @@ class GraspEnv:
             g, R[:, :, 0], R[:, :, 2],                               # 3 + 3 + 3
             (self.tgt_p - g) * 10, hv[:, :3], hv[:, 3:] * 0.2,       # 3 + 3 + 3
             fq / 1.5, self.curl, self.opp[:, None],                  # 15 + 5 + 1
-            tn,                                                      # 9
+            tn[:, :9],                                               # 9
             (T - g) * 5, ec, ee * 10, ey, torch.stack([torch.cos(dy), torch.sin(dy)], -1),    # 3 + 3 + 3 + 2 + 2
             (self.est_age.clamp(max=3) / 3)[:, None], (self.belt_v * 10)[:, None], (self.est_v * 10)[:, None],   # 3
             (drop - g) * 3,                                           # 3
             self.prev_a,                                              # 12
+            tn[:, 9:],                                                # 10: the phalanges' sensors (added last, see S.TOUCH_NAMES)
         ], 1)
         op, oq, c, e, y = self.truth()
         ov = sim.qvel[:, self.do_:self.do_ + 6].float()
         st = torch.zeros(self.n, 3, device=self.dev)
         st[:, STAGES.index(self.stage)] = 1
         priv = torch.cat([obs, (c - g) * 5, oq, ov[:, :3], ov[:, 3:] * 0.1, e * 10, y, ((op[:, 2] - self.z_rest) * 10)[:, None],
-                          (f > 0.3).float(), st, (self.steps.float() / self.max_steps)[:, None], self.lifted_ever.float()[:, None]], 1)
+                          (f[:, :9] > 0.3).float(), st, (self.steps.float() / self.max_steps)[:, None], self.lifted_ever.float()[:, None],
+                          (f[:, 9:] > 0.3).float()], 1)
         return torch.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0).clamp(-100, 100), torch.nan_to_num(priv, nan=0.0, posinf=0.0, neginf=0.0).clamp(-100, 100)
 
 
@@ -1773,6 +1786,41 @@ def rpy_of(R):
     if abs(math.cos(p)) > 1e-6:
         return math.atan2(R[2, 1], R[2, 2]), p, math.atan2(R[1, 0], R[0, 0])
     return math.atan2(-R[1, 2], R[1, 1]), p, 0.0
+
+
+def _near(a, ref):
+    """angle a moved by whole turns to be as close as can be to ref"""
+    return a + 2 * math.pi * round((ref - a) / (2 * math.pi))
+
+
+def rpy_near(R, prev):
+    """roll, pitch, yaw of R (R = Rz(yaw) Ry(pitch) Rx(roll)) chosen to follow on from prev, the angles sent before: the
+    3D view eases between the angles it is sent, so a yaw that wraps from +180 to -180 degrees, or one of the two ways of
+    writing the same turn swapped for the other, would make the object whirl round in the view though it lies still"""
+    if prev is None:
+        return rpy_of(R)
+    pr, pp, py = prev
+    s = max(-1.0, min(1.0, -R[2, 0]))
+    p = math.asin(s)
+    if math.cos(p) > 2e-3:
+        r, y = math.atan2(R[2, 1], R[2, 2]), math.atan2(R[1, 0], R[0, 0])
+        cands = [(r, p, y), (r + math.pi, math.pi - p, y + math.pi)]
+    else:                       # (standing on end: only yaw minus roll is fixed, so the yaw is kept where it was)
+        p = math.copysign(math.pi / 2, s)
+        y = py
+        c, sn = math.cos(y), math.sin(y)
+        Rz = np.array([[c, -sn, 0.0], [sn, c, 0.0], [0.0, 0.0, 1.0]])
+        cp, sp = math.cos(p), math.sin(p)
+        Ry = np.array([[cp, 0.0, sp], [0.0, 1.0, 0.0], [-sp, 0.0, cp]])
+        M = Ry.T @ Rz.T @ R
+        cands = [(math.atan2(M[2, 1], M[2, 2]), p, y)]
+    best, bd = None, 1e9
+    for r, p, y in cands:
+        c = (_near(r, pr), _near(p, pp), _near(y, py))
+        d = abs(c[0] - pr) + abs(c[1] - pp) + abs(c[2] - py)
+        if d < bd:
+            best, bd = c, d
+    return best
 
 
 def quat_R(q):
@@ -2353,11 +2401,12 @@ class Pose3D:
         self.scene = cell_objects(mjm)      # (sent again every few seconds: a view opened later still gets the cell)
         self.n_sent = 0
         self.last_slide = None
+        self.last_obj, self.last_eul = None, None
 
     def snap(self, i=0):
         """what the 3D view needs of cell i, now (kept to be turned into joint items later, off the learning's way)"""
         env, sim = self.env, self.env.sim
-        return (sim.qpos[i, env.qh].float().cpu().numpy().astype(float), None,
+        return (sim.qpos[i, env.qh].float().cpu().numpy().astype(float), env.touches()[i].cpu().numpy().astype(float),
                 sim.qpos[i, self.fq_t].float().cpu().numpy().astype(float), int(env.obj[i]),
                 sim.xpos[i, env.ob].float().cpu().numpy().astype(float), sim.xquat[i, env.ob].float().cpu().numpy().astype(float),
                 -float(env.belt_travel[i]))
@@ -2365,7 +2414,10 @@ class Pose3D:
     def items(self, sn):
         q, _, fq, o, op, oq, belt = sn            # (the arm's angles are the simulated arm's own)
         arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq]
-        r, p, y = rpy_of(quat_R(oq))
+        if o != self.last_obj:
+            self.last_eul = None
+        self.last_obj = o
+        r, p, y = self.last_eul = rpy_near(quat_R(oq), self.last_eul)
         slide = round((belt % SLAT_GAP) * 1000, 1)          # (the slats repeat every SLAT_GAP: where in the gap the belt is)
         # when the slats wrap round to the start of a gap, the view must not slide them back across it (it eases
         # between items): that item carries no value for them, so they jump, unseen, to where the next one puts them
@@ -2382,9 +2434,29 @@ class Pose3D:
             ctx.telemetry("scene", self.scene)
         self.n_sent += 1
         a, o = self.items(sn)
+        if sn[1] is not None and self.n_sent % 3 == 1:
+            ctx.telemetry("touch", touch_row(sn[1]))
         ctx.telemetry("joints", a)
         time.sleep(0.002)       # (the 3D view takes two items of a channel with the same time stamp for one: the objects' would be lost)
         ctx.telemetry("joints", o)
+
+
+def touch_row(f):
+    """the hand's 19 pressure sensors (N) as the gauges and the hand map show them: each one by its name (thumb_tip,
+    index_mid, little_prox, palm_1 ...), each digit in all, the palm, the grip in all, and whether it is holding (the
+    thumb, or the palm, pressing against at least one finger)"""
+    f = [max(0.0, float(x)) for x in f]
+    row = {n: round(x, 2) for n, x in zip(S.TOUCH_NAMES, f)}
+    by = dict(zip(S.TOUCH_NAMES, f))
+    dig = {d: sum(by.get(d + s, 0.0) for s in ("_tip", "_mid", "_prox")) for d in S.DIGITS}
+    palm = sum(by.get("palm_%d" % k, 0.0) for k in range(1, 5))
+    for d in S.DIGITS:
+        row[d + "_n"] = round(dig[d], 2)
+    row["palm_n"] = round(palm, 2)
+    row["grip_n"] = round(sum(f), 2)
+    row["touching"] = sum(1 for x in f if x > 0.3)
+    row["holding"] = 1 if (dig["thumb"] > 0.5 or palm > 0.5) and max(dig[d] for d in S.DIGITS[1:]) > 0.5 else 0
+    return row
 
 
 class Replayer:
@@ -2642,7 +2714,7 @@ def widen(torch, sd, obs, priv):
     for key, want in (("actor.0.weight", obs), ("critic.0.weight", priv)):
         w = sd[key]
         if w.shape[1] < want:
-            sd[key] = torch.cat([w, torch.zeros(w.shape[0], want - w.shape[1], dtype=w.dtype)], 1)
+            sd[key] = torch.cat([w, torch.zeros(w.shape[0], want - w.shape[1], dtype=w.dtype, device=w.device)], 1)
     return sd
 
 
@@ -2685,7 +2757,7 @@ import numpy as np
 import scene as S
 from sims import CTRL_DT, make_sim
 from grasp_env import ACT_DIM, OBS_DIM, PRIV_DIM, STAGES, DROP, GraspEnv, make_seenet, see_loss
-from ppo_part import PPO, chunks, make_ac, Norm, policy_stamp
+from ppo_part import PPO, chunks, make_ac, Norm, policy_stamp, widen
 import viz
 
 FORMAT = "esasim.grasp-policy/1"
@@ -3216,10 +3288,10 @@ def test_run(ctx):
     st = pol["st"]
     env.stage = pol["stage"]
     env.max_steps = int(60.0 / CTRL_DT)       # (the object travels the whole belt: the episode ends when it is picked or falls off)
-    ac = make_ac(torch, st["obs_dim"], st["priv_dim"], st["act_dim"]).to(dev)
-    ac.load_state_dict(st["ac"])
+    ac = make_ac(torch, OBS_DIM, PRIV_DIM, st["act_dim"]).to(dev)
+    ac.load_state_dict(widen(torch, st["ac"], OBS_DIM, PRIV_DIM))     # (a policy from before the phalanges' sensors: they start unweighted)
     ac.eval()
-    on = Norm(torch, st["obs_dim"], dev)
+    on = Norm(torch, OBS_DIM, dev)
     on.load(st["obs_norm"], dev)
     ctx.log("The test: %s policy (%s, %.0f%% in training), camera network %s, on %s." % (STAGE_NAME[pol["stage"]], pol["name"], float(st.get("score") or 0), sp["name"], label))
     objs = [o for o in env.info if o["test"]]
