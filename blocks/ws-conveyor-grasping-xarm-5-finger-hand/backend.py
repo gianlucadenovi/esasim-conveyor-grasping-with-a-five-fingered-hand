@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 29 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 30 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -327,11 +327,12 @@ FINGER_JOINTS = ["thumb_rot", "thumb_j1", "thumb_j2"] + ["%s_j%d" % (f[0], k) fo
 # the fingers' strength and the feel of their contacts (see the README: what a human hand does)
 # a human finger presses with some 10 N at its tip at most in a firm grip (0.35 N m about a knuckle 3-5 cm back); the
 # earlier 0.9 N m let the fingertips squeeze 20-60 N and squirt light objects out of the hand
-FINGER_KP, FINGER_KV, FINGER_FORCE = 0.8, 0.03, 0.35       # each finger joint: stiffness (N m/rad), damping, most torque (N m)
+FINGER_KP, FINGER_KV, FINGER_FORCE = 0.8, 0.06, 0.35       # each finger joint: stiffness (N m/rad), damping (a finger closing fast on an object squeezes it out), most torque (N m)
 HAND_CONDIM, HAND_SOLREF, HAND_SOLIMP = 4, "0.004 1", "0.95 0.99 0.001 0.5 2"
 OBJ_SOLREF = "0.004 1"
 ARM_KP, ARM_KV = (1500, 500), (60, 15)                    # the shoulder and elbow joints, the wrist joints
 IMPRATIO = 5
+TIMESTEP = 0.002                                         # (s) the physics step: CTRL_DT / TIMESTEP of them per control step
 
 
 def actuators_xml():
@@ -363,7 +364,7 @@ def scene_xml(obj_parts=None, rgba=None):
     cam_xy = look_xyaxes(CAM_POS, CAM_LOOK)
     x = ['<mujoco model="belt_grasp">',
          '<compiler angle="radian" autolimits="true"/>',
-         '<option timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="%g"/>' % IMPRATIO,
+         '<option timestep="%g" integrator="implicitfast" cone="elliptic" impratio="%g"/>' % (TIMESTEP, IMPRATIO),
          '<visual><global offwidth="640" offheight="480"/><quality shadowsize="2048"/></visual>',
          '<default><geom solimp="0.95 0.99 0.001 0.5 2"/></default>',
          '<asset><texture name="belt" type="2d" builtin="checker" rgb1="0.12 0.12 0.13" rgb2="0.16 0.16 0.17" width="64" height="64"/>',
@@ -534,7 +535,7 @@ import numpy as np
 import scene as S
 
 DEPTH_MAX = 4.0           # the camera's range (m)
-N_SUB = 20                 # physics steps (2 ms) per control step (40 ms)
+N_SUB = 20                 # physics steps (2 ms) per control step (40 ms): CTRL_DT / scene.TIMESTEP
 CTRL_DT = 0.04
 
 
@@ -867,6 +868,8 @@ WORK_HI = np.array([0.62, 0.62, 0.45])
 DROP = np.array([S.BIN_C[0], S.BIN_C[1], 0.20])
 TRAIN_DROP = 0.15                  # in training, half the objects fall onto the belt from up to 15 cm
 YAW_MAX = 3.0                      # the hand's yaw (rad) either way: nearly every way round, so the arm can choose the pose it reaches
+CURL_RATE = 0.05          # finger closing per control step (fraction of full curl): full closing in 0.8 s; faster, the
+                          # converging fingers pinch the object and squeeze it out at a metre a second
 SETTLE = 22                        # steps (0.9 s) for an object to land and settle before it counts as resting
 
 
@@ -1432,8 +1435,8 @@ class GraspEnv:
         self.tgt_e = self.tgt_e + de
         self.tgt_e[:, 0] = self.tgt_e[:, 0].clamp(-YAW_MAX, YAW_MAX)
         self.tgt_e[:, 1:] = self.tgt_e[:, 1:].clamp(-0.7, 0.7)
-        self.curl = (self.curl + a[:, 6:11] * 0.12).clamp(0, 1)
-        self.opp = (self.opp + a[:, 11] * 0.12).clamp(0, 1)
+        self.curl = (self.curl + a[:, 6:11] * CURL_RATE).clamp(0, 1)
+        self.opp = (self.opp + a[:, 11] * CURL_RATE).clamp(0, 1)
         ctrl = sim.ctrl.clone().float()
         self._fill_ctrl(ctrl, self.tgt_p, self.tgt_e, self.curl, self.opp)
         ctrl[:, self.a_belt] = -self.belt_v
@@ -3080,7 +3083,8 @@ def cell_signature():
     keep = S.ARM_MESHES
     S.ARM_MESHES = None         # (whether the camera has the arm's meshes does not change the cell)
     try:
-        return hashlib.md5(S.scene_xml().encode()).hexdigest()[:12]
+        import grasp_env
+        return hashlib.md5((S.scene_xml() + "curl %g" % grasp_env.CURL_RATE).encode()).hexdigest()[:12]
     finally:
         S.ARM_MESHES = keep
 
