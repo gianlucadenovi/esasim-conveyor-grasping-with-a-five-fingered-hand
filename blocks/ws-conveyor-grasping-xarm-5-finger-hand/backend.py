@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 24 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 25 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-20
@@ -77,6 +77,8 @@ CAM_POS = np.array([0.30, 0.02, 0.80])           # the camera on its pole
 CAM_LOOK = np.array([0.24, 0.42, 0.0])
 CAM_FOVY = 58.0
 CAM_W, CAM_H = 96, 72
+BASE_YAW = math.pi / 2                           # the xArm's base turned a quarter: its front (+x) towards the belt, its
+                                                 # cable connector (at its back) away from it
 HOME = np.array([0.12, 0.22, 0.30])              # the hand's rest pose (palm down, fingers along +x)
 # the UFACTORY xArm 6 (its kinematics, mm and rad: each joint's place and turn in the frame of the one before; every
 # joint turns about its own z), standing on its pedestal at the origin; the hand is screwed onto its flange
@@ -395,7 +397,7 @@ def scene_xml(obj_parts=None, rgba=None):
          '<camera name="cam" pos="%s" xyaxes="%s" fovy="%g"/>' % (_f(CAM_POS), _f(cam_xy), CAM_FOVY),
          '<camera name="overview" pos="%s" xyaxes="%s" fovy="45"/>' % (_f((0.95, -0.75, 0.75)), _f(look_xyaxes((0.95, -0.75, 0.75), (0.05, 0.25, 0.02)))),
          '<camera name="closeup" pos="%s" xyaxes="%s" fovy="40"/>' % (_f((0.45, -0.05, 0.42)), _f(look_xyaxes((0.45, -0.05, 0.42), (0.12, 0.30, 0.12)))),
-         '<body name="arm_mount" pos="0 0 0">',
+         '<body name="arm_mount" pos="0 0 0" euler="0 0 %g">' % BASE_YAW,
          '<geom name="arm_base" type="cylinder" size="0.066 0.06" pos="0 0 0.06" rgba="0.17 0.18 0.2 1" contype="1" conaffinity="2" group="%d"/>' % (3 if ARM_MESHES else 0),
          '<geom name="arm_base_vis" type="mesh" mesh="xarm_link_base" contype="0" conaffinity="0" group="1" density="0" rgba="0.93 0.94 0.95 1"/>' if ARM_MESHES else '',
          hand_xml(), '</body>',
@@ -927,6 +929,9 @@ class ArmKin:
             T[:3, 3] = np.array(xyz) / 1000.0
             J.append(T)
         self.J = torch.as_tensor(np.stack(J), dtype=torch.float32, device=dev)          # (6, 4, 4)
+        B = np.eye(4)                                                                    # (the base, turned on its pedestal)
+        B[:3, :3] = _rpy(0.0, 0.0, S.BASE_YAW)
+        self.B = torch.as_tensor(B, dtype=torch.float32, device=dev)
         FH = np.eye(4)
         FH[:3, :3] = S.R_FH
         FH[:3, 3] = S.P_FH
@@ -943,7 +948,7 @@ class ArmKin:
         """q (n, 6) -> the hand's frame (n, 4, 4), and each joint's axis and origin (n, 6, 3) in the world"""
         torch = self.t
         n = q.shape[0]
-        T = torch.eye(4, device=q.device).expand(n, 4, 4)
+        T = self.B.expand(n, 4, 4)
         zs, ps = [], []
         c, s = torch.cos(q), torch.sin(q)
         for i in range(6):
@@ -973,6 +978,8 @@ class ArmKin:
         n = p_t.shape[0]
         best_q, best_r = None, None
         for sd in ARM_SEEDS:
+            sd = list(sd)
+            sd[0] = (sd[0] - S.BASE_YAW + math.pi) % (2 * math.pi) - math.pi          # (the seeds are in the world's turn)
             q = self.solve(torch.tensor(sd, device=p_t.device, dtype=torch.float32).expand(n, 6).clone(), p_t, R_t, iters=iters)
             r = self.residual(q, p_t, R_t, clearance=True)
             if best_q is None:
@@ -999,7 +1006,7 @@ class ArmKin:
             Jp = Jm.transpose(1, 2) @ torch.linalg.inv(A)                            # (damped) pseudo-inverse
             dq = (Jp @ e[..., None])[..., 0]
             pref = self.q_pref.clone().expand_as(q).clone()
-            pref[:, 0] = torch.atan2(p_t[:, 1], p_t[:, 0])                         # (the base turned towards the hand)
+            pref[:, 0] = torch.remainder(torch.atan2(p_t[:, 1], p_t[:, 0]) - S.BASE_YAW + math.pi, 2 * math.pi) - math.pi   # (towards the hand)
             dn = self.w_pref * 0.3 * (pref - q)
             dq = dq + ((eye6 - Jp @ Jm) @ dn[..., None])[..., 0]
             q = torch.max(torch.min(q + dq.clamp(-0.2, 0.2), self.hi), self.lo)
@@ -1194,7 +1201,7 @@ class GraspEnv:
         # the arm's angles with the hand at rest over the belt (from a seed the arm likes: elbow up, wrist down)
         R0 = self._euler_R(torch.zeros(1, 3, device=dev))
         p0 = torch.as_tensor(S.HOME, dtype=torch.float32, device=dev)[None] - R0[:, :, 0] * 0 - torch.einsum("kij,j->ki", R0, torch.as_tensor(S.GRASP_PT, dtype=torch.float32, device=dev))
-        qs = torch.tensor([[0.6, -0.4, -1.2, 0.0, 1.4, 0.0]], device=dev)
+        qs = torch.tensor([[0.6 - S.BASE_YAW, -0.4, -1.2, 0.0, 1.4, 0.0]], device=dev)
         self.q_home = self.kin.solve(qs, p0, R0, iters=200)
         self.prev_d = z(n) - 1               # the grasp point's distance a step ago (-1: just reset)
         self.prev_dd = z(n) - 1              # (place) the object's distance from over the bin a step ago
@@ -2444,7 +2451,7 @@ def cell_objects(mjm):
     # (the camera's picture is shown in a view of its own, beside the 3D view: not on a sheet in the cell)
     # the two robots where the simulation has them: the xArm's base on its pedestal at the origin, the objects' mounts
     # at the origin too (else the view stands robots without a place 0.8 m apart)
-    objs.append({"id": ARM, "kind": "robot", "robot": ARM, "pos": [0, 0, 0], "rpy": [0, 0, 0]})
+    objs.append({"id": ARM, "kind": "robot", "robot": ARM, "pos": [0, 0, 0], "rpy": [0, 0, round(S.BASE_YAW, 6)]})
     objs.append({"id": OBJS, "kind": "robot", "robot": OBJS, "pos": [0, 0, 0], "rpy": [0, 0, 0]})
     return {"units": "mm", "up": "z", "floor": -750, "objects": objs}
 
