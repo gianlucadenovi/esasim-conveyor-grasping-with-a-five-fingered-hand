@@ -111,7 +111,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Blueprints in this repository
 
-- [1 · Learn to see](blueprints/1-learn-to-see.json) · 9 blocks · version 8
+- [1 · Learn to see](blueprints/1-learn-to-see.json) · 9 blocks · version 9
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 11 blocks · version 6
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 11 blocks · version 7
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 11 blocks · version 6
