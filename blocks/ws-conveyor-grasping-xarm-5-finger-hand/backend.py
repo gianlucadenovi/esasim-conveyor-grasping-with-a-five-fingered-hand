@@ -1,8 +1,8 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 42 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 43 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin; training can be spr
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
-# Saved: 2026-11-20
+# Saved: 2026-11-22
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
 #   policy      Files (pt, py)            Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from, test or combine; those left on the machine by earlier runs are found by themselves (not in a round, which
@@ -3993,6 +3993,82 @@ def test_run(ctx):
     return {"trials": len(rows), "grasped": g_, "placed": p_}
 
 
+def diagnose_run(ctx):
+    """the scripted controller (what the policy imitates) on many cells at once, without noise: how far each episode
+    gets (over it, down, closed, lifted, carried, in the bin) and why the others fail"""
+    import torch
+    import grasp_env as GE
+    p = ctx.params
+    n = int(p.get("worlds") or 1024)
+    minutes = time_budget(ctx, float(p.get("minutes") or 6))
+    seed = int(p.get("seed") or 1)
+    torch.manual_seed(seed)
+    lib, sim, label, env = build(ctx, n, "place", seed=seed)
+    n, dev = sim.n, sim.tdev
+    env.assist = 0.0
+    see, sp = load_see(ctx, dev)
+    if see is not None:
+        env.see = see
+    noise = float(p.get("diag_noise") or 0.0)
+    ctx.log("Diagnosis on %s: %d cells, the scripted controller%s, camera %s." % (label, n, " with noise %.2f" % noise if noise else "", sp["name"] if sp else "(true box)"))
+    demo = GE.Demo(env)
+    env.reset_all()
+    env.perceive()
+    z = lambda *s: torch.zeros(*s, device=dev)   # noqa: E731
+    maxph, maxf, maxlift, near = z(n), z(n), z(n), z(n) + 9
+    eps = []
+    t0, k = time.time(), 0
+    while time.time() - t0 < minutes * 60 and len(eps) < 6 * n:
+        a = demo.act()
+        if noise:
+            a = (a + noise * torch.randn_like(a)).clamp(-1, 1)
+        r, done, info = env.step(a)
+        k += 1
+        maxph = torch.maximum(maxph, demo.phase.float())
+        maxf = torch.maximum(maxf, info["touch"].max(1).values)
+        late = env.steps > GE.SETTLE
+        maxlift = torch.where(late, torch.maximum(maxlift, info["lift"]), maxlift)
+        near = torch.minimum(near, info["d"])
+        if bool(done.any()):
+            idx = done.nonzero().flatten()
+            for i in idx.tolist():
+                eps.append((int(env.obj[i]), int(maxph[i]), bool(info["success"][i]), bool(info["fail"][i]), bool(env.lifted_ever[i]),
+                            float(maxf[i]), float(maxlift[i]), float(near[i]), int(env.steps[i])))
+            env.reset(idx)
+            sim.refresh()
+            demo.reset(idx)
+            maxph[idx], maxf[idx], maxlift[idx], near[idx] = 0, 0, 0, 9
+        if k % 25 == 0:
+            m = len(eps)
+            ok = sum(e[2] for e in eps)
+            ctx.progress(min(99, 100 * (time.time() - t0) / (minutes * 60)), "%d episodes, %d in the bin, %.0f steps/s" % (m, ok, k * n / (time.time() - t0)))
+    m = max(1, len(eps))
+    ctx.log("%d episodes in %.1f min (%.0f steps/s)." % (len(eps), (time.time() - t0) / 60, k * n / (time.time() - t0)))
+    names = ["waiting over it", "going down", "closing", "lifting", "carrying", "over the bin, opening"]
+    for ph in range(6):
+        c = sum(1 for e in eps if e[1] == ph)
+        ctx.log("  furthest phase %d (%s): %d (%.0f%%)" % (ph, names[ph], c, 100.0 * c / m))
+    ctx.log("In the bin: %.1f%% · grasped and held 1 s (8 cm up): %.1f%% · failed (dropped / off the belt): %.1f%% · ran out of time: %.1f%%" % (
+        100.0 * sum(e[2] for e in eps) / m, 100.0 * sum(e[4] for e in eps) / m, 100.0 * sum(e[3] for e in eps) / m,
+        100.0 * sum(1 for e in eps if not e[2] and not e[3]) / m))
+    fs = sorted(e[5] for e in eps)
+    ctx.log("Largest touch force per episode: median %.1f N, 90%% %.1f N, max %.1f N. Closest hand approach: median %.1f cm." % (
+        fs[len(fs) // 2], fs[int(len(fs) * 0.9)], fs[-1], 100 * sorted(e[7] for e in eps)[len(eps) // 2]))
+    per = collections.defaultdict(list)
+    for e in eps:
+        per[env.info[e[0]]["label"]].append(e)
+    for lab, es in sorted(per.items()):
+        ctx.log("  %-11s n=%3d bin %3.0f%% held %3.0f%% closed %3.0f%% lifted>3cm %3.0f%% medianF %.1f N" % (
+            lab, len(es), 100.0 * sum(e[2] for e in es) / len(es), 100.0 * sum(e[4] for e in es) / len(es),
+            100.0 * sum(1 for e in es if e[1] >= 3) / len(es), 100.0 * sum(1 for e in es if e[6] > 0.03) / len(es), sorted(e[5] for e in es)[len(es) // 2]))
+    with open(ctx.output("curve", "diagnosis.csv"), "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["object", "furthest_phase", "in_bin", "failed", "held", "max_force_N", "max_lift_cm", "closest_cm", "steps"])
+        for e in eps:
+            w.writerow([env.info[e[0]]["label"], e[1], e[2], e[3], e[4], round(e[5], 1), round(100 * e[6], 1), round(100 * e[7], 1), e[8]])
+    return {"episodes": len(eps), "in_bin_pct": round(100.0 * sum(e[2] for e in eps) / m, 1)}
+
+
 def models_run(ctx):
     """the 3D view's two robots (the xArm with the hand, the objects), for the project's assets"""
     import mujoco
@@ -4029,6 +4105,8 @@ def run(ctx):
     viz.CONVEYOR_DRAWN["value"] = viz.CONVEYOR["mode"] == "flat" or bool(viz.CONVEYOR["fit"])
     if "model" in what:
         return models_run(ctx)
+    if "diagnos" in what or "check" in what:
+        return diagnose_run(ctx)
     if "combine" in what:
         return combine_run(ctx, None)
     if "see" in what:
