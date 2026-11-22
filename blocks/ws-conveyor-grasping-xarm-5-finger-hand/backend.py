@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 68 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 69 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -900,7 +900,13 @@ OBS_DIM = 89
 PRIV_DIM = 132
 CAM_EVERY = 4                      # a camera frame every 4 control steps (6 per second)
 STAGES = ("reach", "grasp", "place")
-EP_SECONDS = {"reach": 12.0, "grasp": 15.0, "place": 20.0}
+EP_SECONDS = {"reach": 12.0, "grasp": 18.0, "place": 25.0}
+# the grasp, as measured on the hand alone (every training and test object, upright and on either side, 97% held; 91% with
+# the camera's errors): the line along which the thumb closes against the fingers is not the hand's x but turned from it,
+# so the hand is turned GRASP_YAW further than square across the object's long axis; the palm level; the grasp point
+# GRASP_DZ lower and GRASP_DY towards the thumb's side (the hand's -y)
+GRASP_YAW, GRASP_DZ, GRASP_DY = 0.5236, -0.01, 0.01
+GRASP_WAIT_X = 0.42                # (the hand waits for an object until it is this near: the arm turns the hand freely there)
 LIFT_OK, HOLD_STEPS = 0.08, 25     # a grasp: lifted 8 cm and held for 1 s (pushed about in the last half)
 WORK_LO = np.array([-0.62, -0.08 + S.BASE_POS[1], 0.005])   # where the grasp point may go (the arm's reach around the cell; its
                                                                # near side behind the bin, which stands beside the arm's base)
@@ -1559,7 +1565,7 @@ class GraspEnv:
         hx = R[:, :2, 0]
         yaw_h = torch.atan2(hx[:, 1], hx[:, 0])
         psi = 0.5 * torch.atan2(y[:, 1], y[:, 0])
-        align = torch.cos(2 * (yaw_h - psi - math.pi / 2))                 # 1: across the long axis
+        align = torch.cos(2 * (yaw_h - psi - math.pi / 2 - GRASP_YAW))     # 1: turned as the grasp needs (see GRASP_YAW)
         elong = ((e[:, 0] - e[:, 1]) / e[:, 0].clamp(min=1e-3)).clamp(0, 1)
         r_align = elong * (align + 1) / 2
         f = self.touches()
@@ -1651,7 +1657,7 @@ class GraspEnv:
         hx = R[:, :2, 0]
         yaw_h = torch.atan2(hx[:, 1], hx[:, 0])
         psi = 0.5 * torch.atan2(ey[:, 1], ey[:, 0])
-        dy = 2 * (yaw_h - psi - math.pi / 2)
+        dy = 2 * (yaw_h - psi - math.pi / 2 - GRASP_YAW)
         drop = torch.as_tensor(DROP, dtype=torch.float32, device=self.dev)
         obs = torch.cat([
             g, R[:, :, 0], R[:, :, 2],                               # 3 + 3 + 3
@@ -1699,9 +1705,9 @@ class Demo:
         n, dev, phase, timer = env.n, env.dev, self.phase, self.timer
         g, R = env.hand_state()
         ec, ee, ey = env.est_c, env.est_e, env.est_y
-        T = torch.stack([ec[:, 0] - env.belt_v * 0.15, ec[:, 1], torch.max(ec[:, 2], ec[:, 2] + ee[:, 2] - 0.05)], -1)
+        T = torch.stack([ec[:, 0] - env.belt_v * 0.15, ec[:, 1], (torch.max(ec[:, 2], ec[:, 2] + ee[:, 2] - 0.05) + GRASP_DZ).clamp(min=0.004)], -1)
         psi = 0.5 * torch.atan2(ey[:, 1], ey[:, 0])
-        want = torch.remainder(psi + math.pi, math.pi) - math.pi / 2
+        want = torch.remainder(psi + math.pi + GRASP_YAW, math.pi) - math.pi / 2
         # of the two ways round (a grasp turned half a turn is the same grasp), the one the arm reaches better
         if self.timer.sum() == 0 or int(self.timer.max()) % 10 == 0:
             alt = torch.where(want > 0, want - math.pi, want + math.pi)
@@ -1714,13 +1720,15 @@ class Demo:
             self.flip = res[1] + 0.01 < res[0]
         if getattr(self, "flip", None) is not None:
             want = torch.where(self.flip, torch.where(want > 0, want - math.pi, want + math.pi), want)
+        # (the grasp point a little towards the thumb's side: along the hand's -y, as the hand will be turned)
+        T = T - GRASP_DY * torch.stack([-torch.sin(want), torch.cos(want), torch.zeros_like(want)], -1)
         # carrying and over the bin: the fingers pointing away from the arm's base (a pose the arm reaches well there)
         out = torch.atan2(env.tgt_p[:, 1] - S.BASE_POS[1], env.tgt_p[:, 0] - S.BASE_POS[0])
         out = torch.where(out > YAW_MAX, out - 2 * math.pi, torch.where(out < -YAW_MAX, out + 2 * math.pi, out)).clamp(-YAW_MAX, YAW_MAX)
         want = torch.where(phase >= 4, out, want)
         a = torch.zeros(n, ACT_DIM, device=dev)
         tgt = T.clone()
-        tgt[:, 0] = torch.where(phase == 0, tgt[:, 0].clamp(max=0.52), tgt[:, 0])   # (an object still out of reach: waited for)
+        tgt[:, 0] = torch.where(phase == 0, tgt[:, 0].clamp(max=GRASP_WAIT_X), tgt[:, 0])   # (an object still out of reach: waited for)
         tgt[:, 2] = torch.where(phase == 0, T[:, 2] + 0.07, T[:, 2])
         lift = torch.stack([env.tgt_p[:, 0], env.tgt_p[:, 1], torch.full((n,), 0.20, device=dev)], -1)
         drop = torch.as_tensor(DROP, dtype=torch.float32, device=dev).expand(n, 3)
@@ -1745,7 +1753,7 @@ class Demo:
         a[:, :3] = ((tgt - env.tgt_p) / 0.018).clamp(-1, 1) * sp[:, None]   # (carrying: steadier)
         a[:, 3] = ((want - env.tgt_e[:, 0]) / 0.10).clamp(-1, 1) * torch.where(phase >= 4, 0.35, 1.0)     # (turning gently with it in hand)
         # fingers tilted down to grasp (the arm reaches low on the belt far better so), level to carry
-        want_e = torch.stack([torch.where(phase <= 3, 0.4, 0.0), torch.zeros(n, device=dev)], -1)
+        want_e = torch.zeros(n, 2, device=dev)          # (the palm level: on the hand alone, tilting it lost a third of the grasps)
         a[:, 4:6] = ((want_e - env.tgt_e[:, 1:]) / 0.06).clamp(-1, 1)
         close = (phase >= 2) & (phase < 5)
         a[:, 6:11] = torch.where(close[:, None], torch.ones(n, 5, device=dev), -torch.ones(n, 5, device=dev))
