@@ -7,6 +7,90 @@
     "datasets": [],
     "assets": [
         {
+            "path": "grasp-policy/grasp_grasp_20261119_0649_86.pt",
+            "size": 5173285,
+            "sha256": "b9cc80faed145695e58ce0a4fb440721f297267deeb1e202cfc1b788dfe32fd9",
+            "zip": "assets/grasp-policy/grasp_grasp_20261119_0649_86.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_grasp_20261120_0000_87.pt",
+            "size": 5357925,
+            "sha256": "d52d7f73e44003a21ceea7c6a9255b1aef4942f84c7282440acbf80260d46c49",
+            "zip": "assets/grasp-policy/grasp_grasp_20261120_0000_87.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_place_20261119_0849_67.pt",
+            "size": 5173285,
+            "sha256": "1c05d001c82d743dd30fe7ea43dad9484f08f5ec4ebab642271f0723aee16a74",
+            "zip": "assets/grasp-policy/grasp_place_20261119_0849_67.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_reach_20261119_0516_17.pt",
+            "size": 5173285,
+            "sha256": "fc20e83873b953323b205bcf0549c7ff90c00581132c504a00ed206b72371184",
+            "zip": "assets/grasp-policy/grasp_reach_20261119_0516_17.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_reach_20261119_1633_90.pt",
+            "size": 5173413,
+            "sha256": "4dd93fc472cb6443a09c4d72a9a3425447191fb81a818920ec18f1fab04a6567",
+            "zip": "assets/grasp-policy/grasp_reach_20261119_1633_90.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_reach_20261119_2227_00.pt",
+            "size": 5357861,
+            "sha256": "786479fb61f0cd0c39872678af1da4a62d0a24eaad10451fd7c134cd6c8cf106",
+            "zip": "assets/grasp-policy/grasp_reach_20261119_2227_00.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_see_20261119_0340.pt",
+            "size": 1429733,
+            "sha256": "f28417f7dd25ecf3477d240d83e8f06cde748de47872b6652ee0c8d1a2256a9c",
+            "zip": "assets/grasp-policy/grasp_see_20261119_0340.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_see_20261119_0352.pt",
+            "size": 1429733,
+            "sha256": "f28417f7dd25ecf3477d240d83e8f06cde748de47872b6652ee0c8d1a2256a9c",
+            "zip": "assets/grasp-policy/grasp_see_20261119_0352.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_see_20261119_1531.pt",
+            "size": 1429733,
+            "sha256": "754eca22ddbd319677a80d4d1b442858a910c2cdf3763cc4e03578ee61d0af77",
+            "zip": "assets/grasp-policy/grasp_see_20261119_1531.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_see_20261119_2103.pt",
+            "size": 1429733,
+            "sha256": "9a756e009b68d983daf452cccb4f821d699a3d03df7eb8e6a3a108e4b1805563",
+            "zip": "assets/grasp-policy/grasp_see_20261119_2103.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_see_20261119_2126.pt",
+            "size": 1429733,
+            "sha256": "9a756e009b68d983daf452cccb4f821d699a3d03df7eb8e6a3a108e4b1805563",
+            "zip": "assets/grasp-policy/grasp_see_20261119_2126.pt",
+            "in": "repo"
+        },
+        {
+            "path": "grasp-policy/grasp_see_20261121_1813.pt",
+            "size": 1429733,
+            "sha256": "5d270d1461a809f20e9d5f72268ed72940d5c0a0b77d29aff6e304467becda5d",
+            "zip": "assets/grasp-policy/grasp_see_20261121_1813.pt",
+            "in": "repo"
+        },
+        {
             "path": "models/belt_objects.robot.json.gz",
             "size": 493850,
             "sha256": "da196cbb4f3a7bd0aedc9bd4a7a89a327d2a8a8afd72225db3c65f03c9b359a3",
@@ -42,5 +126,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-20T21:57:31+00:00"
+    "saved": "2026-11-22T15:01:34+00:00"
 }

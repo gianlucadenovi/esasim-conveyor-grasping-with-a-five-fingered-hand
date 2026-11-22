@@ -129,6 +129,18 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 The files the project's views draw with (3D models, textures, sounds), in [assets/](assets/):
 
+- [grasp-policy/grasp_grasp_20261119_0649_86.pt](assets/grasp-policy/grasp_grasp_20261119_0649_86.pt) · 4.9 MB
+- [grasp-policy/grasp_grasp_20261120_0000_87.pt](assets/grasp-policy/grasp_grasp_20261120_0000_87.pt) · 5.1 MB
+- [grasp-policy/grasp_place_20261119_0849_67.pt](assets/grasp-policy/grasp_place_20261119_0849_67.pt) · 4.9 MB
+- [grasp-policy/grasp_reach_20261119_0516_17.pt](assets/grasp-policy/grasp_reach_20261119_0516_17.pt) · 4.9 MB
+- [grasp-policy/grasp_reach_20261119_1633_90.pt](assets/grasp-policy/grasp_reach_20261119_1633_90.pt) · 4.9 MB
+- [grasp-policy/grasp_reach_20261119_2227_00.pt](assets/grasp-policy/grasp_reach_20261119_2227_00.pt) · 5.1 MB
+- [grasp-policy/grasp_see_20261119_0340.pt](assets/grasp-policy/grasp_see_20261119_0340.pt) · 1.4 MB
+- [grasp-policy/grasp_see_20261119_0352.pt](assets/grasp-policy/grasp_see_20261119_0352.pt) · 1.4 MB
+- [grasp-policy/grasp_see_20261119_1531.pt](assets/grasp-policy/grasp_see_20261119_1531.pt) · 1.4 MB
+- [grasp-policy/grasp_see_20261119_2103.pt](assets/grasp-policy/grasp_see_20261119_2103.pt) · 1.4 MB
+- [grasp-policy/grasp_see_20261119_2126.pt](assets/grasp-policy/grasp_see_20261119_2126.pt) · 1.4 MB
+- [grasp-policy/grasp_see_20261121_1813.pt](assets/grasp-policy/grasp_see_20261121_1813.pt) · 1.4 MB
 - [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 482 KB
 - [models/simple_rubber_conveyor.glb](assets/models/simple_rubber_conveyor.glb) · 2.9 MB
 - [models/xarm_hand.robot.json.gz](assets/models/xarm_hand.robot.json.gz) · 238 KB
