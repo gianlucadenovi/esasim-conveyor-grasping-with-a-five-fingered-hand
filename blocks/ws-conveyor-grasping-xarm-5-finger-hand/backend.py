@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 53 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 54 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -1868,13 +1868,14 @@ def install_imitation(env):
     def update(self, priv_last, critic_only=False):
         if not state["done"]:
             state["done"] = True
-            rate, tot = policy_rate(env, self, env.max_steps + 10)
-            env.log("The policy as it is puts %.0f%% of %d objects in the bin." % (rate, tot))
-            if rate < 50:
-                imitate(env, self, env.log)
+            rate = 0.0
+            if getattr(env, "policy_stage", None) == "place":      # (only a place policy can already put things in the bin)
                 rate, tot = policy_rate(env, self, env.max_steps + 10)
-                env.log("After imitating: %.0f%% of %d objects in the bin. Now PPO." % (rate, tot))
-                state["critic"] = 30
+                env.log("The policy as it is puts %.0f%% of %d objects in the bin." % (rate, tot))
+            if rate < 50:
+                imitate(env, self, env.log, steps=500, rounds=2)
+                env.log("Now PPO, from what it imitated (its critic first learns what the states are worth).")
+                state["critic"] = 10
         if state["critic"] > 0:
             state["critic"] -= 1
             critic_only = True
@@ -3589,6 +3590,7 @@ def learn_run(ctx, stage):
     if n_tasks > 1:        # every task of a parallel round starts from the same policy: the newest given as input
         found = [f for f in found if f["where"] == "dataset"]
     found = pick_policy(ctx, found, stage)
+    env.policy_stage = found[0]["stage"] if found else None
     if found:
         pick = found[0]
         st = pick["st"]
