@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 69 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 70 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -61,7 +61,9 @@ CONV_S = 0.75 / 0.714
 BELT_TOP = 0.0                                   # the belt's top surface (the world's z = 0: the pedestal's top)
 BELT_CY = 0.63                                   # the conveyor's centre line (y)
 BELT_W = 0.650 * CONV_S                          # the rubber belt's width (0.68 m)
-BELT_Y = 0.42                                    # the lane the objects are put in (y), on the robot's side of the belt
+BELT_Y = 0.48                                    # the lane the objects are put in (y): 19 cm in from the belt's edge on the robot's
+                                                 # side (nearer the edge they ended up against its rail), where the arm still
+                                                 # turns the hand as a grasp needs
 RAIL_NEAR = (-0.486 * CONV_S, -0.329 * CONV_S)   # the side frames beside the belt (y, from the centre line), as in the file:
 RAIL_FAR = (0.329 * CONV_S, 0.457 * CONV_S)      # their tops 3.7 cm above the belt
 RAIL_TOP = 0.035 * CONV_S
@@ -1303,7 +1305,7 @@ class GraspEnv:
             x0 = S.SPAWN_X[0] + (S.SPAWN_X[1] - S.SPAWN_X[0]) * torch.rand(k, generator=g, device=dev)
         else:
             x0 = torch.full((k,), float(x0), device=dev)
-        y0 = S.BELT_Y + 0.06 * (torch.rand(k, generator=g, device=dev) * 2 - 1)
+        y0 = S.BELT_Y + 0.03 * (torch.rand(k, generator=g, device=dev) * 2 - 1)
         qpos = self.qpos0[None].repeat(k, 1)
         z0 = -zlow + 0.006
         # dropped from above the belt, turning a little: where and how it lands is up to the physics (the test drops
@@ -1325,7 +1327,7 @@ class GraspEnv:
         qvel = torch.zeros(k, self.mjm.nv, device=dev)
         qvel[:, self.db] = -v
         spin = 4.0 * (torch.rand(k, 3, generator=g, device=dev) * 2 - 1)            # spinning as it falls
-        slide = 0.15 * (torch.rand(k, 2, generator=g, device=dev) * 2 - 1)
+        slide = torch.tensor([0.15, 0.05], device=dev) * (torch.rand(k, 2, generator=g, device=dev) * 2 - 1)   # (along the belt, and a little across it)
         qvel[:, self.do_ + 3:self.do_ + 6] = torch.where(falls[:, None], spin, torch.zeros_like(spin))
         qvel[:, self.do_:self.do_ + 2] = torch.where(falls[:, None], slide, torch.zeros_like(slide))
         # the hand: at rest, palm down, open (a little off each time)
@@ -1340,7 +1342,7 @@ class GraspEnv:
             cw, ew, yw2 = obb_of(torch, p + torch.stack([x0, y0, -zlow + 0.006], -1)[:, None])
             over = torch.rand(k, generator=g, device=dev) < pa
             hp_a = torch.stack([cw[:, 0] - 0.04 * v, cw[:, 1], cw[:, 2] + ew[:, 2] + 0.03 + 0.03 * torch.rand(k, generator=g, device=dev)], -1)
-            hy_a = 0.5 * torch.atan2(yw2[:, 1], yw2[:, 0]) + math.pi / 2
+            hy_a = 0.5 * torch.atan2(yw2[:, 1], yw2[:, 0]) + math.pi / 2 + GRASP_YAW
             hy_a = torch.remainder(hy_a + math.pi / 2, math.pi) - math.pi / 2       # (a turn of pi is the same grasp)
             hp = torch.where(over[:, None], hp_a, hp)
             hy = torch.where(over, hy_a, hy)
