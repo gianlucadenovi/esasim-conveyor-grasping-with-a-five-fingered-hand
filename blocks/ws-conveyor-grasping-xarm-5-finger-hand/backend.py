@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 76 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 77 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -4173,19 +4173,34 @@ def diagnose_run(ctx):
     env.reset_all()
     env.perceive()
     held = torch.zeros(n, dtype=torch.bool, device=dev)
+    snap = torch.full((n, 7), float("nan"), device=dev)
     eps, t0, k = [], time.time(), 0
     while time.time() - t0 < 8 * 60 and len(eps) < 4 * n:
-        r, done, info = env.step(demo.act())
+        ph0 = demo.phase.clone()
+        a = demo.act()
+        start = (ph0 == 1) & (demo.phase == 2) & torch.isnan(snap[:, 0])
+        if bool(start.any()):
+            _, _, tc, te, ty = env.truth()
+            g, _ = env.hand_state()
+            pe = 0.5 * torch.atan2(env.est_y[:, 1], env.est_y[:, 0])
+            pt = 0.5 * torch.atan2(ty[:, 1], ty[:, 0])
+            dyaw = torch.remainder(pe - pt + math.pi / 2, math.pi) - math.pi / 2
+            row = torch.stack([(env.est_c[:, :2] - tc[:, :2]).norm(dim=1), env.est_c[:, 2] + env.est_e[:, 2] - tc[:, 2] - te[:, 2],
+                               dyaw.abs() * (te[:, 0] > 1.3 * te[:, 1]).float(), (g[:, :2] - tc[:, :2]).norm(dim=1), g[:, 2] - (tc[:, 2] + te[:, 2]),
+                               env.est_age, te[:, 2] * 2], -1)
+            snap = torch.where(start[:, None], row, snap)
+        r, done, info = env.step(a)
         k += 1
         held = held | env.lifted_ever
         if bool(done.any()):
             idx = done.nonzero().flatten()
             for i in idx.tolist():
-                eps.append((int(env.obj[i]), bool(info["success"][i]), bool(held[i])))
+                eps.append((int(env.obj[i]), bool(info["success"][i]), bool(held[i]), snap[i].tolist()))
             env.reset(idx)
             sim.refresh()
             demo.reset(idx)
             held[idx] = False
+            snap[idx] = float("nan")
         if k % 25 == 0:
             ctx.progress(min(99, (time.time() - t0) / 4.8), "%d episodes, %d in the bin" % (len(eps), sum(e[1] for e in eps)))
     m = max(1, len(eps))
@@ -4194,6 +4209,17 @@ def diagnose_run(ctx):
     for e in eps:
         per[env.info[e[0]]["label"]].append(e[1])
     ctx.log("Per object: " + ", ".join("%s %.0f%%" % (a, 100.0 * sum(b) / len(b)) for a, b in sorted(per.items())))
+    import numpy as np
+    names = ["seen xy err cm", "seen top err cm", "seen yaw err deg", "hand xy off cm", "hand above top cm", "frame age s", "height cm"]
+    sc = [100, 100, 57.3, 100, 100, 1, 100]
+    never = [e for e in eps if math.isnan(e[3][0])]
+    ctx.log("Never closed: %d of %d (%d of them in the bin)" % (len(never), len(eps), sum(e[1] for e in never)))
+    for lab in sorted(per):
+        for ok in (True, False):
+            rows = np.array([e[3] for e in eps if env.info[e[0]]["label"] == lab and e[1] == ok and not math.isnan(e[3][0])])
+            if len(rows):
+                med = np.median(rows, 0)
+                ctx.log("%-10s %s n=%d  %s" % (lab, "ok  " if ok else "FAIL", len(rows), "  ".join("%s %.1f" % (nm, v * s) for nm, v, s in zip(names, med, sc))))
     return {"episodes": len(eps)}
 
 
