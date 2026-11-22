@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 81 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 82 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -1775,6 +1775,7 @@ class Demo:
         timer += 1
         nxt = (phase == 0) & (d[:, :2].norm(dim=1) < 0.012) & (timer > 8)
         nxt |= (phase == 1) & (d.norm(dim=1) < 0.012) & (timer > 6)
+        nxt |= (phase == 1) & (d[:, :2].norm(dim=1) < 0.02) & (timer > 15)     # (held up short by the belt or the object)
         nxt |= (phase == 2) & (timer > 12) & (((env.curl.mean(1) > 0.95) & (timer > 24)) | (timer > 40))   # (lifted only once the hand has closed)
         nxt |= (phase == 3) & (env.tgt_p[:, 2] > 0.19) & (timer > 30)
         nxt |= (phase == 4) & ((env.tgt_p - drop).norm(dim=1) < 0.01)
