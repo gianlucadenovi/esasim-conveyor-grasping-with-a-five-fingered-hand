@@ -8,68 +8,66 @@
 
 # Conveyor grasping with a five-fingered hand
 
-**An xArm with a five-fingered hand learns to see the objects coming on a conveyor belt, reach them, grasp them with simulated contact forces and put them in a bin. Then you test it on objects it has never seen, in the pose you choose.**
+**An xArm with a five-fingered hand learns to see the objects coming on a conveyor belt, pick them up with simulated contact forces and put them in a bin. Then you test it on objects it has never seen, in the pose you choose.**
 
-The hand senses through a camera beside the robot and nine touch sensors (the five fingertips and four zones of the palm). Every force between the fingers, the palm and the object is simulated by MuJoCo. The arm positions the hand kinematically, since the objects weigh next to nothing compared with the arm, but the grasp itself is physical.
+The robot senses through a camera beside it and 19 touch sensors (each digit's tip, middle and first phalanx, and four zones of the palm). The xArm 6 and the hand are simulated bodies in MuJoCo: the arm's six joints are servo-driven through inverse kinematics, and every force between the fingers, the palm, the object, the belt and the bin is computed.
 
-![type](https://img.shields.io/badge/type-Robotics-blue) ![language](https://img.shields.io/badge/language-Python-3776AB) ![runs on](https://img.shields.io/badge/runs%20on-NVIDIA%20%7C%20CPU-6f42c1) ![physics](https://img.shields.io/badge/physics-MuJoCo%20%7C%20MuJoCo%20Warp-orange) ![learning](https://img.shields.io/badge/learning-PPO%20%2B%20CNN-178c8c) [![made with](https://img.shields.io/badge/made%20with-EsaSim-0b7285)](https://esacode.com/)
+![type](https://img.shields.io/badge/type-Robotics-blue) ![language](https://img.shields.io/badge/language-Python-3776AB) ![runs on](https://img.shields.io/badge/runs%20on-NVIDIA%20%7C%20CPU-6f42c1) ![physics](https://img.shields.io/badge/physics-MuJoCo%20%7C%20MuJoCo%20Warp-orange) ![learning](https://img.shields.io/badge/learning-Imitation%20%2B%20PPO%20%2B%20CNN-178c8c) [![made with](https://img.shields.io/badge/made%20with-EsaSim-0b7285)](https://esacode.com/)
 
 </div>
 
 ## Overview
 
-Objects of different shapes travel along a belt, upright, on their side or tumbled, at any orientation, at 3 to 8 cm/s. Next to the belt are an xArm 6 carrying a five-fingered hand, a camera on a pole and a bin.
+Objects of 18 training shapes are dropped onto a belt running at 5 to 10 cm/s: upright, on their side or tumbled, at any orientation. Next to the belt are the xArm 6 with the hand, a camera on a pole and a bin.
 
-Learning happens in stages, and each stage carries on from the one before:
+1. **See**: a small convolutional network learns, from the camera's depth and colour, which pixels belong to the object and from them its box: where it is, how big, which way its long side lies.
+2. **Place** (the main stage): the policy first learns from a scripted pick-and-place controller that uses only what the robot senses (its hand and the camera's box): it imitates it, then drives itself while the controller corrects it (DAgger). Then PPO fine-tunes it on the real reward (object in the bin), with a fading term that keeps it close to the demonstrations and a capped step size.
+3. **Test**: one cell in real time, on 12 shapes it never trained on (a banana, a stepped cone, a drill, a pear, a duck and others).
 
-1. **See**: a small convolutional network learns, from the camera's depth and colour, which pixels belong to the object and from them its box: where it is, how big it is and which way its long side lies.
-2. **Reach**: the hand learns to meet the object on the moving belt, palm down, turned across its long side, keeping pace with the belt.
-3. **Grasp**: it learns to close the fingers and the thumb around the object, lift it 8 cm and hold it for a second while the object is pushed about.
-4. **Place**: it learns to carry the object to the bin and let it go there.
+**Reach** and **Grasp** are also available as stages of their own (grasp learns from the same demonstrations); they are not needed before Place.
 
-Thousands of cells learn at once on one GPU (MuJoCo Warp, with its batch renderer for the cameras). The objects come from the 18 training shapes. The 12 test shapes (a banana, a stepped cone, a drill, a pear, a duck and others) are never used in training.
-
-All models are built by the project itself from simple shapes (boxes, cylinders, spheres, capsules, ellipsoids): the cell, the hand and the objects. Better-looking models can replace them later without changing the learning.
+All models are built by the project itself from simple shapes (boxes, cylinders, spheres, capsules, ellipsoids). Better-looking models can replace them later without changing the learning.
 
 ## Flows
 
 | Flow | What it does |
 |---|---|
 | [**1 · Learn to see**](https://esacode.com/app/projects/25/flows/84) | Trains the camera network (about 25 minutes on an RTX 3070). |
-| [**2 · Learn to reach**](https://esacode.com/app/projects/25/flows/85) | PPO on 2048 cells, 60 minutes. |
-| [**3 · Learn to grasp**](https://esacode.com/app/projects/25/flows/87) | Carries on from reach, 90 minutes. |
-| [**4 · Learn to place**](https://esacode.com/app/projects/25/flows/88) | Carries on from grasp, 90 minutes. |
+| [**4 · Learn to place**](https://esacode.com/app/projects/25/flows/88) | Learns from demonstrations, then PPO: the stage that does the whole task. 1024 cells, 75 to 100 minutes. |
 | [**5 · Test with new objects**](https://esacode.com/app/projects/25/flows/89) | One cell, in real time, driven from the View. |
+| [2 · Learn to reach](https://esacode.com/app/projects/25/flows/85) · [3 · Learn to grasp](https://esacode.com/app/projects/25/flows/87) | Optional stages on their own. |
 
-Every flow has the **Conveyor grasping (xArm + 5-finger hand)** block in the matching mode, reading and writing its networks in the **grasp-networks** dataset. Each flow also has the **xArm model** block (UFACTORY's own meshes, BSD-3), the **Conveyor grasping view** and charts of the learning curve.
+Every flow has the **Conveyor grasping (xArm + 5-finger hand)** block in the matching mode, reading and writing its networks in the **grasp-networks** dataset.
 
 ## The View
 
-- **The cell** in 3D: the belt (its surface runs), the bin, the camera on its pole, the object, the hand with every finger joint, and the xArm. The arm is posed by inverse kinematics on the hand's pose at every frame.
+- **The cell** in 3D: the belt, the bin, the camera on its pole, the object, the hand with every finger joint, and the xArm.
 - The **camera box**, in yellow: where the camera network thinks the object is.
-- **Touch**: the force on each fingertip and palm zone, in newtons.
-- **What the camera sees**: the picture the network gets, with its box (seeing and testing).
-- During training, one episode is replayed every 20 seconds, with its result.
-- **Test with a new object**: choose the object (new, or one it trained on), how it lies (upright, on its side, tumbled), how it is turned and the belt speed, then press **Put it on the belt**. The trial plays live, and the count of trials, grasps and objects in the bin goes up.
-- **Camera view**, **Close up**, **Whole cell**, and buttons that show or hide the camera box and the xArm.
+- **Touch**: the force on each digit and palm zone, in newtons.
+- **What the camera sees**: the picture the network gets, with its box.
+- During training, episodes of the learning cells are replayed with their result.
+- **Test with a new object**: choose the object, how it lies, how it is turned and the belt speed (5 to 10 cm/s, the range it trained on), then press **Put it on the belt**. The object is dropped at the start of the belt; the hand waits at rest until the object reaches the stretch where training objects start, then picks it.
 
 ## What is computed
 
 | Part | How |
 |---|---|
-| **Physics** | MuJoCo 3 (CPU) or MuJoCo Warp (GPU): 2 ms steps, 40 ms control steps; elliptic friction cones; finger joints driven by position servos with limited force |
-| **Hand** | 5 fingers, 15 joints. The policy sets each finger's curl (shared over its three joints) and the thumb's swing under the palm. The hand's pose (x, y, z, yaw, pitch, roll) comes from six stiff servos: kinematic positioning |
-| **Touch** | 9 MuJoCo touch sensors: thumb, index, middle, ring and little fingertips, and four palm zones |
-| **Camera** | 96×72 depth, colour and segmentation, 6 frames a second, turned into a point map |
-| **Camera network** | encoder-decoder CNN: an object mask, then mask-weighted point statistics give the box (centre, half sizes, yaw) |
-| **Policy** | PPO with an asymmetric critic. The policy sees only what the robot could sense: its hand, fingers, touch, belt speed and the camera's box. The critic also sees the true object state. Network 512-256-128 |
-| **Rewards** | reach: distance to the grasp point and progress towards it, palm level, turned across the object. Grasp: pinch and wrap contacts, lift, held while pushed. Place: carried to the bin, released, resting in it. Knocking the object over or crushing it costs |
+| **Physics** | MuJoCo 3 (CPU) or MuJoCo Warp (GPU): 2 ms steps, 40 ms control steps; elliptic friction cones |
+| **Arm** | xArm 6 with UFACTORY's kinematics; position servos with the motors' torques, gravity compensated; the policy says where the hand should be (x, y, z, yaw, pitch, roll) and inverse kinematics sets the joints |
+| **Hand** | 5 fingers, 15 joints, position servos with limited torque. The policy sets each finger's curl and the thumb's swing under the palm |
+| **Touch** | 19 MuJoCo touch sensors |
+| **Camera** | 96×72 depth, colour and segmentation, 6 frames a second |
+| **Camera network** | encoder-decoder CNN: an object mask, then the box (centre, half sizes, yaw) |
+| **Scripted controller** | over the object, down, close the hand fully, lift slowly at first, carry round the arm's base, open over the bin. About 72% of training objects end in the bin |
+| **Policy** | behaviour cloning + DAgger from the controller, then PPO with an asymmetric critic (the policy sees only what the robot could sense; the critic also sees the true object state). Network 512-256-128 |
+| **Rewards** | place: distance gained towards the bin with the object in hand, released over the bin, resting in it; dropping it or knocking it off costs |
 
 ## Where it runs
 
-- **NVIDIA GPU** (recommended): MuJoCo Warp, 1024 to 4096 cells at once, 10 to 30 thousand steps a second on an RTX 3070.
-- **CPU**: MuJoCo, one simulation per thread and at most 256 cells. It works but takes far longer.
-- A worker whose PyTorch is built for the CPU only gets a CUDA build of it once, in its data folder, for this block only.
+- **NVIDIA GPU** (needed for learning in reasonable time): MuJoCo Warp. On an 8 GB card (RTX 3070) **1024 cells learn faster than 2048**: with objects in the hands the contact physics is heavy, and 2048 cells run about three times slower in total.
+- **CPU**: MuJoCo, one simulation per thread. Fine for the test and for checks; slow for learning.
+- **Run on: NVIDIA GPU** sends the block only to workers with an NVIDIA GPU.
+- A worker whose PyTorch is built for the CPU only gets a CUDA build of it once, in its data folder, for this block only. If the worker's Windows service account cannot see the GPU (nvidia-smi says it lacks permission), runs there use the CPU: give that account access to the GPU.
 
 ## What you need
 
@@ -78,19 +76,23 @@ Every flow has the **Conveyor grasping (xArm + 5-finger hand)** block in the mat
 
 ## How to run it
 
-1. Run **1 · Learn to see**, then **2 · Learn to reach**, **3 · Learn to grasp** and **4 · Learn to place**, in order. Each stage finds the networks of the one before, in the **grasp-networks** dataset or left on the machine.
-2. Run **5 · Test with new objects**, switch to **View**, choose an object and its pose, and press **Put it on the belt**. Left alone, it picks the new objects itself, one after the other.
-3. To learn longer, run a stage again: **Training: Continue** carries on from the newest policy. Use **Start over** to begin again.
+1. Run **1 · Learn to see** (once; again only if the cell changes).
+2. Run **4 · Learn to place**. With **Training: Start over** it learns from demonstrations first; with **Continue** it carries on from the best place policy of this cell (if that one succeeds less than half the time, it learns from demonstrations again first).
+3. Run **5 · Test with new objects**, switch to **View**, choose an object and its pose, and press **Put it on the belt**. Left alone, it picks the new objects itself, one after the other.
 
 ## Settings worth knowing
 
-On the **Conveyor grasping** block: **What to do** (the mode), **Run on** (auto, NVIDIA GPU or CPU), **Cells learning at once**, **Minutes**, **Training** (Continue or Start over), **Replay every**, and for the test: **pace** (1 = real time), **pick objects when idle**, **Test objects** (new only or all).
+On the **Conveyor grasping** block: **What to do** (the mode), **Run on**, **Cells learning at once** (1024 on an 8 GB GPU), **Minutes**, **Training** (Continue or Start over), **Live cell while learning** (No by default: a real-time cell in the same process slows learning several times; the view then replays episodes of the learning cells), and for the test: **pace**, **pick objects when idle**, **Test objects** (new only or all).
+
+## Which policy is used
+
+Policies are carried on from (and tested) only if they were learned in the same version of the cell (each policy records a fingerprint of the cell). Among those, the furthest stage is used, then the best success, then the newest. A newer but worse policy of an earlier stage no longer replaces a good one.
 
 ## What you get
 
 - `grasp_see_<date>.pt`: the camera network.
-- `grasp_<stage>_<date>_<success>.pt`: the policies, each saved together with the camera network it used.
-- `see.csv`, `reach.csv`, `grasp.csv`, `place.csv`: the learning curves. `test.csv`: one row per test trial (object, pose, yaw, belt speed, grasped, in the bin, maximum grip force).
+- `grasp_<stage>_<date>_<success>.pt`: the policies, each saved together with the camera network it used. During learning the best policy so far is kept; a worse one never overwrites it.
+- `see.csv`, `reach.csv`, `grasp.csv`, `place.csv`: the learning curves. `test.csv`: one row per test trial (object, pose, yaw, belt speed, grasped, in the bin, largest touch force).
 
 ## Data and licences
 
@@ -98,9 +100,8 @@ The xArm's kinematics and meshes come from [xarm_ros](https://github.com/xArm-De
 
 ## Notes
 
-- The camera network places objects it never saw within about 0.6 cm and their long axis within about 4°.
-- In the 3D view the xArm is drawn from its meshes when the xArm model's file reaches the browser. Otherwise it is drawn from its kinematics with simple shapes, and a note says so.
-- In training, reach success is counted with the policy's exploration noise. Keeping pace with the belt within 8 cm/s is hard under that noise, so the reach success figure understates what the policy does in the test, which runs without noise. The distance at which the hand ends is the better guide.
+- Success during learning is counted with the policy's exploration noise, over the episodes that have ended; early in a run the short episodes (often failures) end first, so the first figures run low or high before they settle.
+- The hardest objects to hold are the small and round ones (rod, small ball, egg, cube); boxes, cans, mugs and T blocks go in most reliably.
 - A cell whose physics blows up (rare, among thousands) is restarted, and the log counts how often.
 
 <!-- esasim: files of the project -->
@@ -121,7 +122,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Workspace blocks it uses
 
-- [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 63
+- [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 64
 - [Camera picture](blocks/ws-camera-picture) · version 1
 - [Hand pressure map](blocks/ws-hand-pressure-map) · version 2
 
