@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 78 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 79 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -1459,6 +1459,11 @@ class GraspEnv:
             seen = objpix >= 6
         ok_ = torch.isfinite(c).all(1) & torch.isfinite(e).all(1) & torch.isfinite(yw).all(1)
         seen = seen & ok_
+        # the fingers down round the object hide it from the camera and are taken for part of it (its top seen 2 cm too
+        # high, its middle and its axis pulled off): then the box seen before they came down is kept, carried by the belt
+        g = self.sim.site_xpos[:, self.gsite].float()
+        hidden = ((g[:, :2] - self.est_c[:, :2]).norm(dim=1) < 0.08) & (g[:, 2] < self.est_c[:, 2] + self.est_e[:, 2] + 0.01)
+        seen = seen & ~hidden
         c, e, yw = torch.nan_to_num(c), torch.nan_to_num(e), torch.nan_to_num(yw)
         old = self.est_c.clone()
         dt = self.est_age.clamp(min=CTRL_DT)
