@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 77 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 78 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -4174,14 +4174,22 @@ def diagnose_run(ctx):
     env.perceive()
     held = torch.zeros(n, dtype=torch.bool, device=dev)
     snap = torch.full((n, 7), float("nan"), device=dev)
+    snap0 = torch.full((n, 3), float("nan"), device=dev)
     eps, t0, k = [], time.time(), 0
     while time.time() - t0 < 8 * 60 and len(eps) < 4 * n:
         ph0 = demo.phase.clone()
         a = demo.act()
-        start = (ph0 == 1) & (demo.phase == 2) & torch.isnan(snap[:, 0])
-        if bool(start.any()):
+        for p_from, p_to in ((0, 1), (1, 2)):
+          start = (ph0 == p_from) & (demo.phase == p_to) & (torch.isnan(snap[:, 0]) if p_from == 1 else torch.isnan(snap0[:, 0]))
+          if bool(start.any()):
             _, _, tc, te, ty = env.truth()
             g, _ = env.hand_state()
+            if p_from == 0:
+                pe0 = 0.5 * torch.atan2(env.est_y[:, 1], env.est_y[:, 0]); pt0 = 0.5 * torch.atan2(ty[:, 1], ty[:, 0])
+                d0 = (torch.remainder(pe0 - pt0 + math.pi / 2, math.pi) - math.pi / 2).abs() * (te[:, 0] > 1.3 * te[:, 1]).float()
+                r0 = torch.stack([(env.est_c[:, :2] - tc[:, :2]).norm(dim=1), env.est_c[:, 2] + env.est_e[:, 2] - tc[:, 2] - te[:, 2], d0], -1)
+                snap0 = torch.where(start[:, None], r0, snap0)
+                continue
             pe = 0.5 * torch.atan2(env.est_y[:, 1], env.est_y[:, 0])
             pt = 0.5 * torch.atan2(ty[:, 1], ty[:, 0])
             dyaw = torch.remainder(pe - pt + math.pi / 2, math.pi) - math.pi / 2
@@ -4195,12 +4203,13 @@ def diagnose_run(ctx):
         if bool(done.any()):
             idx = done.nonzero().flatten()
             for i in idx.tolist():
-                eps.append((int(env.obj[i]), bool(info["success"][i]), bool(held[i]), snap[i].tolist()))
+                eps.append((int(env.obj[i]), bool(info["success"][i]), bool(held[i]), snap[i].tolist() + snap0[i].tolist()))
             env.reset(idx)
             sim.refresh()
             demo.reset(idx)
             held[idx] = False
             snap[idx] = float("nan")
+            snap0[idx] = float("nan")
         if k % 25 == 0:
             ctx.progress(min(99, (time.time() - t0) / 4.8), "%d episodes, %d in the bin" % (len(eps), sum(e[1] for e in eps)))
     m = max(1, len(eps))
@@ -4210,13 +4219,13 @@ def diagnose_run(ctx):
         per[env.info[e[0]]["label"]].append(e[1])
     ctx.log("Per object: " + ", ".join("%s %.0f%%" % (a, 100.0 * sum(b) / len(b)) for a, b in sorted(per.items())))
     import numpy as np
-    names = ["seen xy err cm", "seen top err cm", "seen yaw err deg", "hand xy off cm", "hand above top cm", "frame age s", "height cm"]
-    sc = [100, 100, 57.3, 100, 100, 1, 100]
+    names = ["seen xy err cm", "seen top err cm", "seen yaw err deg", "hand xy off cm", "hand above top cm", "frame age s", "height cm", "| from above: xy", "top", "yaw"]
+    sc = [100, 100, 57.3, 100, 100, 1, 100, 100, 100, 57.3]
     never = [e for e in eps if math.isnan(e[3][0])]
     ctx.log("Never closed: %d of %d (%d of them in the bin)" % (len(never), len(eps), sum(e[1] for e in never)))
     for lab in sorted(per):
         for ok in (True, False):
-            rows = np.array([e[3] for e in eps if env.info[e[0]]["label"] == lab and e[1] == ok and not math.isnan(e[3][0])])
+            rows = np.array([e[3] for e in eps if env.info[e[0]]["label"] == lab and e[1] == ok and not math.isnan(e[3][0]) and not math.isnan(e[3][7])])
             if len(rows):
                 med = np.median(rows, 0)
                 ctx.log("%-10s %s n=%d  %s" % (lab, "ok  " if ok else "FAIL", len(rows), "  ".join("%s %.1f" % (nm, v * s) for nm, v, s in zip(names, med, sc))))
