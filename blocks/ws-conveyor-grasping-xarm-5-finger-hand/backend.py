@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 54 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 55 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -4059,6 +4059,11 @@ def diagnose_run(ctx):
     minutes = time_budget(ctx, float(p.get("minutes") or 6))
     seed = int(p.get("seed") or 1)
     torch.manual_seed(seed)
+    if float(p.get("diag_finger_force") or 0) > 0:
+        S.FINGER_FORCE = float(p["diag_finger_force"])
+    if float(p.get("diag_finger_kp") or 0) > 0:
+        S.FINGER_KP = float(p["diag_finger_kp"])
+    ctx.log("Fingers: stiffness %.2f N m/rad, at most %.2f N m." % (S.FINGER_KP, S.FINGER_FORCE))
     lib, sim, label, env = build(ctx, n, "place", seed=seed)
     n, dev = sim.n, sim.tdev
     env.assist = 0.0

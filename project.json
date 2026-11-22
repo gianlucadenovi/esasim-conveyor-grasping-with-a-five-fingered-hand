@@ -32,7 +32,7 @@
         {
             "name": "4 · Learn to place",
             "file": "blueprints/4-learn-to-place.json",
-            "published_version": 6,
+            "published_version": 7,
             "nodes": 11
         },
         {
@@ -63,7 +63,7 @@
     "blocks": [
         {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
-            "version": 54,
+            "version": 55,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
         },
         {
