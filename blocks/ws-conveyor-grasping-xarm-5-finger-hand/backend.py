@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 56 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 57 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -1259,7 +1259,7 @@ class GraspEnv:
         self.k = 0
         self.n_bad = 0
         self.assist = {"reach": 0.0, "grasp": 0.5, "place": 0.3}[stage]   # a share of episodes start with the hand over the object
-        if stage == "place" and n > 1:
+        if stage in ("grasp", "place") and n > 1:
             install_imitation(self)
 
     # ── resets ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1591,9 +1591,12 @@ class GraspEnv:
         fail = (op[:, 0] < S.EXIT_X) | (op[:, 2] < -0.08)
         in_bin = ((op[:, 0] - S.BIN_C[0]).abs() < S.BIN_HALF[0]) & ((op[:, 1] - S.BIN_C[1]).abs() < S.BIN_HALF[1]) & (op[:, 2] < S.BIN_H) & (op[:, 2] > -0.02)
         if st == "reach":
-            ok = (dxy < 0.025) & (dz < 0.025) & (level > 0.85) & ((elong < 0.3) | (align > 0.7)) & (match < 0.12) & ~early
+            # (within 4 cm of the grasp point, palm about level, turned roughly across a long object, keeping roughly
+            # with the belt, for two steps: what a grasp can start from. The earlier test, 2.5 cm and 12 cm/s for three
+            # steps under the exploration's jitter, was never met in any run, so the success bonus never paid)
+            ok = (dxy < 0.04) & (dz < 0.04) & (level > 0.8) & ((elong < 0.3) | (align > 0.5)) & (match < 0.2) & ~early
             self.ok_cnt = torch.where(ok, self.ok_cnt + 1, torch.zeros_like(self.ok_cnt))
-            success = self.ok_cnt >= 3
+            success = self.ok_cnt >= 2
             r = r + 1.0 * r_reach * (dxy < 0.04).float() * (1 - torch.tanh(15 * dz)) + 10.0 * success.float()
         else:
             near = (d < 0.05).float()
@@ -1816,7 +1819,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
         return float(loss.item()), N
 
     ok, tot = collect(0, False)
-    log("Demonstrations: %d episodes, %.0f%% put in the bin by the scripted controller." % (tot, 100.0 * ok / max(1, tot)))
+    log("Demonstrations: %d episodes, %.0f%% succeeded with the scripted controller." % (tot, 100.0 * ok / max(1, tot)))
     Oc = torch.cat(O)
     for k in range(0, len(Oc), 65536):
         algo.on.update(Oc[k:k + 65536].to(env.dev).float())
@@ -1826,7 +1829,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
     for r_ in range(rounds):
         ok, tot = collect(r_ + 1, True)
         err, N = fit(epochs // 2 + 500)
-        log("Round %d (the policy drives, the controller corrects): %.0f%% of %d episodes in the bin; error %.3f on %d examples (%.0f s)." % (
+        log("Round %d (the policy drives, the controller corrects): %.0f%% of %d episodes succeeded; error %.3f on %d examples (%.0f s)." % (
             r_ + 1, 100.0 * ok / max(1, tot), tot, err, N, time.time() - t0))
     with torch.no_grad():
         algo.ac.log_std.fill_(math.log(0.12))
@@ -1871,9 +1874,9 @@ def install_imitation(env):
         if not state["done"]:
             state["done"] = True
             rate = 0.0
-            if getattr(env, "policy_stage", None) == "place":      # (only a place policy can already put things in the bin)
+            if getattr(env, "policy_stage", None) == env.stage:      # (only a policy of this stage can already do it)
                 rate, tot = policy_rate(env, self, env.max_steps + 10)
-                env.log("The policy as it is puts %.0f%% of %d objects in the bin." % (rate, tot))
+                env.log("The policy as it is succeeds in %.0f%% of %d episodes." % (rate, tot))
             if rate < 50:
                 imitate(env, self, env.log, steps=500, rounds=2)
                 env.log("Now PPO, from what it imitated (its critic first learns what the states are worth).")
