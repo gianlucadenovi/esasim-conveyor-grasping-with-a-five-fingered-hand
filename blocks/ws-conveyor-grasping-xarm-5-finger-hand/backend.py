@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 57 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 58 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -3136,7 +3136,7 @@ import viz
 FORMAT = "esasim.grasp-policy/1"
 SEE_FORMAT = "esasim.grasp-see/2"          # (2: the network finds the object's pixels, then its box)
 VIEW = "esasim.grasp/1"
-SHOW_CELLS = 256                  # cells recorded for the 3D view's replays (each cell advances slowly: many are needed to keep the view playing)
+SHOW_CELLS = 32                   # cells recorded for the 3D view's replays (each one is recorded at every step: more of them slow the learning)
 REPLAY_QUEUE = 40                 # episodes waiting their turn in the 3D view (they come in bursts: the cells advance together)
 
 STAGE_NAME = {"reach": "Reach", "grasp": "Grasp", "place": "Place"}
