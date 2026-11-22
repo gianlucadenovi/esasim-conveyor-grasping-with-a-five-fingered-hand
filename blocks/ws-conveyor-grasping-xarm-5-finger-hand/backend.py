@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 72 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 73 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -3239,8 +3239,36 @@ def camera_png(env, i):
     rgb = (img[3:6].clamp(0, 1) * 255).byte().permute(1, 2, 0).cpu().numpy()
     seg = env.last_seg[i].cpu().numpy()
     rgb = np.where((seg < 0)[..., None], np.array([28, 30, 34], np.uint8), rgb)
-    rgb = np.repeat(np.repeat(rgb, 2, 0), 2, 1)
-    return viz.png_rgb(np.ascontiguousarray(rgb))
+    rgb = np.ascontiguousarray(np.repeat(np.repeat(rgb, PIC_SCALE, 0), PIC_SCALE, 1))
+    try:
+        draw_grasp_overlay(rgb, env, i)
+    except Exception:          # noqa: BLE001  (a picture without its lines rather than none)
+        pass
+    return viz.png_rgb(rgb)
+
+
+def draw_grasp_overlay(img, env, i):
+    """over the camera's picture, for whoever watches (the policy never sees it): the object's box as the camera network
+    sees it (yellow) and its long axis (orange), and the hand's grasping axis, from the thumb's tip to the middle of the
+    index's and the middle finger's tips (cyan). In a good grasp the cyan line crosses the orange one"""
+    c = env.est_c[i].float().cpu().numpy()
+    e = env.est_e[i].float().cpu().numpy()
+    y = env.est_y[i].float().cpu().numpy()
+    psi = 0.5 * math.atan2(float(y[1]), float(y[0]))
+    u = np.array([math.cos(psi), math.sin(psi), 0.0])
+    v = np.array([-math.sin(psi), math.cos(psi), 0.0])
+    top = np.array([c[0], c[1], c[2] + e[2]])
+    corners = [top + sa * e[0] * u + sb * e[1] * v for sa, sb in ((1, 1), (1, -1), (-1, -1), (-1, 1))]
+    px = [_to_pixel(env, p) for p in corners]
+    for k in range(4):
+        _line(img, px[k], px[(k + 1) % 4], (255, 214, 10), 1)
+    _line(img, _to_pixel(env, top - 1.3 * e[0] * u), _to_pixel(env, top + 1.3 * e[0] * u), (255, 120, 20), 2)
+    _, _, _, sid = _cam_geometry(env)
+    sx = env.sim.site_xpos[i].float().cpu().numpy()
+    th = sx[sid["thumb_tip"]]
+    fi = 0.5 * (sx[sid["index_tip"]] + sx[sid["middle_tip"]])
+    mid, half = 0.5 * (th + fi), 0.5 * (fi - th)
+    _line(img, _to_pixel(env, mid - 1.2 * half), _to_pixel(env, mid + 1.2 * half), (40, 220, 255), 2)
 
 
 def episode_result(info, i, stage):
