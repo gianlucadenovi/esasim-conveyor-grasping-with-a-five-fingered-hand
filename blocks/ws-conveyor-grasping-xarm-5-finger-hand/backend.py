@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 46 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 47 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -3287,18 +3287,10 @@ def pick_policy(ctx, found, stage):
             ctx.log("Not carrying on from %s: it learned in another version of the cell." % f["name"])
             continue
         ok.append(f)
-    newest = {}
-    for f in ok:
-        newest[f["stage"]] = max(newest.get(f["stage"], 0), f["stamp"])
-    cur = []
-    for f in ok:
-        later_before = [newest[s] for s in newest if order.get(s, 9) < order.get(f["stage"], 9)]
-        if later_before and f["stamp"] < max(later_before):
-            ctx.log("Not carrying on from %s (%s): a %s policy was learned after it." % (
-                f["name"], STAGE_NAME.get(f["stage"], f["stage"]), STAGE_NAME[[s for s in STAGES if newest.get(s) == max(later_before)][0]].lower()))
-            continue
-        cur.append(f)
-    cur.sort(key=lambda f: (order.get(f["stage"], 0), f["stamp"]), reverse=True)
+    # the furthest stage first; within it the best success, then the newest (a newer but worse policy of an earlier
+    # stage no longer throws away a good one of a later stage)
+    cur = list(ok)
+    cur.sort(key=lambda f: (order.get(f["stage"], 0), round(float(f["st"].get("score") or 0)), f["stamp"]), reverse=True)
     return cur
 
 
