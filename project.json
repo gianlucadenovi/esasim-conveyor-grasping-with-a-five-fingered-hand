@@ -44,8 +44,8 @@
         {
             "name": "Check · scripted controller",
             "file": "blueprints/check-scripted-controller.json",
-            "published_version": 4,
-            "nodes": 1
+            "published_version": 5,
+            "nodes": 2
         },
         {
             "name": "Learn on all my machines (a round)",

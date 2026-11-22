@@ -5,8 +5,8 @@
     },
     "name": "Check · scripted controller",
     "description": "Runs the scripted pick-and-place controller (what the policy imitates) on many cells and reports where episodes fail.",
-    "published_version": 4,
-    "updated": "2026-11-22 16:44:37",
+    "published_version": 5,
+    "updated": "2026-11-22 16:46:08",
     "graph": {
         "nodes": [
             {
@@ -16,15 +16,32 @@
                 "y": 0,
                 "params": {
                     "mode": "Diagnose the scripted controller",
-                    "accelerator": "NVIDIA GPU",
-                    "worlds": 1024,
-                    "minutes": 7,
+                    "accelerator": "CPU",
+                    "worlds": 512,
+                    "minutes": 9,
                     "diag_noise": 0,
                     "diag_finger_force": 0.7,
                     "diag_finger_kp": 1.6,
                     "seed": 3
                 },
-                "title": "Scripted controller"
+                "title": "Stronger fingers"
+            },
+            {
+                "id": "base",
+                "type": "ws-conveyor-grasping-xarm-5-finger-hand",
+                "x": 0,
+                "y": 200,
+                "params": {
+                    "mode": "Diagnose the scripted controller",
+                    "accelerator": "CPU",
+                    "worlds": 512,
+                    "minutes": 9,
+                    "diag_noise": 0,
+                    "diag_finger_force": 0,
+                    "diag_finger_kp": 0,
+                    "seed": 3
+                },
+                "title": "Fingers as built"
             }
         ],
         "edges": [],
