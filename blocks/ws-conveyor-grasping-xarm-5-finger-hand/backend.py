@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 66 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 67 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -3368,10 +3368,11 @@ def pick_policy(ctx, found, stage):
             ctx.log("Not carrying on from %s: it learned in another version of the cell." % f["name"])
             continue
         ok.append(f)
-    # the furthest stage first; within it the best success, then the newest (a newer but worse policy of an earlier
-    # stage no longer throws away a good one of a later stage)
+    # the furthest stage first (a newer policy of an earlier stage no longer throws away one of a later stage), and
+    # within it the newest: each run keeps the best snapshot it reached, and the success of runs with other settings
+    # (episode length, demonstrations) is not comparable
     cur = list(ok)
-    cur.sort(key=lambda f: (order.get(f["stage"], 0), round(float(f["st"].get("score") or 0)), f["stamp"]), reverse=True)
+    cur.sort(key=lambda f: (order.get(f["stage"], 0), f["stamp"]), reverse=True)
     return cur
 
 
