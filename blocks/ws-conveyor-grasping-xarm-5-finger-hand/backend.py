@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 82 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 83 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -909,6 +909,7 @@ EP_SECONDS = {"reach": 12.0, "grasp": 18.0, "place": 25.0}
 # so the hand is turned GRASP_YAW further than square across the object's long axis; the palm level; the grasp point
 # GRASP_DZ lower and GRASP_DY towards the thumb's side (the hand's -y)
 GRASP_YAW, GRASP_DZ, GRASP_DY = 0.6981, -0.01, 0.01
+GRASP_DY_W = 0.6                   # (and further, by this much of its half-width over 1.5 cm: a wide object between thumb and fingers)
 GRASP_WAIT_X = 0.42                # (the hand waits for an object until it is this near: the arm turns the hand freely there)
 LIFT_OK, HOLD_STEPS = 0.08, 25     # a grasp: lifted 8 cm and held for 1 s (pushed about in the last half)
 WORK_LO = np.array([-0.62, -0.08 + S.BASE_POS[1], 0.005])   # where the grasp point may go (the arm's reach around the cell; its
@@ -1699,6 +1700,7 @@ class Demo:
         self.empty = t.zeros(env.n, device=env.dev)      # (control steps in a row the hand has felt nothing in it)
         self.plan_yaw = t.zeros(env.n, device=env.dev)   # (the grasp chosen from above: the hand's turn and height)
         self.plan_z = t.zeros(env.n, device=env.dev)
+        self.plan_dy = t.zeros(env.n, device=env.dev)
 
     def reset(self, idx):
         self.phase[idx] = 0
@@ -1734,7 +1736,9 @@ class Demo:
         T = torch.stack([T[:, 0], T[:, 1], torch.where(down, self.plan_z, T[:, 2])], -1)
         want_g, z_g = want.clone(), T[:, 2].clone()
         # (the grasp point a little towards the thumb's side: along the hand's -y, as the hand will be turned)
-        T = T - GRASP_DY * torch.stack([-torch.sin(want), torch.cos(want), torch.zeros_like(want)], -1)
+        dy = torch.where(down, self.plan_dy, GRASP_DY + GRASP_DY_W * (ee[:, 1] - 0.015).clamp(min=0))
+        dy_g = dy.clone()
+        T = T - dy[:, None] * torch.stack([-torch.sin(want), torch.cos(want), torch.zeros_like(want)], -1)
         # carrying and over the bin: the fingers pointing away from the arm's base (a pose the arm reaches well there)
         out = torch.atan2(env.tgt_p[:, 1] - S.BASE_POS[1], env.tgt_p[:, 0] - S.BASE_POS[0])
         out = torch.where(out > YAW_MAX, out - 2 * math.pi, torch.where(out < -YAW_MAX, out + 2 * math.pi, out)).clamp(-YAW_MAX, YAW_MAX)
@@ -1782,6 +1786,7 @@ class Demo:
         go = nxt & (phase == 0)
         self.plan_yaw = torch.where(go, want_g, self.plan_yaw)
         self.plan_z = torch.where(go, z_g, self.plan_z)
+        self.plan_dy = torch.where(go, dy_g, self.plan_dy)
         # what the hand feels (the same test as the reward's): the thumb or the palm, and a finger, pressing
         f = env.touches()
         dig = f[:, 0:5] + f[:, 9::2] + f[:, 10::2]
