@@ -1,0 +1,57 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 94
+    },
+    "name": "tmp · check the new grasp",
+    "description": "Temporary: the scripted controller with the new grasp, on 1024 cells. To be deleted.",
+    "published_version": 1,
+    "updated": "2026-11-22 21:23:58",
+    "graph": {
+        "nodes": [
+            {
+                "id": "nets",
+                "type": "dataset",
+                "x": -400,
+                "y": 0,
+                "params": {
+                    "dataset": "36",
+                    "version": "latest",
+                    "pattern": "*.pt"
+                },
+                "title": "Networks so far"
+            },
+            {
+                "id": "diag",
+                "type": "ws-conveyor-grasping-xarm-5-finger-hand",
+                "x": 0,
+                "y": 0,
+                "params": {
+                    "mode": "Diagnose",
+                    "accelerator": "NVIDIA GPU",
+                    "worlds": 1024,
+                    "minutes": 9,
+                    "seed": 3
+                },
+                "title": "Scripted controller"
+            }
+        ],
+        "edges": [
+            {
+                "id": "nets.files>diag.policy",
+                "from": {
+                    "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "diag",
+                    "port": "policy"
+                }
+            }
+        ],
+        "notes": [],
+        "dash": {
+            "items": []
+        }
+    }
+}
