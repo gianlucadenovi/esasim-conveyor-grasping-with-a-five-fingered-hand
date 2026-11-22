@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 83 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 84 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -4188,9 +4188,11 @@ def diagnose_run(ctx):
     if see is not None:
         env.see = see
     demo = GE.Demo(env)
+    env.max_steps = int(90 / GE.CTRL_DT)
     env.reset_all()
     env.perceive()
     held = torch.zeros(n, dtype=torch.bool, device=dev)
+    tries = torch.zeros(n, device=dev)
     snap = torch.full((n, 7), float("nan"), device=dev)
     snap0 = torch.full((n, 3), float("nan"), device=dev)
     eps, t0, k = [], time.time(), 0
@@ -4198,6 +4200,8 @@ def diagnose_run(ctx):
         ph0 = demo.phase.clone()
         a = demo.act()
         for p_from, p_to in ((0, 1), (1, 2)):
+          if p_from == 1:
+            tries += ((ph0 == 1) & (demo.phase == 2)).float()
           start = (ph0 == p_from) & (demo.phase == p_to) & (torch.isnan(snap[:, 0]) if p_from == 1 else torch.isnan(snap0[:, 0]))
           if bool(start.any()):
             _, _, tc, te, ty = env.truth()
@@ -4221,13 +4225,14 @@ def diagnose_run(ctx):
         if bool(done.any()):
             idx = done.nonzero().flatten()
             for i in idx.tolist():
-                eps.append((int(env.obj[i]), bool(info["success"][i]), bool(held[i]), snap[i].tolist() + snap0[i].tolist()))
+                eps.append((int(env.obj[i]), bool(info["success"][i]), bool(held[i]), snap[i].tolist() + snap0[i].tolist(), float(tries[i]), float(env.steps[i]) * GE.CTRL_DT))
             env.reset(idx)
             sim.refresh()
             demo.reset(idx)
             held[idx] = False
             snap[idx] = float("nan")
             snap0[idx] = float("nan")
+            tries[idx] = 0
         if k % 25 == 0:
             ctx.progress(min(99, (time.time() - t0) / 4.8), "%d episodes, %d in the bin" % (len(eps), sum(e[1] for e in eps)))
     m = max(1, len(eps))
@@ -4239,6 +4244,9 @@ def diagnose_run(ctx):
     import numpy as np
     names = ["seen xy err cm", "seen top err cm", "seen yaw err deg", "hand xy off cm", "hand above top cm", "frame age s", "height cm", "| from above: xy", "top", "yaw"]
     sc = [100, 100, 57.3, 100, 100, 1, 100, 100, 100, 57.3]
+    for nt in (0, 1, 2, 3):
+        sel = [e for e in eps if (e[4] == nt if nt < 3 else e[4] >= 3)]
+        ctx.log("%s grasp attempts: %d episodes, %.0f%% in the bin, ended after %.0f s (median)" % (nt if nt < 3 else "3+", len(sel), 100.0 * sum(e[1] for e in sel) / max(1, len(sel)), float(np.median([e[5] for e in sel])) if sel else 0))
     never = [e for e in eps if math.isnan(e[3][0])]
     ctx.log("Never closed: %d of %d (%d of them in the bin)" % (len(never), len(eps), sum(e[1] for e in never)))
     for lab in sorted(per):
