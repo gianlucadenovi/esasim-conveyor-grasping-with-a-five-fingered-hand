@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 50 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 51 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -1778,9 +1778,9 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
         for k in range(steps):
             a = demo.act()
             o, _ = env.obs()
-            if k % 2 == 0:
-                O.append(o.half())
-                A.append(a.half())
+            if k % 2 == 0:            # (kept in the computer's memory, not the GPU's)
+                O.append(o.half().cpu())
+                A.append(a.half().cpu())
             if drive_policy:
                 with torch.no_grad():
                     u = actor(algo.on(o))
@@ -1804,8 +1804,10 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
         N = len(Oc)
         loss = torch.zeros(())
         for ep in range(n_epochs):
-            j = torch.randint(N, (4096,), device=Oc.device)
-            loss = ((actor(algo.on(Oc[j].float())) - Ac[j].float()) ** 2).mean()
+            j = torch.randint(N, (4096,))
+            loss = ((actor(algo.on(Oc[j].to(env.dev).float())) - Ac[j].to(env.dev).float()) ** 2).mean()
+            if ep % 200 == 0:
+                prog(0, "Learning from demonstrations: fitting the policy (%d of %d)" % (ep, n_epochs))
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
@@ -1815,7 +1817,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
     log("Demonstrations: %d episodes, %.0f%% put in the bin by the scripted controller." % (tot, 100.0 * ok / max(1, tot)))
     Oc = torch.cat(O)
     for k in range(0, len(Oc), 65536):
-        algo.on.update(Oc[k:k + 65536].float())
+        algo.on.update(Oc[k:k + 65536].to(env.dev).float())
     del Oc
     err, N = fit(epochs)
     log("The policy imitates it: error %.3f on %d examples (%.0f s)." % (err, N, time.time() - t0))
@@ -3033,6 +3035,12 @@ class PPO:
                 vl = torch.max((v - ret[idx]) ** 2, (vc - ret[idx]) ** 2).mean()
                 ent = (ls + 1.4189385).sum()
                 loss = vl if critic_only else pl + 1.0 * vl - self.ent * ent
+                bc = getattr(self, "bc", None)
+                if bc is not None and not critic_only and getattr(self, "bc_coef", 0) > 0.01:
+                    # (after learning from demonstrations: a term that keeps the policy near them, fading update by update)
+                    jb = torch.randint(len(bc[0]), (4096,))
+                    ob, ab = bc[0][jb].to(self.dev).float(), bc[1][jb].to(self.dev).float()
+                    loss = loss + self.bc_coef * ((self.ac.actor(self.on(ob)) - ab) ** 2).mean()
                 if not bool(torch.isfinite(loss)):
                     continue                                    # (a batch with a broken number in it: skipped, the networks stay sound)
                 self.opt.zero_grad(set_to_none=True)
@@ -3040,6 +3048,8 @@ class PPO:
                 torch.nn.utils.clip_grad_norm_(self.ac.parameters(), 1.0)
                 self.opt.step()
                 stats["kl"], stats["vloss"], stats["ploss"] = float(kl), float(vl.detach()), float(pl.detach())
+        if getattr(self, "bc", None) is not None and not critic_only:
+            self.bc_coef = max(0.05, getattr(self, "bc_coef", 0.5) * 0.985)
         with torch.no_grad():     # (the input scaling follows what it sees, after the update that used the old one)
             self.on.update(obs)
             self.pn.update(priv)
