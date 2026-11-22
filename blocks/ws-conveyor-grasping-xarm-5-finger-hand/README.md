@@ -6,7 +6,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 
 | | |
 |---|---|
-| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 52 |
+| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 53 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any worker, NVIDIA GPU |
@@ -31,7 +31,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `mode` What to do | select | `"Learn to reach"` |  |
-| `accelerator` Run on | select | `"auto"` | auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU |
+| `accelerator` Run on | select | `"auto"` | auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU. NVIDIA GPU: only workers that have one |
 | `round_task` Task in a round | number | `0` | 0: learns alone. 1, 2, 3...: one of the Learn nodes of a multi-worker round (all start from the policy wired in; task 1 drives the 3D view); a Combine a round node averages them |
 | `worlds` Cells learning at once | number | `2048` | Each cell is a belt, an object, the arm with the hand and the camera (CPU: at most 256) |
 | `minutes` Minutes | number | `60` |  |
