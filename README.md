@@ -21,7 +21,7 @@ The robot senses through a camera beside it and 19 touch sensors (each digit's t
 Objects of 18 training shapes are dropped onto a belt running at 5 to 10 cm/s: upright, on their side or tumbled, at any orientation. Next to the belt are the xArm 6 with the hand, a camera on a pole and a bin.
 
 1. **See**: a small convolutional network learns, from the camera's depth and colour, which pixels belong to the object and from them its box: where it is, how big, which way its long side lies.
-2. **Place** (the main stage): the policy first learns from a scripted pick-and-place controller that uses only what the robot senses (its hand and the camera's box): it imitates it, then drives itself while the controller corrects it (DAgger). Then PPO fine-tunes it on the real reward (object in the bin), with a fading term that keeps it close to the demonstrations and a capped step size.
+2. **Place** (the main stage): the policy first learns from a scripted pick-and-place controller that uses only what the robot senses (its hand, its touch sensors and the camera's box): it imitates it, then drives itself while the controller corrects it (DAgger). Then PPO fine-tunes it on the real reward (object in the bin), with a fading term that keeps it close to the demonstrations and a capped step size.
 3. **Test**: one cell in real time, on 12 shapes it never trained on (a banana, a stepped cone, a drill, a pear, a duck and others).
 
 **Reach** and **Grasp** are also available as stages of their own (grasp learns from the same demonstrations); they are not needed before Place.
@@ -33,7 +33,7 @@ All models are built by the project itself from simple shapes (boxes, cylinders,
 | Flow | What it does |
 |---|---|
 | [**1 · Learn to see**](https://esacode.com/app/projects/25/flows/84) | Trains the camera network (about 25 minutes on an RTX 3070). |
-| [**4 · Learn to place**](https://esacode.com/app/projects/25/flows/88) | Learns from demonstrations, then PPO: the stage that does the whole task. 1024 cells, 75 to 100 minutes. |
+| [**4 · Learn to place**](https://esacode.com/app/projects/25/flows/88) | Learns from demonstrations, then PPO: the stage that does the whole task. 1024 cells, 45 to 100 minutes. |
 | [**5 · Test with new objects**](https://esacode.com/app/projects/25/flows/89) | One cell, in real time, driven from the View. |
 | [2 · Learn to reach](https://esacode.com/app/projects/25/flows/85) · [3 · Learn to grasp](https://esacode.com/app/projects/25/flows/87) | Optional stages on their own. |
 
@@ -55,10 +55,10 @@ Every flow has the **Conveyor grasping (xArm + 5-finger hand)** block in the mat
 | **Physics** | MuJoCo 3 (CPU) or MuJoCo Warp (GPU): 2 ms steps, 40 ms control steps; elliptic friction cones |
 | **Arm** | xArm 6 with UFACTORY's kinematics; position servos with the motors' torques, gravity compensated; the policy says where the hand should be (x, y, z, yaw, pitch, roll) and inverse kinematics sets the joints |
 | **Hand** | 5 fingers, 15 joints, position servos with limited torque. The policy sets each finger's curl and the thumb's swing under the palm |
-| **Touch** | 19 MuJoCo touch sensors |
+| **Touch** | 19 MuJoCo touch sensors, all of them given to the policy |
 | **Camera** | 96×72 depth, colour and segmentation, 6 frames a second |
 | **Camera network** | encoder-decoder CNN: an object mask, then the box (centre, half sizes, yaw) |
-| **Scripted controller** | over the object, down, close the hand fully, lift slowly at first, carry round the arm's base, open over the bin. About 72% of training objects end in the bin |
+| **Scripted controller** | over the object, down, close the hand fully, lift slowly at first, carry round the arm's base, open over the bin. It feels the object: if its touch sensors say the hand holds nothing (no thumb or palm with a finger pressing) while it lifts or carries, it opens and goes back to try again instead of carrying an empty hand to the bin |
 | **Policy** | behaviour cloning + DAgger from the controller, then PPO with an asymmetric critic (the policy sees only what the robot could sense; the critic also sees the true object state). Network 512-256-128 |
 | **Rewards** | place: distance gained towards the bin with the object in hand, released over the bin, resting in it; dropping it or knocking it off costs |
 
@@ -77,7 +77,7 @@ Every flow has the **Conveyor grasping (xArm + 5-finger hand)** block in the mat
 ## How to run it
 
 1. Run **1 · Learn to see** (once; again only if the cell changes).
-2. Run **4 · Learn to place**. With **Training: Start over** it learns from demonstrations first; with **Continue** it carries on from the best place policy of this cell (if that one succeeds less than half the time, it learns from demonstrations again first).
+2. Run **4 · Learn to place**. With **Training: Start over** it learns from demonstrations first; with **Continue** it carries on from the newest place policy of this cell (if that one succeeds less than half the time, it learns from demonstrations again first).
 3. Run **5 · Test with new objects**, switch to **View**, choose an object and its pose, and press **Put it on the belt**. Left alone, it picks the new objects itself, one after the other.
 
 ## Settings worth knowing
@@ -86,13 +86,19 @@ On the **Conveyor grasping** block: **What to do** (the mode), **Run on**, **Cel
 
 ## Which policy is used
 
-Policies are carried on from (and tested) only if they were learned in the same version of the cell (each policy records a fingerprint of the cell). Among those, the furthest stage is used, then the best success, then the newest. A newer but worse policy of an earlier stage no longer replaces a good one.
+Policies are carried on from (and tested) only if they were learned in the same version of the cell (each policy records a fingerprint of the cell; a policy without one is from an older cell). Among those, the furthest stage is used, then the newest. Each run keeps the best snapshot it reached and never overwrites it with a worse one, so the newest policy of a stage is that run's best.
 
 ## What you get
 
 - `grasp_see_<date>.pt`: the camera network.
-- `grasp_<stage>_<date>_<success>.pt`: the policies, each saved together with the camera network it used. During learning the best policy so far is kept; a worse one never overwrites it.
+- `grasp_<stage>_<date>_<success>.pt`: the policies, each saved together with the camera network it used.
 - `see.csv`, `reach.csv`, `grasp.csv`, `place.csv`: the learning curves. `test.csv`: one row per test trial (object, pose, yaw, belt speed, grasped, in the bin, largest touch force).
+
+## How well it does now
+
+- The scripted controller puts about 72% of training objects in the bin (measured on 600 episodes).
+- The learned policy, in the test (60 s per object, new objects dropped from 25 cm): about 30% in the bin, on shapes it trained on and on new shapes alike. When it lifts and holds an object it nearly always delivers it; the misses are grasps that do not close on the object.
+- The figure the learning shows during training (the best snapshot's, from the first episodes after imitation) runs well above what the test measures: judge by the test.
 
 ## Data and licences
 
@@ -100,8 +106,9 @@ The xArm's kinematics and meshes come from [xarm_ros](https://github.com/xArm-De
 
 ## Notes
 
-- Success during learning is counted with the policy's exploration noise, over the episodes that have ended; early in a run the short episodes (often failures) end first, so the first figures run low or high before they settle.
-- The hardest objects to hold are the small and round ones (rod, small ball, egg, cube); boxes, cans, mugs and T blocks go in most reliably.
+- Success during learning is counted with the policy's exploration noise, over the episodes that have ended; early in a run the short episodes end first, so the first figures run low or high before they settle.
+- The hardest objects to hold are the small and round ones (rod, small ball, egg, cube); boxes, cans, mugs, bottles and T blocks go in most reliably.
+- PPO after imitation has so far not improved on the imitated policy within an hour on one RTX 3070 (about 900 steps a second); more demonstrations and DAgger rounds have helped more.
 - A cell whose physics blows up (rare, among thousands) is restarted, and the log counts how often.
 
 <!-- esasim: files of the project -->
