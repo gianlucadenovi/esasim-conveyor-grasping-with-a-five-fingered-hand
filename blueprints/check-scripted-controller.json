@@ -1,0 +1,51 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 93
+    },
+    "name": "Check · scripted controller",
+    "description": "Runs the scripted pick-and-place controller (what the policy imitates) on many cells and reports where episodes fail.",
+    "published_version": 1,
+    "updated": "2026-11-22 16:23:08",
+    "graph": {
+        "nodes": [
+            {
+                "id": "nets",
+                "type": "dataset",
+                "x": -400,
+                "y": 0,
+                "params": {
+                    "dataset": "36",
+                    "version": "latest",
+                    "pattern": "*.pt"
+                },
+                "title": "Networks so far"
+            },
+            {
+                "id": "diag",
+                "type": "ws-conveyor-grasping-xarm-5-finger-hand",
+                "x": 0,
+                "y": 0,
+                "params": [],
+                "title": "Scripted controller"
+            }
+        ],
+        "edges": [
+            {
+                "id": "nets.files>diag.policy",
+                "from": {
+                    "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "diag",
+                    "port": "policy"
+                }
+            }
+        ],
+        "notes": [],
+        "dash": {
+            "items": []
+        }
+    }
+}

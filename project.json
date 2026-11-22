@@ -42,6 +42,12 @@
             "nodes": 10
         },
         {
+            "name": "Check · scripted controller",
+            "file": "blueprints/check-scripted-controller.json",
+            "published_version": 1,
+            "nodes": 2
+        },
+        {
             "name": "Learn on all my machines (a round)",
             "file": "blueprints/learn-on-all-my-machines-a-round.json",
             "published_version": 0,
@@ -57,7 +63,7 @@
     "blocks": [
         {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
-            "version": 43,
+            "version": 46,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
         },
         {
