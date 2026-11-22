@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 84 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 85 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -4189,6 +4189,7 @@ def diagnose_run(ctx):
         env.see = see
     demo = GE.Demo(env)
     env.max_steps = int(90 / GE.CTRL_DT)
+    GE.S.SPAWN_X = (GE.S.SPAWN_X[1] - 0.03, GE.S.SPAWN_X[1] - 0.02)     # (as in the test: from upstream)
     env.reset_all()
     env.perceive()
     held = torch.zeros(n, dtype=torch.bool, device=dev)
