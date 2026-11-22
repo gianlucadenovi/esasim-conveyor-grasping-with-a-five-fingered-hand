@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 75 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 76 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -908,7 +908,7 @@ EP_SECONDS = {"reach": 12.0, "grasp": 18.0, "place": 25.0}
 # the camera's errors): the line along which the thumb closes against the fingers is not the hand's x but turned from it,
 # so the hand is turned GRASP_YAW further than square across the object's long axis; the palm level; the grasp point
 # GRASP_DZ lower and GRASP_DY towards the thumb's side (the hand's -y)
-GRASP_YAW, GRASP_DZ, GRASP_DY = 0.5236, -0.01, 0.01
+GRASP_YAW, GRASP_DZ, GRASP_DY = 0.6981, -0.01, 0.01
 GRASP_WAIT_X = 0.42                # (the hand waits for an object until it is this near: the arm turns the hand freely there)
 LIFT_OK, HOLD_STEPS = 0.08, 25     # a grasp: lifted 8 cm and held for 1 s (pushed about in the last half)
 WORK_LO = np.array([-0.62, -0.08 + S.BASE_POS[1], 0.005])   # where the grasp point may go (the arm's reach around the cell; its
@@ -1708,7 +1708,8 @@ class Demo:
         n, dev, phase, timer = env.n, env.dev, self.phase, self.timer
         g, R = env.hand_state()
         ec, ee, ey = env.est_c, env.est_e, env.est_y
-        T = torch.stack([ec[:, 0] - env.belt_v * 0.15, ec[:, 1], (torch.max(ec[:, 2], ec[:, 2] + ee[:, 2] - 0.05) + GRASP_DZ).clamp(min=0.004)], -1)
+        # (where the camera sees the object now, not ahead of it: an object the fingers touch slows down on the belt)
+        T = torch.stack([ec[:, 0], ec[:, 1], (torch.max(ec[:, 2], ec[:, 2] + ee[:, 2] - 0.05) + GRASP_DZ).clamp(min=0.004)], -1)
         psi = 0.5 * torch.atan2(ey[:, 1], ey[:, 0])
         want = torch.remainder(psi + math.pi + GRASP_YAW, math.pi) - math.pi / 2
         # of the two ways round (a grasp turned half a turn is the same grasp), the one the arm reaches better
