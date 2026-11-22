@@ -6,7 +6,7 @@
     "name": "Check · scripted controller",
     "description": "Runs the scripted pick-and-place controller (what the policy imitates) on many cells and reports where episodes fail.",
     "published_version": 2,
-    "updated": "2026-11-22 16:29:40",
+    "updated": "2026-11-22 16:37:34",
     "graph": {
         "nodes": [
             {

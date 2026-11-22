@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 49 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 50 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -1757,48 +1757,79 @@ class Demo:
         return a
 
 
-def imitate(env, algo, log, steps=1200, epochs=4000):
-    """the policy learns to act as the scripted controller does: the controller drives the cells (with a little noise,
-    so the policy also sees how to get back on track) while (what the policy senses, what the controller does) pairs
-    are kept; then the policy's network is fitted to them"""
+def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
+    """the policy learns to act as the scripted controller does. First the controller drives the cells (with a little
+    noise) while (what the policy senses, what the controller does) pairs are kept, and the policy's network is fitted
+    to them; then, for a few rounds (DAgger), the policy itself drives and the controller says what it would do in the
+    places the policy gets to, so that it learns to get back on track from its own mistakes"""
     import time
     torch = env.t
     t0 = time.time()
-    demo = Demo(env)
-    env.reset_all()
-    env.perceive()
-    O, A = [], []
-    ok = tot = 0
-    for k in range(steps):
-        a = demo.act()
-        o, _ = env.obs()
-        if k % 2 == 0:
-            O.append(o.half())
-            A.append(a.half())
-        r, done, info = env.step((a + 0.15 * torch.randn_like(a)).clamp(-1, 1))
-        if bool(done.any()):
-            idx = done.nonzero().flatten()
-            ok += int(info["success"][idx].sum())
-            tot += len(idx)
-            env.reset(idx)
-            env.sim.refresh()
-            demo.reset(idx)
-    O, A = torch.cat(O), torch.cat(A)
-    log("Demonstrations: %d episodes, %.0f%% put in the bin by the scripted controller; %d examples." % (tot, 100.0 * ok / max(1, tot), len(O)))
-    for k in range(0, len(O), 65536):
-        algo.on.update(O[k:k + 65536].float())
+    prog = getattr(env, "progress", None) or (lambda *a: None)
     actor = algo.ac.actor
     opt = torch.optim.Adam(actor.parameters(), lr=1e-3)
-    N = len(O)
-    for ep in range(epochs):
-        j = torch.randint(N, (4096,), device=O.device)
-        loss = ((actor(algo.on(O[j].float())) - A[j].float()) ** 2).mean()
-        opt.zero_grad(set_to_none=True)
-        loss.backward()
-        opt.step()
+    O, A = [], []
+
+    def collect(r_, drive_policy):
+        demo = Demo(env)
+        env.reset_all()
+        env.perceive()
+        ok = tot = 0
+        for k in range(steps):
+            a = demo.act()
+            o, _ = env.obs()
+            if k % 2 == 0:
+                O.append(o.half())
+                A.append(a.half())
+            if drive_policy:
+                with torch.no_grad():
+                    u = actor(algo.on(o))
+                u = u + 0.1 * torch.randn_like(u)
+            else:
+                u = a + 0.15 * torch.randn_like(a)
+            r, done, info = env.step(u.clamp(-1, 1))
+            if bool(done.any()):
+                idx = done.nonzero().flatten()
+                ok += int(info["success"][idx].sum())
+                tot += len(idx)
+                env.reset(idx)
+                env.sim.refresh()
+                demo.reset(idx)
+            if k % 20 == 0:
+                prog(0, "Learning from demonstrations: round %d of %d, step %d of %d" % (r_ + 1, rounds + 1, k, steps))
+        return ok, tot
+
+    def fit(n_epochs):
+        Oc, Ac = torch.cat(O), torch.cat(A)
+        N = len(Oc)
+        loss = torch.zeros(())
+        for ep in range(n_epochs):
+            j = torch.randint(N, (4096,), device=Oc.device)
+            loss = ((actor(algo.on(Oc[j].float())) - Ac[j].float()) ** 2).mean()
+            opt.zero_grad(set_to_none=True)
+            loss.backward()
+            opt.step()
+        return float(loss.item()), N
+
+    ok, tot = collect(0, False)
+    log("Demonstrations: %d episodes, %.0f%% put in the bin by the scripted controller." % (tot, 100.0 * ok / max(1, tot)))
+    Oc = torch.cat(O)
+    for k in range(0, len(Oc), 65536):
+        algo.on.update(Oc[k:k + 65536].float())
+    del Oc
+    err, N = fit(epochs)
+    log("The policy imitates it: error %.3f on %d examples (%.0f s)." % (err, N, time.time() - t0))
+    for r_ in range(rounds):
+        ok, tot = collect(r_ + 1, True)
+        err, N = fit(epochs // 2 + 500)
+        log("Round %d (the policy drives, the controller corrects): %.0f%% of %d episodes in the bin; error %.3f on %d examples (%.0f s)." % (
+            r_ + 1, 100.0 * ok / max(1, tot), tot, err, N, time.time() - t0))
     with torch.no_grad():
-        algo.ac.log_std.fill_(math.log(0.15))
-    log("The policy imitates it: error %.3f after %d steps (%.0f s)." % (loss.item(), epochs, time.time() - t0))
+        algo.ac.log_std.fill_(math.log(0.12))
+    # the demonstrations stay with PPO for a while: a term that keeps the policy near them, fading out
+    keep = min(len(O), 600)
+    algo.bc = (torch.cat(O[-keep:]), torch.cat(A[-keep:]))
+    algo.bc_coef = 0.5
     env.reset_all()
     env.perceive()
 
@@ -1837,7 +1868,7 @@ def install_imitation(env):
             state["done"] = True
             rate, tot = policy_rate(env, self, env.max_steps + 10)
             env.log("The policy as it is puts %.0f%% of %d objects in the bin." % (rate, tot))
-            if rate < 20:
+            if rate < 50:
                 imitate(env, self, env.log)
                 rate, tot = policy_rate(env, self, env.max_steps + 10)
                 env.log("After imitating: %.0f%% of %d objects in the bin. Now PPO." % (rate, tot))
