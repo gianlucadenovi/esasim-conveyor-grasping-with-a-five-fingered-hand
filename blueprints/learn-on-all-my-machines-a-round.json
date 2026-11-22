@@ -6,7 +6,7 @@
     "name": "Learn on all my machines (a round)",
     "description": "Three Learn nodes, each on its own worker (GPU or CPU, whichever it has), start from the same policy; their policies are averaged into one. Set the same stage on the three, run, repeat.",
     "published_version": 0,
-    "updated": "2026-11-20 21:15:06",
+    "updated": "2026-11-22 16:36:40",
     "graph": {
         "nodes": [
             {

@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 48 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 49 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -1735,7 +1735,9 @@ class Demo:
         arc = torch.stack([b0[0] + r_n * torch.cos(th_n), b0[1] + r_n * torch.sin(th_n), drop[:, 2]], -1)
         arc = torch.where(((env.tgt_p[:, :2] - drop[:, :2]).norm(dim=1) < 0.03)[:, None], drop, arc)
         tgt = torch.where((phase >= 4)[:, None], arc, tgt)
-        a[:, :3] = ((tgt - env.tgt_p) / 0.018).clamp(-1, 1) * torch.where(phase >= 3, 0.6, 1.0)[:, None]   # (carrying: steadier)
+        sp = torch.where(phase >= 3, 0.6, 1.0)
+        sp = torch.where((phase == 3) & (timer < 15), 0.25, sp)              # (the first centimetres of the lift slowly: the grip settles)
+        a[:, :3] = ((tgt - env.tgt_p) / 0.018).clamp(-1, 1) * sp[:, None]   # (carrying: steadier)
         a[:, 3] = ((want - env.tgt_e[:, 0]) / 0.10).clamp(-1, 1) * torch.where(phase >= 4, 0.35, 1.0)     # (turning gently with it in hand)
         # fingers tilted down to grasp (the arm reaches low on the belt far better so), level to carry
         want_e = torch.stack([torch.where(phase <= 3, 0.4, 0.0), torch.zeros(n, device=dev)], -1)
@@ -1747,7 +1749,7 @@ class Demo:
         timer += 1
         nxt = (phase == 0) & (d[:, :2].norm(dim=1) < 0.012) & (timer > 8)
         nxt |= (phase == 1) & (d.norm(dim=1) < 0.012) & (timer > 6)
-        nxt |= (phase == 2) & (timer > 12)
+        nxt |= (phase == 2) & (timer > 12) & (((env.curl.mean(1) > 0.95) & (timer > 24)) | (timer > 40))   # (lifted only once the hand has closed)
         nxt |= (phase == 3) & (env.tgt_p[:, 2] > 0.19) & (timer > 30)
         nxt |= (phase == 4) & ((env.tgt_p - drop).norm(dim=1) < 0.01)
         self.phase = torch.where(nxt, phase + 1, phase)
