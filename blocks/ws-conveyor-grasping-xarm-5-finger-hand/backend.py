@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 73 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 75 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -4157,6 +4157,45 @@ def test_run(ctx):
     return {"trials": len(rows), "grasped": g_, "placed": p_}
 
 
+def diagnose_run(ctx):
+    """(temporary) the scripted controller on many cells: how many objects end in the bin, per object"""
+    import torch
+    import grasp_env as GE
+    p = ctx.params
+    lib, sim, label, env = build(ctx, int(p.get("worlds") or 1024), "place", seed=3)
+    n, dev = sim.n, sim.tdev
+    env.assist = 0.0
+    see, sp = load_see(ctx, dev)
+    if see is not None:
+        env.see = see
+    demo = GE.Demo(env)
+    env.reset_all()
+    env.perceive()
+    held = torch.zeros(n, dtype=torch.bool, device=dev)
+    eps, t0, k = [], time.time(), 0
+    while time.time() - t0 < 8 * 60 and len(eps) < 4 * n:
+        r, done, info = env.step(demo.act())
+        k += 1
+        held = held | env.lifted_ever
+        if bool(done.any()):
+            idx = done.nonzero().flatten()
+            for i in idx.tolist():
+                eps.append((int(env.obj[i]), bool(info["success"][i]), bool(held[i])))
+            env.reset(idx)
+            sim.refresh()
+            demo.reset(idx)
+            held[idx] = False
+        if k % 25 == 0:
+            ctx.progress(min(99, (time.time() - t0) / 4.8), "%d episodes, %d in the bin" % (len(eps), sum(e[1] for e in eps)))
+    m = max(1, len(eps))
+    ctx.log("%d episodes: in the bin %.1f%%, held %.1f%%" % (len(eps), 100.0 * sum(e[1] for e in eps) / m, 100.0 * sum(e[2] for e in eps) / m))
+    per = collections.defaultdict(list)
+    for e in eps:
+        per[env.info[e[0]]["label"]].append(e[1])
+    ctx.log("Per object: " + ", ".join("%s %.0f%%" % (a, 100.0 * sum(b) / len(b)) for a, b in sorted(per.items())))
+    return {"episodes": len(eps)}
+
+
 def models_run(ctx):
     """the 3D view's two robots (the xArm with the hand, the objects), for the project's assets"""
     import mujoco
@@ -4193,6 +4232,8 @@ def run(ctx):
     viz.CONVEYOR_DRAWN["value"] = viz.CONVEYOR["mode"] == "flat" or bool(viz.CONVEYOR["fit"])
     if "model" in what:
         return models_run(ctx)
+    if "diagnos" in what:
+        return diagnose_run(ctx)
     if "combine" in what:
         return combine_run(ctx, None)
     if "see" in what:
