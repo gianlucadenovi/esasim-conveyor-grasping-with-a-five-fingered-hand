@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 60 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 62 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -1833,7 +1833,12 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
     # the demonstrations stay with PPO for a while: a term that keeps the policy near them, fading out
     keep = min(len(O), 600)
     algo.bc = (torch.cat(O[-keep:]), torch.cat(A[-keep:]))
-    algo.bc_coef = 0.5
+    algo.bc_coef = 1.0
+    # (small, capped steps from here: the adaptive step size grows while the demonstrations hold the policy still,
+    # and at 1e-2 PPO undid in a few updates what the policy had imitated)
+    algo.lr, algo.lr_max = 1e-4, 3e-4
+    for g in algo.opt.param_groups:
+        g["lr"] = algo.lr
     env.reset_all()
     env.perceive()
 
@@ -2953,6 +2958,7 @@ class PPO:
         self.n, self.T, self.obs_dim, self.priv_dim, self.act_dim = n_env, horizon, obs, priv, act
         self.gamma, self.lam, self.clip, self.epochs, self.mb, self.ent, self.kl_want = gamma, lam, clip, epochs, minibatches, entropy, desired_kl
         self.schedule = schedule
+        self.lr_max = 1e-3            # (the adaptive step never beyond this: larger steps undid what had been learned)
         T, n = horizon, n_env
         z = lambda *s: torch.zeros(*s, device=dev)   # noqa: E731
         self.b_obs, self.b_priv, self.b_act = z(T, n, obs), z(T, n, priv), z(T, n, act)
@@ -3023,7 +3029,7 @@ class PPO:
                         if kl > 2 * self.kl_want:
                             self.lr = max(1e-5, self.lr / 1.5)
                         elif 0 < kl < self.kl_want / 2:
-                            self.lr = min(1e-2, self.lr * 1.5)
+                            self.lr = min(getattr(self, "lr_max", 1e-2), self.lr * 1.5)
                         for g in self.opt.param_groups:
                             g["lr"] = self.lr
                 if kl > 4 * self.kl_want and stop_ok and not critic_only:
@@ -3052,7 +3058,10 @@ class PPO:
                 self.opt.step()
                 stats["kl"], stats["vloss"], stats["ploss"] = float(kl), float(vl.detach()), float(pl.detach())
         if getattr(self, "bc", None) is not None and not critic_only:
-            self.bc_coef = max(0.05, getattr(self, "bc_coef", 0.5) * 0.985)
+            self.bc_coef = max(0.1, getattr(self, "bc_coef", 1.0) * 0.993)
+            self.lr = min(self.lr, getattr(self, "lr_max", 1e-3))
+            for g in self.opt.param_groups:
+                g["lr"] = self.lr
         with torch.no_grad():     # (the input scaling follows what it sees, after the update that used the old one)
             self.on.update(obs)
             self.pn.update(priv)
@@ -3069,7 +3078,7 @@ class PPO:
         self.ac.load_state_dict(widen(self.t, sd, self.obs_dim, self.priv_dim))
         self.on.load(st["obs_norm"], self.dev)
         self.pn.load(st["priv_norm"], self.dev)
-        self.lr = float(st.get("lr") or self.lr)
+        self.lr = min(float(st.get("lr") or self.lr), 3e-4)
         # the optimizer's running moments too, when the network is the same shape: training carries on where it was
         if same and st.get("opt"):
             try:
