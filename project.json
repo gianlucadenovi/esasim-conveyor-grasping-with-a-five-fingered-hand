@@ -44,7 +44,7 @@
         {
             "name": "Check · scripted controller",
             "file": "blueprints/check-scripted-controller.json",
-            "published_version": 2,
+            "published_version": 3,
             "nodes": 2
         },
         {
@@ -63,7 +63,7 @@
     "blocks": [
         {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
-            "version": 55,
+            "version": 56,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
         },
         {

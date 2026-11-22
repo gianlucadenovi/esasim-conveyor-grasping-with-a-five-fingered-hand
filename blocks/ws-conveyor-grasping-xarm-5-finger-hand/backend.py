@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 55 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 56 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -22,6 +22,8 @@
 #   live_cell   select    Live cell while learning = "No" of No | Yes
 #   replay_every number    Replay every (s) = 20
 #   diag_noise  number    Diagnose: action noise = 0
+#   diag_finger_force number    Diagnose: finger torque (N m, 0 = as built) = 0
+#   diag_finger_kp number    Diagnose: finger stiffness (0 = as built) = 0
 #   pace        number    Test pace (1 = real time) = 1
 #   drop_cm     number    Test: drop height (cm) = 25
 #   autoplay    select    Test: pick objects when idle = "Yes" of Yes | No

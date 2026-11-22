@@ -151,6 +151,18 @@
             "default": 0
         },
         {
+            "key": "diag_finger_force",
+            "label": "Diagnose: finger torque (N m, 0 = as built)",
+            "type": "number",
+            "default": 0
+        },
+        {
+            "key": "diag_finger_kp",
+            "label": "Diagnose: finger stiffness (0 = as built)",
+            "type": "number",
+            "default": 0
+        },
+        {
             "key": "pace",
             "label": "Test pace (1 = real time)",
             "type": "number",
@@ -245,6 +257,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 55
+        "version": 56
     }
 }
