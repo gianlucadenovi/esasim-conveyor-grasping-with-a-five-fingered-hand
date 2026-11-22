@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 62 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 63 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -3354,7 +3354,7 @@ def pick_policy(ctx, found, stage):
         if order.get(f["stage"], 9) > order[stage]:
             continue
         cs = f["st"].get("cell")
-        if cs and cs != sig:
+        if cs != sig:           # (no fingerprint: from before it was recorded, so from an older cell as well)
             ctx.log("Not carrying on from %s: it learned in another version of the cell." % f["name"])
             continue
         ok.append(f)
