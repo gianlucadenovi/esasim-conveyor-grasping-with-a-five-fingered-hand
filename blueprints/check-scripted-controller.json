@@ -5,8 +5,8 @@
     },
     "name": "Check · scripted controller",
     "description": "Runs the scripted pick-and-place controller (what the policy imitates) on many cells and reports where episodes fail.",
-    "published_version": 1,
-    "updated": "2026-11-22 16:23:08",
+    "published_version": 2,
+    "updated": "2026-11-22 16:26:26",
     "graph": {
         "nodes": [
             {
@@ -26,7 +26,14 @@
                 "type": "ws-conveyor-grasping-xarm-5-finger-hand",
                 "x": 0,
                 "y": 0,
-                "params": [],
+                "params": {
+                    "mode": "Diagnose the scripted controller",
+                    "accelerator": "auto",
+                    "worlds": 1024,
+                    "minutes": 5,
+                    "diag_noise": 0,
+                    "seed": 3
+                },
                 "title": "Scripted controller"
             }
         ],

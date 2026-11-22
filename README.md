@@ -116,7 +116,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 11 blocks · version 7
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 11 blocks · version 6
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 10 blocks · version 9
-- [Check · scripted controller](blueprints/check-scripted-controller.json) · 2 blocks · version 1
+- [Check · scripted controller](blueprints/check-scripted-controller.json) · 2 blocks · version 2
 - [Learn on all my machines (a round)](blueprints/learn-on-all-my-machines-a-round.json) · 14 blocks
 - [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 3 blocks · version 15
 

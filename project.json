@@ -44,7 +44,7 @@
         {
             "name": "Check · scripted controller",
             "file": "blueprints/check-scripted-controller.json",
-            "published_version": 1,
+            "published_version": 2,
             "nodes": 2
         },
         {
