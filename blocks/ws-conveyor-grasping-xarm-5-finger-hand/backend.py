@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 59 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 60 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -9,21 +9,18 @@
 #   conveyor    Files (glb)               Conveyor model · optional · Make the 3D models: a conveyor 3D file (.glb), fitted to the simulated belt and drawn in place of the boxes
 # Outputs  ctx.output("id", "name.ext") is the path to write; ctx.write_json / ctx.write_text
 #   policy      Files (pt)                Network · grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; Combine a round: the combined policy
-#   curve       Table (csv)               Learning curve · see.csv, reach.csv, grasp.csv, place.csv, diagnosis.csv or test.csv (one row per trial)
+#   curve       Table (csv)               Learning curve · see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial)
 #   models      Files (gz)                3D models · Make the 3D models: xarm_hand.robot.json.gz and belt_objects.robot.json.gz (with the conveyor's 3D file when one is wired in), for the project's assets
 #   telemetry   Live telemetry            ctx.telemetry("channel", data) while it runs
 # Settings ctx.params["key"]
 #   mode        select    What to do = "Learn to reach" of Learn to see | Learn to reach | Learn to grasp | Learn to place | …
 #   accelerator select    Run on = "auto" of auto | NVIDIA GPU | CPU
 #   round_task  number    Task in a round = 0
-#   worlds      number    Cells learning at once = 2048
+#   worlds      number    Cells learning at once = 1024
 #   minutes     number    Minutes = 60
 #   training    select    Training = "Continue" of Continue | Start over
 #   live_cell   select    Live cell while learning = "No" of No | Yes
 #   replay_every number    Replay every (s) = 20
-#   diag_noise  number    Diagnose: action noise = 0
-#   diag_finger_force number    Diagnose: finger torque (N m, 0 = as built) = 0
-#   diag_finger_kp number    Diagnose: finger stiffness (0 = as built) = 0
 #   pace        number    Test pace (1 = real time) = 1
 #   drop_cm     number    Test: drop height (cm) = 25
 #   autoplay    select    Test: pick objects when idle = "Yes" of Yes | No

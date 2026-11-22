@@ -6,7 +6,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 
 | | |
 |---|---|
-| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 59 |
+| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 60 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any worker, NVIDIA GPU |
@@ -23,7 +23,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 | Port | Type | Description |
 |---|---|---|
 | `policy` Network | Files (pt) | grasp_see_<date>.pt (Learn to see) or grasp_<stage>_<date>_<success>.pt with the camera network it used; Combine a round: the combined policy |
-| `curve` Learning curve | Table (csv) | see.csv, reach.csv, grasp.csv, place.csv, diagnosis.csv or test.csv (one row per trial) |
+| `curve` Learning curve | Table (csv) | see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial) |
 | `models` 3D models | Files (gz) | Make the 3D models: xarm_hand.robot.json.gz and belt_objects.robot.json.gz (with the conveyor's 3D file when one is wired in), for the project's assets |
 
 ## Settings
@@ -33,14 +33,11 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 | `mode` What to do | select | `"Learn to reach"` |  |
 | `accelerator` Run on | select | `"auto"` | auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU. NVIDIA GPU: only workers that have one |
 | `round_task` Task in a round | number | `0` | 0: learns alone. 1, 2, 3...: one of the Learn nodes of a multi-worker round (all start from the policy wired in; task 1 drives the 3D view); a Combine a round node averages them |
-| `worlds` Cells learning at once | number | `2048` | Each cell is a belt, an object, the arm with the hand and the camera (CPU: at most 256) |
+| `worlds` Cells learning at once | number | `1024` | Each cell is a belt, an object, the arm with the hand and the camera. On an 8 GB GPU 1024 learn faster than 2048 (CPU: at most 256) |
 | `minutes` Minutes | number | `60` |  |
 | `training` Training | select | `"Continue"` | Continue carries on from the best policy of this stage (or the stage before) |
 | `live_cell` Live cell while learning | select | `"No"` | Yes: one extra cell plays the policy in real time for the 3D view. It shares the process with the learning and slows it down several times; No: the 3D view replays episodes of the learning cells instead |
 | `replay_every` Replay every (s) | number | `20` |  |
-| `diag_noise` Diagnose: action noise | number | `0` |  |
-| `diag_finger_force` Diagnose: finger torque (N m, 0 = as built) | number | `0` |  |
-| `diag_finger_kp` Diagnose: finger stiffness (0 = as built) | number | `0` |  |
 | `pace` Test pace (1 = real time) | number | `1` | 0: as fast as it can |
 | `drop_cm` Test: drop height (cm) | number | `25` | How high above the belt the chosen object is let go |
 | `autoplay` Test: pick objects when idle | select | `"Yes"` |  |

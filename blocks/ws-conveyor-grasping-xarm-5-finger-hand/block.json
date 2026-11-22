@@ -49,7 +49,7 @@
             "formats": [
                 "csv"
             ],
-            "help": "see.csv, reach.csv, grasp.csv, place.csv, diagnosis.csv or test.csv (one row per trial)"
+            "help": "see.csv, reach.csv, grasp.csv, place.csv, or test.csv (one row per trial)"
         },
         {
             "id": "models",
@@ -74,8 +74,7 @@
                 "Learn to place",
                 "Combine a round",
                 "Test with new objects",
-                "Make the 3D models",
-                "Diagnose the scripted controller"
+                "Make the 3D models"
             ]
         },
         {
@@ -103,10 +102,10 @@
             "key": "worlds",
             "label": "Cells learning at once",
             "type": "number",
-            "default": 2048,
+            "default": 1024,
             "min": 1,
             "max": 16384,
-            "help": "Each cell is a belt, an object, the arm with the hand and the camera (CPU: at most 256)"
+            "help": "Each cell is a belt, an object, the arm with the hand and the camera. On an 8 GB GPU 1024 learn faster than 2048 (CPU: at most 256)"
         },
         {
             "key": "minutes",
@@ -143,24 +142,6 @@
             "label": "Replay every (s)",
             "type": "number",
             "default": 20
-        },
-        {
-            "key": "diag_noise",
-            "label": "Diagnose: action noise",
-            "type": "number",
-            "default": 0
-        },
-        {
-            "key": "diag_finger_force",
-            "label": "Diagnose: finger torque (N m, 0 = as built)",
-            "type": "number",
-            "default": 0
-        },
-        {
-            "key": "diag_finger_kp",
-            "label": "Diagnose: finger stiffness (0 = as built)",
-            "type": "number",
-            "default": 0
         },
         {
             "key": "pace",
@@ -257,6 +238,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 59
+        "version": 60
     }
 }
