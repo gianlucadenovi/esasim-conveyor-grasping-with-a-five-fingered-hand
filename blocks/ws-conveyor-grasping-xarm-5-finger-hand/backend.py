@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 70 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 71 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -67,6 +67,7 @@ BELT_Y = 0.48                                    # the lane the objects are put 
 RAIL_NEAR = (-0.486 * CONV_S, -0.329 * CONV_S)   # the side frames beside the belt (y, from the centre line), as in the file:
 RAIL_FAR = (0.329 * CONV_S, 0.457 * CONV_S)      # their tops 3.7 cm above the belt
 RAIL_TOP = 0.035 * CONV_S
+SEE_Y0 = 0.42                                    # (the camera network's reference across the belt: where the lane was when it learned)
 BELT_X0 = 0.2                                    # belt centre (x): the conveyor runs from BELT_START_X to BELT_END_X
 BELT_HALF_LEN = 1.0 * CONV_S
 BELT_START_X, BELT_END_X = BELT_X0 + BELT_HALF_LEN, BELT_X0 - BELT_HALF_LEN
@@ -1128,7 +1129,7 @@ class Camera:
         shade = 0.45 + 0.55 * nrm[..., 2].abs()
         col = col * shade[..., None]
         x = (P[..., 0] - 0.25) / 0.4
-        y = (P[..., 1] - S.BELT_Y) / 0.4
+        y = (P[..., 1] - S.SEE_Y0) / 0.4
         h = P[..., 2].clamp(-0.05, 0.3) / 0.1
         img = torch.stack([x, y, h, col[..., 0], col[..., 1], col[..., 2]], 1)
         return torch.where(far[:, None], torch.zeros_like(img), img)
@@ -1163,13 +1164,13 @@ def make_seenet(torch):
             # the object's points, weighted by the mask: where they are, how they spread, how high they reach
             w = torch.sigmoid(logit) * (x[:, 3:6].abs().sum(1) > 0).float()
             ws = w.sum((1, 2)).clamp(min=1e-3)
-            X = 0.25 + 0.4 * x[:, 0]; Y = S.BELT_Y + 0.4 * x[:, 1]; H = 0.1 * x[:, 2]
+            X = 0.25 + 0.4 * x[:, 0]; Y = S.SEE_Y0 + 0.4 * x[:, 1]; H = 0.1 * x[:, 2]
             mx = (w * X).sum((1, 2)) / ws; my = (w * Y).sum((1, 2)) / ws; mh = (w * H).sum((1, 2)) / ws
             dx, dy = X - mx[:, None, None], Y - my[:, None, None]
             cxx = (w * dx * dx).sum((1, 2)) / ws; cyy = (w * dy * dy).sum((1, 2)) / ws; cxy = (w * dx * dy).sum((1, 2)) / ws
             hmax = (torch.softmax((H * 200).masked_fill(w < 0.5, -1e4).flatten(1), 1) * H.flatten(1)).sum(1)
             area = ws / 100.0
-            stats = torch.stack([(mx - 0.25) / 0.4, (my - S.BELT_Y) / 0.4, mh * 10, cxx * 400, cyy * 400, cxy * 400, hmax * 10, area,
+            stats = torch.stack([(mx - 0.25) / 0.4, (my - S.SEE_Y0) / 0.4, mh * 10, cxx * 400, cyy * 400, cxy * 400, hmax * 10, area,
                                  torch.sqrt(cxx + cyy + 1e-8) * 20, (cxx - cyy) * 400, 2 * cxy * 400, (ws > 1).float()], 1)
             o = self.h(torch.cat([f3.mean((2, 3)), stats], 1))
             c = torch.stack([mx + 0.05 * torch.tanh(o[:, 0]), my + 0.05 * torch.tanh(o[:, 1]), 0.5 * hmax + 0.03 * torch.tanh(o[:, 2])], 1)
