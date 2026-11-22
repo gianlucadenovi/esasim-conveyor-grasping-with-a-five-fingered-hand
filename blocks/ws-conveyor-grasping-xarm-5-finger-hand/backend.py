@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 51 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 52 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -3567,6 +3567,7 @@ def learn_run(ctx, stage):
     torch.manual_seed(seed)
     lib, sim, label, env = build(ctx, n, stage, seed=seed)
     n, dev = sim.n, sim.tdev
+    env.progress = ctx.progress           # (long steps before the first update, such as learning from demonstrations, report as they go)
     see, sp = load_see(ctx, dev)
     if see is not None:
         env.see = see
@@ -3979,6 +3980,20 @@ def test_run(ctx):
             env.restart_clock(idx)
             env.z_rest[0] = sim.xpos[0, env.ob, 2].float()
             ctx.telemetry(ch_ev, {"text": "Landed at %.0f cm along the belt, %.0f cm from its middle, after %.1f s" % (float(sim.xpos[0, env.ob, 0]) * 100, (float(sim.xpos[0, env.ob, 1]) - S.BELT_CY) * 100, (k + 1) * CTRL_DT)})
+        # the belt brings it along while the hand waits at rest: the robot's turn begins where the objects it learned
+        # on were put on the belt (the policy is never asked to act on what it never saw in training)
+        wall0, kw = time.time(), 0
+        while float(sim.xpos[0, env.ob, 0]) > S.SPAWN_X[1] - 0.02 and float(sim.xpos[0, env.ob, 2]) > -0.05 and kw < 1500:
+            env.step(torch.zeros(1, ACT_DIM, device=dev))
+            kw += 1
+            if every and kw % every == 0:
+                pose.send(ctx, pose.snap(0))
+            if pace > 0:
+                lag = wall0 + kw * CTRL_DT / pace - time.time()
+                if lag > 0:
+                    time.sleep(lag)
+        env.restart_clock(idx)
+        env.z_rest[0] = sim.xpos[0, env.ob, 2].float()
         env.perceive()
         wall0 = time.time()
         grasped, maxf, result = False, 0.0, "ran out of time"
