@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 65 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 66 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -1679,17 +1679,20 @@ class GraspEnv:
 # controller that uses only what the robot senses (its hand, and the camera network's box of the object) shows how:
 # the policy first imitates it (behaviour cloning), then PPO carries on with the same rewards and improves on it.
 class Demo:
-    """the scripted controller: over the object, down, close, lift, carry over the bin, open"""
+    """the scripted controller: over the object, down, close, lift, carry over the bin, open. It feels the object: if
+    its touch sensors say the hand holds nothing while it lifts or carries, it opens and goes back to try again"""
 
     def __init__(self, env):
         t = env.t
         self.env = env
         self.phase = t.zeros(env.n, dtype=t.long, device=env.dev)
         self.timer = t.zeros(env.n, device=env.dev)
+        self.empty = t.zeros(env.n, device=env.dev)      # (control steps in a row the hand has felt nothing in it)
 
     def reset(self, idx):
         self.phase[idx] = 0
         self.timer[idx] = 0
+        self.empty[idx] = 0
 
     def act(self):
         env, torch = self.env, self.env.t
@@ -1754,8 +1757,15 @@ class Demo:
         nxt |= (phase == 2) & (timer > 12) & (((env.curl.mean(1) > 0.95) & (timer > 24)) | (timer > 40))   # (lifted only once the hand has closed)
         nxt |= (phase == 3) & (env.tgt_p[:, 2] > 0.19) & (timer > 30)
         nxt |= (phase == 4) & ((env.tgt_p - drop).norm(dim=1) < 0.01)
-        self.phase = torch.where(nxt, phase + 1, phase)
-        self.timer = torch.where(nxt, torch.zeros_like(timer), timer)
+        # what the hand feels (the same test as the reward's): the thumb or the palm, and a finger, pressing
+        f = env.touches()
+        dig = f[:, 0:5] + f[:, 9::2] + f[:, 10::2]
+        held = ((dig[:, 0] > 0.3) | (f[:, 5:9].max(1).values > 0.3)) & ((dig[:, 1:5] > 0.3).sum(1) >= 1)
+        self.empty = torch.where(held | (phase < 3) | (phase > 4), torch.zeros_like(self.empty), self.empty + 1)
+        lost = (((phase == 3) & (timer > 8)) | (phase == 4)) & (self.empty >= 4)
+        self.phase = torch.where(lost, torch.zeros_like(phase), torch.where(nxt, phase + 1, phase))
+        self.timer = torch.where(nxt | lost, torch.zeros_like(timer), timer)
+        self.empty = torch.where(lost, torch.zeros_like(self.empty), self.empty)
         return a
 
 
