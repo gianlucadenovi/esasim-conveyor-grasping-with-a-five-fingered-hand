@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 71 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 72 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-22
@@ -3189,6 +3189,48 @@ def camera_pics(env, n):
     bg = (env.last_seg[:n] < 0)
     bg = (bg[..., 0] if bg.dim() == 4 else bg).cpu().numpy()
     return [(rgb[i], bg[i]) for i in range(n)]
+
+
+PIC_SCALE = 3                     # (the camera's picture shown three times its size, so the lines drawn on it read well)
+
+
+def _cam_geometry(env):
+    """(once per cell set) the camera's place and turn, for drawing points of the cell onto its picture"""
+    if getattr(env, "_cam_geo", None) is None:
+        import mujoco
+        dd = mujoco.MjData(env.mjm)
+        mujoco.mj_forward(env.mjm, dd)
+        cid = env.mjm.camera("cam").id
+        fy = 0.5 * S.CAM_H / math.tan(math.radians(S.CAM_FOVY) / 2)
+        sid = {nm: env.mjm.site(nm).id for nm in ("thumb_tip", "index_tip", "middle_tip")}
+        env._cam_geo = (np.array(dd.cam_xpos[cid]), np.array(dd.cam_xmat[cid]).reshape(3, 3), fy, sid)
+    return env._cam_geo
+
+
+def _to_pixel(env, p):
+    """a point of the cell (m) -> (column, row) on the picture shown (None: behind the camera)"""
+    pos, R, fy, _ = _cam_geometry(env)
+    c = R.T @ (np.asarray(p, float) - pos)
+    if c[2] > -1e-3:
+        return None
+    col = (c[0] / -c[2]) * fy + S.CAM_W / 2 - 0.5
+    row = -(c[1] / -c[2]) * fy + S.CAM_H / 2 - 0.5
+    return (col + 0.5) * PIC_SCALE - 0.5, (row + 0.5) * PIC_SCALE - 0.5
+
+
+def _line(img, a, b, colour, width=1):
+    if a is None or b is None:
+        return
+    n = int(max(abs(b[0] - a[0]), abs(b[1] - a[1]))) + 1
+    t = np.linspace(0, 1, max(2, n * 2))
+    cs = np.round(a[0] + (b[0] - a[0]) * t).astype(int)
+    rs = np.round(a[1] + (b[1] - a[1]) * t).astype(int)
+    h, w = img.shape[:2]
+    for dr in range(-width + 1, width):
+        for dc in range(-width + 1, width):
+            rr, cc = rs + dr, cs + dc
+            ok = (rr >= 0) & (rr < h) & (cc >= 0) & (cc < w)
+            img[rr[ok], cc[ok]] = colour
 
 
 def camera_png(env, i):
