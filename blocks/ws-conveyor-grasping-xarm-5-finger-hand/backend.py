@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 100 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 101 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1963,10 +1963,7 @@ XARM6 = [((0.0, 0.0, 267.0), (0.0, 0.0, 0.0)), ((0.0, 0.0, 0.0), (-1.5708, 0.0, 
          ((77.5, 342.5, 0.0), (-1.5708, 0.0, 0.0)), ((0.0, 0.0, 0.0), (1.5708, 0.0, 0.0)), ((76.0, 97.0, 0.0), (-1.5708, 0.0, 0.0))]
 XARM6_LIM = [(-178.2, 178.2), (-118.0, 120.0), (-178.2, 11.0), (-178.2, 178.2), (-97.0, 178.2), (-178.2, 178.2)]
 MESH_URL = "https://raw.githubusercontent.com/xArm-Developer/xarm_ros/master/xarm_description/meshes/xarm6/visual/%s.stl"
-FLANGE_X = -0.118                 # the far face of the adapter on the back of the hand, on the hand's x axis (m)
-# the hand in the flange's frame: the flange's z carries on along the hand's x (the fingers), its x is the hand's z
-R_FH = np.array([[0.0, 0.0, 1.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]])
-P_FH = np.array([-0.002, 0.0, -FLANGE_X])
+R_FH, P_FH = S.R_FH, S.P_FH       # the hand in the flange's frame (as the simulation has it)
 
 
 # ── small maths ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -2233,6 +2230,217 @@ def simple_xarm_links():
     return out
 
 
+# ── the project's rigged robot (a glTF file: the xArm and the left hand), for the 3D view ─────────────────────────
+# Its parts hang on the rig's joints: the arm's six (ctrl_1 ... nurbsCircle2) and the hand's fifteen (L_<finger>_MCP,
+# PIP, DIP; L_thumb_CMC, MCP, IP). Each part is put in the frame of the simulated link or finger it hangs on, at the
+# xArm 6's own size (the file is 1.097 times too large), so the 3D view moves it with the simulated joints. Its look:
+# each material's colour and finish; a textured material's triangles take their colour from the texture (in a few
+# tones, so its panels and screws show), as the 3D view draws robots in plain finishes. The rig's zero is the xArm 6's
+# zero turned half round about the vertical; its arm joints turn about local y, z, z, y, z, y
+RIG_SCALE = 0.9113
+RIG_ARM = {"ctrl_1": 1, "ctrl_2": 2, "ctrl_3": 3, "ctrl_4": 4, "nurbsCircle1": 5, "nurbsCircle2": 6}
+RIG_FINGERS = {"index": "index", "middle": "middle", "ring": "ring", "pinky": "little"}
+RIG_THUMB = {"CMC": "thumb_0", "MCP": "thumb_1", "IP": "thumb_2"}
+# the hand's frame (the simulation's: palm centre, fingers +x, palm facing -z) in the frame of the rig's L_wrist node
+# (rotation, and position in the file's metres), as the file has the hand
+RIG_HAND_IN_WRIST = (((0.11256, -0.99345, 0.01974), (0.99364, 0.11254, -0.00224), (0.0, 0.01987, 0.9998)), (0.00053, 0.06842, -0.00032))
+
+
+def _rg_qm(q):
+    x, y, z, w = q
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)], [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+
+
+def xarm_links_at_zero():
+    """the xArm 6's link frames (4x4, in its base's frame, m) with every joint at 0"""
+    T, out = np.eye(4), [np.eye(4)]
+    for xyz, rpy in XARM6:
+        A = np.eye(4); A[:3, :3] = rot_rpy(*rpy); A[:3, 3] = np.array(xyz) / 1000.0
+        T = T @ A
+        out.append(T.copy())
+    return out
+
+
+class RigGlb:
+    def __init__(self, path):
+        import struct
+        d = open(path, "rb").read()
+        n = struct.unpack("<I", d[12:16])[0]
+        self.js = json.loads(d[20:20 + n])
+        off = 20 + n
+        bl = struct.unpack("<I", d[off:off + 4])[0]
+        self.bin = d[off + 8:off + 8 + bl]
+
+    def view(self, k):
+        bv = self.js["bufferViews"][k]
+        o = bv.get("byteOffset", 0)
+        return self.bin[o:o + bv["byteLength"]]
+
+    def acc(self, i, ncomp):
+        a = self.js["accessors"][i]
+        bv = self.js["bufferViews"][a["bufferView"]]
+        o = bv.get("byteOffset", 0) + a.get("byteOffset", 0)
+        if a["componentType"] != 5126:
+            dt = {5121: np.uint8, 5123: np.uint16, 5125: np.uint32}[a["componentType"]]
+            return np.frombuffer(self.bin, dt, a["count"] * ncomp, o).astype(np.int64).reshape(-1, ncomp)
+        st = bv.get("byteStride") or 4 * ncomp
+        raw = np.frombuffer(self.bin, np.uint8, (a["count"] - 1) * st + 4 * ncomp, o)
+        return np.lib.stride_tricks.as_strided(raw, shape=(a["count"], 4 * ncomp), strides=(st, 1)).copy().view(np.float32).reshape(-1, ncomp).astype(float)
+
+    def world(self, zero=()):
+        """each node's world transform (the file's frame, y up); the nodes named in zero without their own turn"""
+        W, nodes = {}, self.js["nodes"]
+
+        def loc(nd):
+            Sc = np.diag(list(nd.get("scale", [1, 1, 1])) + [1])
+            R = np.eye(4)
+            if nd.get("name") not in zero:
+                R[:3, :3] = _rg_qm(nd.get("rotation", [0, 0, 0, 1]))
+            T = np.eye(4); T[:3, 3] = nd.get("translation", [0, 0, 0])
+            return T @ R @ Sc
+
+        def walk(i, P):
+            W[i] = P @ loc(nodes[i])
+            for c in nodes[i].get("children", []):
+                walk(c, W[i])
+        for r in self.js["scenes"][self.js.get("scene", 0)]["nodes"]:
+            walk(r, np.eye(4))
+        return W
+
+
+def _rg_textures(g):
+    """each texture's picture (h, w, 3, floats 0-1), decoded by MuJoCo (no other package needed)"""
+    import mujoco
+    import tempfile
+    out = {}
+    for ti, t in enumerate(g.js.get("textures", [])):
+        im = g.js["images"][t["source"]]
+        if "bufferView" not in im:
+            continue
+        data = g.view(im["bufferView"])
+        ext = ".png" if "png" in im.get("mimeType", "png") else ".jpg"
+        with tempfile.TemporaryDirectory() as d:
+            fn = os.path.join(d, "t" + ext)
+            open(fn, "wb").write(data)
+            try:
+                m = mujoco.MjModel.from_xml_string('<mujoco><asset><texture name="t" type="2d" file="%s"/></asset></mujoco>' % fn.replace("\\", "/"))
+            except Exception:      # noqa: BLE001
+                continue
+            h, w, nc = int(m.tex_height[0]), int(m.tex_width[0]), int(m.tex_nchannel[0])
+            out[ti] = np.asarray(m.tex_data[:h * w * nc], float).reshape(h, w, nc)[..., :3] / 255.0
+    return out
+
+
+def _rg_srgb(c):
+    c = np.clip(np.asarray(c, float), 0, 1)
+    return np.where(c <= 0.0031308, 12.92 * c, 1.055 * c ** (1 / 2.4) - 0.055)
+
+
+def _rg_hex(c):
+    r, g, b = [int(round(255 * float(x))) for x in np.clip(c, 0, 1)[:3]]
+    return (r << 16) | (g << 8) | b
+
+
+def _rg_finishes(g, mi, faces, uv, tex, tones=4):
+    """a primitive's triangles as finishes: [(face indices, colour, roughness, metalness, clearcoat)]"""
+    mat = g.js["materials"][mi] if mi is not None else {}
+    pbr = mat.get("pbrMetallicRoughness", {})
+    rough = float(pbr.get("roughnessFactor", 1.0))
+    metal = float(pbr.get("metallicFactor", 1.0))
+    base = pbr.get("baseColorTexture")
+    if base is not None and uv is not None and base["index"] in tex:
+        img = tex[base["index"]]
+        h, w = img.shape[:2]
+        c = uv[faces].mean(1)
+        col = img[np.clip((c[:, 1] % 1.0) * h, 0, h - 1).astype(int), np.clip((c[:, 0] % 1.0) * w, 0, w - 1).astype(int)]
+        lum = col @ np.array([0.3, 0.59, 0.11])
+        cuts = np.quantile(lum, np.linspace(0, 1, tones + 1)[1:-1]) if len(lum) > tones else []
+        band = np.searchsorted(cuts, lum)
+        out = []
+        for b in range(tones):
+            sel = np.nonzero(band == b)[0]
+            if len(sel):
+                out.append((sel, _rg_hex(col[sel].mean(0)), min(1.0, rough), 0.25, 0.0))
+        return out
+    colr = _rg_srgb(pbr.get("baseColorFactor", [0.8, 0.8, 0.8, 1])[:3])
+    glossy = rough < 0.15 and metal < 0.5
+    return [(np.arange(len(faces)), _rg_hex(colr), max(0.18, rough), metal, 0.6 if glossy else 0.0)]
+
+
+def rig_parts(path, hand_bodies):
+    """{owner: [part]} for the 3D view: owner 0 the arm's base, 1-6 its links, "hand" the palm, or a finger body's name;
+    a part {"v": (n, 3) m in the owner's frame, "f", "color", "roughness", "metalness", "clearcoat"}. hand_bodies: each
+    finger body's place in the hand's frame (m), as the simulation has it"""
+    g = RigGlb(path)
+    nodes = g.js["nodes"]
+    name = {i: nd.get("name") for i, nd in enumerate(nodes)}
+    W0 = g.world(zero=set(RIG_ARM))                 # the arm at the rig's zero (the xArm 6's zero, turned half round)
+    Wf = g.world()                                  # the hand as the file has it (its fingers at their rest)
+    G2Z = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float)
+    RZ = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]], float)
+    links = xarm_links_at_zero()
+    # the hand's frame in the file (from the L_wrist node)
+    wi = [i for i in name if name[i] == "L_wrist"][0]
+    Rw = Wf[wi][:3, :3] / np.linalg.norm(Wf[wi][:3, 0]); pw = Wf[wi][:3, 3]
+    R_hw, p_hw = np.asarray(RIG_HAND_IN_WRIST[0]), np.asarray(RIG_HAND_IN_WRIST[1])
+    Rh, Oh = Rw @ R_hw, pw + Rw @ p_hw
+    owner = {}
+
+    def walk(i, own):
+        nm = name[i] or ""
+        if nm == "arm":
+            own = 0
+        elif nm in RIG_ARM:
+            own = RIG_ARM[nm]
+        elif nm in ("left_hand", "L_wrist"):
+            own = "hand"
+        elif nm.startswith("L_"):
+            parts = nm.split("_")
+            if len(parts) == 3 and parts[1] in RIG_FINGERS:
+                own = "%s_%d" % (RIG_FINGERS[parts[1]], {"MCP": 1, "PIP": 2, "DIP": 3}[parts[2]])
+            elif len(parts) == 3 and parts[1] == "thumb":
+                own = RIG_THUMB[parts[2]]
+        owner[i] = own
+        for c in nodes[i].get("children", []):
+            walk(c, own)
+    for r in g.js["scenes"][g.js.get("scene", 0)]["nodes"]:
+        walk(r, None)
+    tex = _rg_textures(g)
+    out = {}
+    for i, nd in enumerate(nodes):
+        if "mesh" not in nd or owner.get(i) is None:
+            continue
+        own = owner[i]
+        for pr in g.js["meshes"][nd["mesh"]]["primitives"]:
+            v = g.acc(pr["attributes"]["POSITION"], 3)
+            f = g.acc(pr["indices"], 1).reshape(-1, 3) if "indices" in pr else np.arange(len(v)).reshape(-1, 3)
+            uv = g.acc(pr["attributes"]["TEXCOORD_0"], 2) if "TEXCOORD_0" in pr["attributes"] else None
+            if isinstance(own, int):                 # an arm link: the rig at its zero, z up, turned half round, to size
+                T = W0[i]
+                vw = (T[:3, :3] @ v.T).T + T[:3, 3]
+                vw = (RZ @ G2Z @ vw.T).T * RIG_SCALE
+                L = links[own]
+                vl = (vw - L[:3, 3]) @ L[:3, :3]
+            else:                                    # the hand: in its own frame, then in its body's
+                T = Wf[i]
+                vw = (T[:3, :3] @ v.T).T + T[:3, 3]
+                vl = ((vw - Oh) @ Rh) * RIG_SCALE
+                if own != "hand":
+                    vl = vl - np.asarray(hand_bodies[own])
+            for sel, col, rough, metal, coat in _rg_finishes(g, pr.get("material"), f, uv, tex):
+                ff = f[sel]
+                used = np.unique(ff)
+                remap = -np.ones(len(v), np.int64); remap[used] = np.arange(len(used))
+                out.setdefault(own, []).append({"v": vl[used], "f": remap[ff], "color": col, "roughness": rough, "metalness": metal, "clearcoat": coat})
+    return out
+
+
+def _rig_link(parts):
+    """a link drawn from the rigged model's parts, each with its own finish (in the file's units: 0.1 mm)"""
+    return {"parts": [{"v": [int(round(x)) for x in (np.asarray(p["v"]) * 10000.0).reshape(-1)], "f": [int(x) for x in np.asarray(p["f"]).reshape(-1)],
+                       "color": int(p["color"]), "roughness": round(float(p["roughness"]), 3), "metalness": round(float(p["metalness"]), 3),
+                       "clearcoat": round(float(p["clearcoat"]), 3)} for p in parts]}
 N_PADS = 16                       # (the hand's parts with pressure sensors: the palm and the 15 phalanges; see arm_model)
 
 
