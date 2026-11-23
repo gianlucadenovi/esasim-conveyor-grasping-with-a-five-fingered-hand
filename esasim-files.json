@@ -112,6 +112,13 @@
             "in": "repo"
         },
         {
+            "path": "models/xarm6_left_hand_rigged.glb",
+            "size": 16535384,
+            "sha256": "bf6b5f97fafea48533a65303484670b9da7eb5ddc297ce4c11fdab2d323fb5a6",
+            "zip": "assets/models/xarm6_left_hand_rigged.glb",
+            "in": "repo"
+        },
+        {
             "path": "models/xarm_hand.robot.json.gz",
             "size": 243428,
             "sha256": "4234b66bb1f19b3603617751b431756198b2322404ce4aee7a3c27ab6936648b",
@@ -133,5 +140,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-23T01:42:19+00:00"
+    "saved": "2026-11-23T04:38:54+00:00"
 }
