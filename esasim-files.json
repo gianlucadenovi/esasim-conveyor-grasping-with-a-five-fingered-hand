@@ -113,9 +113,16 @@
         },
         {
             "path": "models/conveyor_belt.glb",
-            "size": 9056,
-            "sha256": "126577744c4b2302377a2bf10363ff2ff772eb359f6010b5de10d1daa52bb9ac",
+            "size": 1049356,
+            "sha256": "28d15d3430cb971ba42b82a46e95ad44b5ad1a25f21455c1c321bf8c43b6a567",
             "zip": "assets/models/conveyor_belt.glb",
+            "in": "repo"
+        },
+        {
+            "path": "models/conveyor_frame.glb",
+            "size": 993452,
+            "sha256": "476fd8093b7ff988c01b1c73804103b74420589f3b0179c01f01adb37be01bfc",
+            "zip": "assets/models/conveyor_frame.glb",
             "in": "repo"
         },
         {
@@ -135,7 +142,7 @@
         {
             "path": "models/xarm_hand.robot.json.gz",
             "size": 561780,
-            "sha256": "a43d6d40d8522e40355a73016a22302d60fe6472e5e73588a1a354ffbf165af2",
+            "sha256": "4f25456bf08dbdf0b6c7877ef49819962fb3ac7475d676be5e3fbe5b98abd7e7",
             "zip": "assets/models/xarm_hand.robot.json.gz",
             "in": "repo"
         },
@@ -154,5 +161,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-23T16:22:06+00:00"
+    "saved": "2026-11-23T16:22:22+00:00"
 }
