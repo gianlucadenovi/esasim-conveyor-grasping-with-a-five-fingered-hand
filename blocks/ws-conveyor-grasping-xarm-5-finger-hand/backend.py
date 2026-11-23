@@ -1,8 +1,8 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 85 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 86 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
-# Saved: 2026-11-22
+# Saved: 2026-11-23
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
 #   policy      Files (pt, py)            Policies · several · optional · Camera networks (grasp_see_*.pt) and policies (grasp_reach/grasp/place_*.pt) to carry on from, test or combine; those left on the machine by earlier runs are found by themselves (not in a round, which
@@ -1778,6 +1778,7 @@ class Demo:
         d = g - T
         timer += 1
         nxt = (phase == 0) & (d[:, :2].norm(dim=1) < 0.012) & (timer > 8)
+        nxt |= (phase == 0) & (d[:, :2].norm(dim=1) < 0.025) & (timer > 20)   # (the camera's box jumps by a centimetre or two)
         nxt |= (phase == 1) & (d.norm(dim=1) < 0.012) & (timer > 6)
         nxt |= (phase == 1) & (d[:, :2].norm(dim=1) < 0.02) & (timer > 15)     # (held up short by the belt or the object)
         nxt |= (phase == 2) & (timer > 12) & (((env.curl.mean(1) > 0.95) & (timer > 24)) | (timer > 40))   # (lifted only once the hand has closed)
