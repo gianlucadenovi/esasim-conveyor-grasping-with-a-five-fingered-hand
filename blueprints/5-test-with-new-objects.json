@@ -6,7 +6,7 @@
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
     "published_version": 19,
-    "updated": "2026-11-23 18:26:13",
+    "updated": "2026-11-23 20:34:45",
     "graph": {
         "nodes": [
             {
@@ -266,36 +266,36 @@
                 "view": {
                     "x": 0,
                     "y": 0,
-                    "w": 6,
-                    "h": 21
+                    "w": 12,
+                    "h": 16
                 },
                 "table": {
                     "x": 6,
-                    "y": 15,
+                    "y": 31,
                     "w": 6,
                     "h": 6
                 },
                 "score": {
                     "x": 6,
-                    "y": 8,
+                    "y": 24,
                     "w": 6,
                     "h": 3
                 },
                 "camview": {
                     "x": 6,
-                    "y": 0,
+                    "y": 16,
                     "w": 3,
                     "h": 8
                 },
                 "hand": {
                     "x": 9,
-                    "y": 0,
+                    "y": 16,
                     "w": 3,
                     "h": 8
                 },
                 "touchg": {
                     "x": 6,
-                    "y": 11,
+                    "y": 27,
                     "w": 6,
                     "h": 4
                 }
