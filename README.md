@@ -135,11 +135,11 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 12 blocks · version 13
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 11 blocks · version 18
 - [Learn on all my machines (a round)](blueprints/learn-on-all-my-machines-a-round.json) · 14 blocks
-- [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 4 blocks · version 22
+- [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 4 blocks · version 23
 
 ### Workspace blocks it uses
 
-- [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 114
+- [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 115
 - [Camera picture](blocks/ws-camera-picture) · version 1
 - [Hand pressure map](blocks/ws-hand-pressure-map) · version 2
 

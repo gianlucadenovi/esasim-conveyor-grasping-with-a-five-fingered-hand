@@ -50,14 +50,14 @@
         {
             "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
             "file": "blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json",
-            "published_version": 22,
+            "published_version": 23,
             "nodes": 4
         }
     ],
     "blocks": [
         {
             "id": "ws-conveyor-grasping-xarm-5-finger-hand",
-            "version": 114,
+            "version": 115,
             "name": "Conveyor grasping (xArm + 5-finger hand)"
         },
         {

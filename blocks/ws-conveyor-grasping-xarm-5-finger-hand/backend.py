@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 114 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 115 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2757,11 +2757,11 @@ def belt_texture_png(w=512, h=448, lines=2, seed=7):
         k[0, 0] = 1.0
         n = np.real(np.fft.ifft2(np.fft.fft2(rng.standard_normal((hh, ww))) / k ** beta))
         return (n - n.mean()) / n.std()
-    img = 0.085 + 0.010 * noise(h, w, 1.6) + 0.010 * noise(h, w, 0.4) + 0.004 * np.repeat(noise(h, 8, 1.0), w // 8, axis=1)
+    img = 0.13 + 0.018 * noise(h, w, 1.6) + 0.014 * noise(h, w, 0.4) + 0.006 * np.repeat(noise(h, 8, 1.0), w // 8, axis=1)
     for _ in range(260):
         y, x, r = rng.integers(0, h), rng.integers(0, w), rng.integers(1, 3)
-        img[np.ix_(np.arange(y - r, y + r) % h, np.arange(x - r, x + r) % w)] += rng.choice([0.03, -0.025])
-    groove = {-4: -0.02, -3: -0.04, -2: -0.055, -1: -0.06, 0: -0.06, 1: -0.055, 2: -0.04, 3: 0.03, 4: 0.03, 5: 0.015}
+        img[np.ix_(np.arange(y - r, y + r) % h, np.arange(x - r, x + r) % w)] += rng.choice([0.045, -0.04])
+    groove = {-5: -0.03, -4: -0.06, -3: -0.085, -2: -0.1, -1: -0.1, 0: -0.1, 1: -0.1, 2: -0.085, 3: 0.07, 4: 0.075, 5: 0.05, 6: 0.02}
     for k in range(lines):
         wob = 1 + 0.15 * noise(h, 1, 1.2)[:, 0]
         for dx, a in groove.items():
