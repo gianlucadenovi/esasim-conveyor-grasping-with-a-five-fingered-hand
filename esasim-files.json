@@ -120,8 +120,8 @@
         },
         {
             "path": "models/cell.scene.json",
-            "size": 4069,
-            "sha256": "208163ce1d0ef3f5c89df029c814be40af1688818e5a1c03afed468fc2008053",
+            "size": 2851,
+            "sha256": "1b662f8efaf821b5e3cf872a9e60a20da4a36949bd54f02fae3df1ed40f15397",
             "zip": "assets/models/cell.scene.json",
             "in": "repo"
         },
@@ -210,5 +210,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-23T20:35:42+00:00"
+    "saved": "2026-11-23T20:40:26+00:00"
 }

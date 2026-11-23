@@ -163,7 +163,7 @@ The files the project's views draw with (3D models, textures, sounds), in [asset
 - [grasp-policy/grasp_see_20261121_1813.pt](assets/grasp-policy/grasp_see_20261121_1813.pt) · 1.4 MB
 - [models/belt_hum.wav](assets/models/belt_hum.wav) · 250 KB
 - [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 75 KB
-- [models/cell.scene.json](assets/models/cell.scene.json) · 4.0 KB
+- [models/cell.scene.json](assets/models/cell.scene.json) · 2.8 KB
 - [models/conveyor_belt.glb](assets/models/conveyor_belt.glb) · 1.0 MB
 - [models/conveyor_frame.glb](assets/models/conveyor_frame.glb) · 8.3 MB
 - [models/drop_belt.wav](assets/models/drop_belt.wav) · 28 KB
