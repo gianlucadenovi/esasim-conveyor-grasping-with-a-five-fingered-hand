@@ -98,16 +98,23 @@
             "in": "repo"
         },
         {
+            "path": "models/belt_hum.wav",
+            "size": 256044,
+            "sha256": "21bc27b1e59a36792a92adc373d9299e61515818a4f480135725858c8f2d6c05",
+            "zip": "assets/models/belt_hum.wav",
+            "in": "repo"
+        },
+        {
             "path": "models/belt_objects.robot.json.gz",
             "size": 104665,
-            "sha256": "2c7012b07b99ebe63b6ab234cb2ac3c7d0cac4b72146a9535811c1c848285c4c",
+            "sha256": "299fdfcc744142c33d6029aebbfc4c1eb045e5b01e68add6d90b92cff375ed67",
             "zip": "assets/models/belt_objects.robot.json.gz",
             "in": "repo"
         },
         {
             "path": "models/cell.scene.json",
-            "size": 3402,
-            "sha256": "91b867865fa378c1efc38e876dcfcd47e282e8719dae65ab6558cc0441af57d5",
+            "size": 4128,
+            "sha256": "33b161bbc39a6caa214b2eaee8ff488e4bb94076aabfa4179a4b28546843e57b",
             "zip": "assets/models/cell.scene.json",
             "in": "repo"
         },
@@ -126,10 +133,38 @@
             "in": "repo"
         },
         {
+            "path": "models/drop_belt.wav",
+            "size": 28844,
+            "sha256": "d650324eb0c0d540ea19d57c8a5110bd24366807053700b78b8ed5c574c4e91c",
+            "zip": "assets/models/drop_belt.wav",
+            "in": "repo"
+        },
+        {
+            "path": "models/drop_bin.wav",
+            "size": 44844,
+            "sha256": "773d8875fab0031e5d3ea88382f7f8017ae8f067ed38f3c99691698c27e7d5c9",
+            "zip": "assets/models/drop_bin.wav",
+            "in": "repo"
+        },
+        {
             "path": "models/floor.glb",
             "size": 3101464,
             "sha256": "f4dca190bd3e44c462c3364100232f3b32cf4c970afbaf72db83909079504905",
             "zip": "assets/models/floor.glb",
+            "in": "repo"
+        },
+        {
+            "path": "models/rub.wav",
+            "size": 128044,
+            "sha256": "483b2c5304dfc8a99b08253323fe0643a309275e95ef2853426f70e1c8b0e742",
+            "zip": "assets/models/rub.wav",
+            "in": "repo"
+        },
+        {
+            "path": "models/servo.wav",
+            "size": 128044,
+            "sha256": "e34e38e3a9ddbb09b9c0bb2596688bf997416d99ef5f46af1c9c74ab498ba594",
+            "zip": "assets/models/servo.wav",
             "in": "repo"
         },
         {
@@ -149,7 +184,7 @@
         {
             "path": "models/xarm_hand.robot.json.gz",
             "size": 561780,
-            "sha256": "9ec3944921689ebd6e4dab33bd82ed308317311d3ec1de981d8a0db4efa305bd",
+            "sha256": "0bb3193a286dffbbbc3d6255d8170494ac6fdbd2f748cd82e7122137c5e1a165",
             "zip": "assets/models/xarm_hand.robot.json.gz",
             "in": "repo"
         },
@@ -168,5 +203,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-23T18:26:55+00:00"
+    "saved": "2026-11-23T18:46:39+00:00"
 }

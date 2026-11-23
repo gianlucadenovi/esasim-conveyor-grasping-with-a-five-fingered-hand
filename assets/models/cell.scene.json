@@ -227,6 +227,46 @@
    "color": "#8e959f"
   }
  ],
+ "sounds": [
+  {
+   "id": "belt_motor",
+   "sound": "models/belt_hum.wav",
+   "volume": 0.45
+  },
+  {
+   "id": "servos",
+   "sound": "models/servo.wav",
+   "volume": {
+    "expr": "clamp((@cell.servo or 0) * 1.3, 0, 1)"
+   },
+   "pitch": {
+    "expr": "0.8 + 0.45 * (@cell.servo or 0)"
+   }
+  },
+  {
+   "id": "rub",
+   "sound": "models/rub.wav",
+   "volume": {
+    "expr": "(@cell.rub or 0)"
+   }
+  },
+  {
+   "id": "drop_belt",
+   "sound": "models/drop_belt.wav",
+   "on": {
+    "expr": "(@cell.drop_belt or 0) > 0"
+   },
+   "volume": 0.9
+  },
+  {
+   "id": "drop_bin",
+   "sound": "models/drop_bin.wav",
+   "on": {
+    "expr": "(@cell.drop_bin or 0) > 0"
+   },
+   "volume": 0.9
+  }
+ ],
  "cameras": [
   {
    "id": "cell",
