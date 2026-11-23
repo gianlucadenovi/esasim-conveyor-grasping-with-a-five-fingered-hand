@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 132 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 133 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2817,7 +2817,7 @@ def conveyor_mesh(path, log):
         elif "leg" in nm:           # (the feet: the legs' triangles down at the floor)
             low = v[f][:, :, 2].max(1) < lo[2] + FEET_H
             by_col.setdefault(("feet",), []).append((vs, f[low], CONVEYOR_FINISH[("feet",)]["color"]))
-            by_col.setdefault(part_colour(c, nm), []).append((vs, f[~low], part_colour(c, nm)))
+            by_col.setdefault(("frame",), []).append((vs, f[~low], CONVEYOR_FINISH[("frame",)]["color"]))
         else:
             by_col.setdefault(part_colour(c, nm), []).append((vs, f, part_colour(c, nm)))
     links, frame = [], []
@@ -2828,7 +2828,7 @@ def conveyor_mesh(path, log):
         if key == ("belt",):          # (the belt: a 3D file of its own, its rubber running round the rollers)
             CONVEYOR["belt_glb"], CONVEYOR["belt_period"] = belt_glb(items, log)
             continue
-        if key in (("frame",), ("feet",)):     # (the frame and its feet: a 3D file of their own, in their scuffed paint)
+        if key == ("frame",):          # (the frame and its legs: a 3D file of their own, in their worn paint)
             frame += items
             continue
         m = Mesh()
@@ -2841,11 +2841,11 @@ def conveyor_mesh(path, log):
     return links
 
 
-# the conveyor's look: its frame and feet glossy blue, the bearing plates at its corners metal, the motor black metal
-# (the legs keep the file's colour)
+# the conveyor's look: its frame and legs glossy blue, the bearing plates at its corners and the feet bare metal, the
+# motor black metal
 _GLOSSY_BLUE = {"color": 0x1f5fc4, "roughness": 0.18, "metalness": 0.1, "clearcoat": 1.0}
-CONVEYOR_FINISH = {("frame",): _GLOSSY_BLUE, ("feet",): _GLOSSY_BLUE,
-                   ("plates",): {"color": 0xc9cdd3, "roughness": 0.22, "metalness": 1.0, "clearcoat": 0.0},
+_METAL = {"color": 0xc9cdd3, "roughness": 0.22, "metalness": 1.0, "clearcoat": 0.0}
+CONVEYOR_FINISH = {("frame",): _GLOSSY_BLUE, ("feet",): _METAL, ("plates",): _METAL,
                    ("motor",): {"color": 0x1c1d20, "roughness": 0.32, "metalness": 0.85, "clearcoat": 0.3}}
 FEET_H = 0.05                     # (m, in the file) the feet: the legs up to this height above the floor
 
@@ -3380,12 +3380,9 @@ def sound_files(seed=11):
     hum = sum(a * np.sin(2 * np.pi * f * t + p) for f, a, p in ((50, 1.0, 0), (100, 0.35, 1.1), (150, 0.08, 2.3)))
     roll = 0.6 * _band_noise(rng, n, 25, 220, tilt=6) * (1 + 0.15 * np.sin(2 * np.pi * 1.75 * t))
     out["belt_hum.wav"] = _wav(_peak(hum + roll, 0.7))
-    # the actuators: gentle electric drives, a soft low hum (no gear rasp, no switching whine) and a faint breath of air
+    # the actuators: gentle electric drives, a soft smooth whir (air and bearings, no hum or whine to it)
     n = 2 * R
-    t = np.arange(n) / R
-    hum = sum(a * np.sin(2 * np.pi * f * t) for f, a in ((140, 1.0), (280, 0.25), (420, 0.06)))
-    hum = hum * (1 + 0.08 * np.sin(2 * np.pi * 3 * t))
-    out["servo.wav"] = _wav(_peak(hum + 0.25 * _band_noise(rng, n, 80, 600, tilt=6), 0.7))
+    out["servo.wav"] = _wav(_peak(_band_noise(rng, n, 90, 900, tilt=7), 0.7))
     # rubbing: rubber scraping on rubber, stick and slip (bursts of it, unevenly, some forty a second)
     hits = np.zeros(n)
     for k in rng.integers(0, n, 80):
@@ -3583,8 +3580,7 @@ def scene_file(mjm, conveyor):
             # (the sounds: the belt's motor all along; the servos and the fingers rubbing on the belt as loud as the cell
             # says (their missing values silent); a hit each time an object lands on the belt or in the bin)
             "sounds": [{"id": "belt_motor", "sound": "models/belt_hum.wav", "volume": 0.08},
-                       {"id": "servos", "sound": "models/servo.wav", "volume": {"expr": "clamp((@cell.servo or 0) * 0.35, 0, 0.25)"},
-                        "pitch": {"expr": "0.9 + 0.25 * (@cell.servo or 0)"}},
+                       {"id": "servos", "sound": "models/servo.wav", "volume": {"expr": "clamp((@cell.servo or 0) * 0.25, 0, 0.15)"}},
                        {"id": "rub", "sound": "models/rub.wav", "volume": {"expr": "0.6 * (@cell.rub or 0)"}},
                        {"id": "drop_belt", "sound": "models/drop_belt.wav", "on": {"expr": "(@cell.drop_belt or 0) > 0"}, "volume": 0.8},
                        {"id": "drop_bin", "sound": "models/drop_bin.wav", "on": {"expr": "(@cell.drop_bin or 0) > 0"}, "volume": 0.8}],
