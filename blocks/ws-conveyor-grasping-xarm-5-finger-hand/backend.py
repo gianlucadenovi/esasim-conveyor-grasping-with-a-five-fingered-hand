@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 104 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 105 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2179,9 +2179,26 @@ def xarm_links(cache, log):
         return None
 
 
-def camera_arm_meshes(cache, log):
-    """the xArm's link meshes for the simulation's camera (simplified to 1 cm: its pictures are 96 x 72), or None"""
+def camera_arm_meshes(cache, log, rig_file=None):
+    """the arm's link meshes for the simulation's camera (simplified to 1 cm: its pictures are 96 x 72), or None: from
+    the project's rigged model when it is wired in (rig_file), else the xArm's own"""
     import urllib.request
+    if rig_file:
+        try:
+            class _Rest(dict):          # (the hand's parts are not wanted here: the camera sees the simulated hand)
+                def __missing__(self, k):
+                    return (0.0, 0.0, 0.0)
+            parts = rig_parts(rig_file, _Rest())
+            out = {}
+            for k in range(7):
+                if not parts.get(k):
+                    raise ValueError("its link %d has no parts" % k)
+                v, f = decimate(np.concatenate([p["v"][p["f"]] for p in parts[k]]) * 1000.0, 10.0)
+                out["link_base" if k == 0 else "link%d" % k] = (np.round(v) / 1000.0, f)
+            log("The camera sees the arm as the robot's model (%s) has it." % os.path.basename(rig_file))
+            return out
+        except Exception as e:      # noqa: BLE001
+            log("The robot's model could not give the camera its arm (%s): the camera sees the xArm's own meshes." % e)
     out = {}
     try:
         os.makedirs(cache, exist_ok=True)
@@ -4551,7 +4568,8 @@ def mesh_cache():
 def run(ctx):
     what = str(ctx.params.get("mode") or "Learn to reach").lower()
     viz.budget_telemetry(ctx, 60.0 * float(ctx.params.get("minutes") or 60))      # (EsaSim keeps 20 000 live items a run)
-    S.ARM_MESHES = viz.camera_arm_meshes(mesh_cache(), ctx.log)     # (the camera sees the xArm as it is)
+    rig = [f for f in (ctx.inputs.get("policy") or []) if str(f.name).lower().endswith(".glb")]
+    S.ARM_MESHES = viz.camera_arm_meshes(mesh_cache(), ctx.log, str(rig[0].path) if rig else None)   # (the camera sees the arm as it is)
     bd = str(ctx.params.get("belt_drawing") or "flat").lower()
     viz.CONVEYOR["mode"] = "boxes" if bd.startswith("box") else "textured" if ("material" in bd or "textur" in bd) else "flat"
     glb = [f for f in (ctx.inputs.get("conveyor") or []) if str(f.name).lower().endswith(".glb")]
