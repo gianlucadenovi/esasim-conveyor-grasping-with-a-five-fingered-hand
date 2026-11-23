@@ -5,8 +5,8 @@
     },
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
-    "published_version": 13,
-    "updated": "2026-11-23 16:24:44",
+    "published_version": 14,
+    "updated": "2026-11-23 16:45:47",
     "graph": {
         "nodes": [
             {
@@ -40,7 +40,7 @@
                     "mode": "Learn to place",
                     "accelerator": "NVIDIA GPU",
                     "worlds": 1024,
-                    "minutes": 60,
+                    "minutes": 90,
                     "training": "Start over",
                     "live_cell": "No",
                     "replay_every": 0,
@@ -144,11 +144,11 @@
                 "params": {
                     "kind": "line",
                     "x": "minutes",
-                    "y": "imitation_success,success,success_from_rest,success_hand_over,failed",
+                    "y": "imitation_success,checked_success,success,success_from_rest,success_hand_over,failed",
                     "channel": "train",
                     "ymin": "0",
                     "ymax": "100",
-                    "title": "Put in the bin (%): while learning from demonstrations; then all, from the hand at rest, from the hand over it; dropped (%)"
+                    "title": "Put in the bin (%): learning from demonstrations; checked without exploration; then all, from rest, from the hand over it; dropped (%)"
                 },
                 "title": "Success"
             },
@@ -172,7 +172,7 @@
                 "x": 760,
                 "y": 320,
                 "params": {
-                    "fields": "train.imitation_success,train.success,train.success_from_rest,train.success_hand_over,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
+                    "fields": "train.imitation_success,train.checked_success,train.success,train.success_from_rest,train.success_hand_over,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
                     "style": "number",
                     "decimals": 1
                 },
