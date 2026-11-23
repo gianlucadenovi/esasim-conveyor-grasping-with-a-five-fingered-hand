@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 112 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 113 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2536,55 +2536,6 @@ def _under(mjm, b, top):
 
 
 # ── a 3D file of the conveyor (glTF binary), baked into the cell model ────────────────────────────────────────────
-def glb_part_picture(data, word="belt"):
-    """the picture of the first part of a .glb whose name has word in it (its material's colour texture, a data URL),
-    with the size one picture covers on it, (along its length, across it) in m, from its texture coordinates; or None"""
-    import base64
-    import struct
-    try:
-        n = struct.unpack("<I", data[12:16])[0]
-        js = json.loads(data[20:20 + n])
-        off = 20 + n
-        bl = struct.unpack("<I", data[off:off + 4])[0]
-        binc = data[off + 8:off + 8 + bl]
-
-        def acc(i):
-            a = js["accessors"][i]
-            bv = js["bufferViews"][a["bufferView"]]
-            k = {"VEC2": 2, "VEC3": 3}[a["type"]]
-            st = bv.get("byteStride") or 4 * k
-            o = bv.get("byteOffset", 0) + a.get("byteOffset", 0)
-            return np.frombuffer(binc[o:o + st * a["count"]], dtype=np.float32).reshape(a["count"], st // 4)[:, :k].astype(float)
-        for m in js.get("meshes", []):
-            if word not in str(m.get("name", "")).lower():
-                continue
-            pr = m["primitives"][0]
-            mat = js["materials"][pr["material"]]
-            t = (mat.get("pbrMetallicRoughness", {}).get("baseColorTexture")
-                 or mat.get("extensions", {}).get("KHR_materials_pbrSpecularGlossiness", {}).get("diffuseTexture"))
-            if not t or "TEXCOORD_0" not in pr["attributes"]:
-                return None
-            im = js["images"][js["textures"][t["index"]]["source"]]
-            bv = js["bufferViews"][im["bufferView"]]
-            raw = binc[bv.get("byteOffset", 0):bv.get("byteOffset", 0) + bv["byteLength"]]
-            P, U = acc(pr["attributes"]["POSITION"]), acc(pr["attributes"]["TEXCOORD_0"])
-            ext = P.max(0) - P.min(0)
-            lng, wid = int(np.argmax(ext)), int(np.argsort(ext)[1])     # (its length, its width: in the file's axes)
-            # metres per whole picture, along and across: from how far the coordinates run over the part
-            def per(ax):
-                c = [abs(np.corrcoef(U[:, j], P[:, ax])[0, 1]) for j in range(2)]
-                j = int(np.argmax(c))
-                du = U[:, j].max() - U[:, j].min()
-                return j, ext[ax] / max(du, 1e-6)
-            ja, along = per(lng)
-            _, across = per(wid)
-            return {"image": "data:%s;base64,%s" % (im.get("mimeType", "image/png"), base64.b64encode(raw).decode()),
-                    "along": float(along), "across": float(across), "along_uv": "uv"[ja]}
-    except Exception:      # noqa: BLE001
-        return None
-    return None
-
-
 def glb_meshes(data):
     """the triangles of a .glb: [(vertices (m, Z up), faces, colour)] with every node's transform applied"""
     import struct
@@ -2717,7 +2668,6 @@ def conveyor_mesh(path, log):
     parts = glb_meshes(data)
     if not parts:
         return None
-    pic = glb_part_picture(data)
     allv = np.concatenate([p[0] for p in parts])
     lo, hi = allv.min(0), allv.max(0)
     ext = hi - lo
@@ -2767,22 +2717,14 @@ def conveyor_mesh(path, log):
         items = [it for it in items if len(it[1])]
         if not items:
             continue
+        if key == ("belt",):          # (the belt: a 3D file of its own, its texture running round the rollers)
+            CONVEYOR["belt_glb"], CONVEYOR["belt_period"] = belt_glb(items, log)
+            continue
         m = Mesh()
         for v, f, _ in items:
             vv, ff = decimate(v[f] * 1000.0, 2.0) if len(f) > 3000 else (v * 1000.0, f)
             m.add(vv / 1000.0, ff)
-        tex = None
-        if key == ("belt",):
-            tex = dict(BELT_TEXTURE)
-            if pic:            # (the belt's own picture, from the file, at the file's own scale on the belt)
-                # (one picture every BELT_PERIOD along the belt, its proportions kept across: within a few % of the
-                # file's own scale, and the belt's position is sent within that period, so it scrolls without a seam)
-                across = BELT_PERIOD * pic["across"] / pic["along"]
-                tex.update({"pattern": "image", "image": pic["image"], "along_uv": pic["along_uv"],
-                            "period": round(BELT_PERIOD * 1000, 1), "across": round(across * 1000, 1)})
-                log("The belt's own texture: one picture every %.2f m along the belt (%.2f m in the file), %.2f m across; it "
-                    "scrolls with the belt (a 3D view that draws link textures)." % (BELT_PERIOD, pic["along"] * float(sc[0]), across))
-        links.append((items[0][2], m, tex, CONVEYOR_FINISH.get(key)))
+        links.append((items[0][2], m, CONVEYOR_FINISH.get(key)))
     return links
 
 
@@ -2795,21 +2737,72 @@ CONVEYOR_FINISH = {("frame",): _GLOSSY_BLUE, ("feet",): _GLOSSY_BLUE,
 FEET_H = 0.05                     # (m, in the file) the feet: the legs up to this height above the floor
 
 
-# the texture of the belt's surface, for the 3D view: rubber with a fine grain and chevrons pointing the way the belt
-# runs (towards -x), one every BELT_PERIOD, laid along x over the belt part and scrolled with the objects model's
-# joint 0 (belt_x: where the belt is within a period, in mm)
-BELT_PERIOD = 2.0                 # (m) the belt's texture repeats every BELT_PERIOD along it; its position is sent within it
-BELT_TEXTURE = {"pattern": "belt", "period": BELT_PERIOD * 1000, "marks": 20, "axis": "x", "direction": -1, "follow_joint": 0,
-                "color": 0x1d1f23, "mark_color": 0x3a3f47}
+# the belt's rubber: a seamless picture in the project's assets (lines across the belt, the grain and wear of the
+# rubber), one every BELT_TEX_ALONG along the belt (a whole number of them round its loop) and BELT_TEX_ACROSS across
+BELT_TEX = "textures/belt_rubber.png"
+BELT_TEX_ALONG, BELT_TEX_ACROSS = 0.40, 0.34          # (m)
+
+
+def belt_glb(items, log):
+    """the belt as a 3D file of its own (glTF binary, Z up, in the cell's metres) and the length one picture of its
+    texture covers (m): one surface round the rollers, its texture coordinates along the loop (u, in pictures: the top
+    from the belt's start, round the far roller, back underneath and round the near one) and across it (v)"""
+    tri = np.concatenate([v[f] for v, f, _ in items])          # (n, 3 corners, xyz)
+    p = tri.reshape(-1, 3)
+    x0, x1, z0, z1 = p[:, 0].min(), p[:, 0].max(), p[:, 2].min(), p[:, 2].max()
+    r, zc = (z1 - z0) / 2, (z0 + z1) / 2                       # (the rollers' radius and height, from the belt round them)
+    xl, xr = x0 + r, x1 - r
+    L = xr - xl
+    T = 2 * L + 2 * math.pi * r                                # (the loop's length)
+    x, z = p[:, 0], p[:, 2]
+    s = np.where(x > xr, L + r * (math.pi / 2 - np.arctan2(z - zc, x - xr)),
+                 np.where(x < xl, 2 * L + math.pi * r + r * np.mod(-math.pi / 2 - np.arctan2(z - zc, x - xl), 2 * math.pi),
+                          np.where(z >= zc, x - xl, L + math.pi * r + (xr - x)))).reshape(-1, 3)
+    seam = (s.max(1) - s.min(1)) > T / 2                       # (a triangle across the loop's start: its corners on one side)
+    s = np.where(seam[:, None] & (s < T / 2), s + T, s)
+    period = T / max(1, round(T / BELT_TEX_ALONG))
+    uv = np.stack([s.reshape(-1) / period, (p[:, 1] - p[:, 1].min()) / BELT_TEX_ACROSS], 1)
+    fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+    _, key = np.unique(np.round(p / 1e-4).astype(np.int64), axis=0, return_inverse=True)
+    key = key.reshape(-1)
+    nrm = np.zeros((key.max() + 1, 3))
+    np.add.at(nrm, key, np.repeat(fn, 3, axis=0))              # (each corner: the faces at its place, so the rollers look round)
+    nrm = nrm[key] / np.maximum(np.linalg.norm(nrm[key], axis=1, keepdims=True), 1e-12)
+    log("The belt: one surface %.2f m round its rollers, its texture %d times round it (one every %.3f m), %.2f m across."
+        % (T, round(T / period), period, BELT_TEX_ACROSS))
+    return glb_bytes(p, nrm, uv, "belt", 0x1d1f23), period
+
+
+def glb_bytes(pos, nrm, uv, material, color):
+    """a glTF binary of one mesh, its corners not shared (pos, nrm: (n, 3), uv: (n, 2)), with one material by name"""
+    import struct
+    pos, nrm, uv = (np.asarray(a, np.float32) for a in (pos, nrm, uv))
+    idx = np.arange(len(pos), dtype=np.uint32)
+    blobs, views, accs, off = [], [], [], 0
+    for arr, typ, target in ((pos, "VEC3", 34962), (nrm, "VEC3", 34962), (uv, "VEC2", 34962), (idx, "SCALAR", 34963)):
+        b = arr.tobytes()
+        views.append({"buffer": 0, "byteOffset": off, "byteLength": len(b), "target": target})
+        accs.append({"bufferView": len(views) - 1, "componentType": 5125 if arr.dtype == np.uint32 else 5126, "count": len(arr), "type": typ})
+        blobs.append(b + b"\0" * (-len(b) % 4))
+        off += len(blobs[-1])
+    accs[0]["min"], accs[0]["max"] = pos.min(0).tolist(), pos.max(0).tolist()
+    rgb = [((int(color) >> sh) & 255) / 255.0 for sh in (16, 8, 0)]
+    js = {"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0, "name": material}],
+          "meshes": [{"name": material, "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, "indices": 3, "material": 0}]}],
+          "materials": [{"name": material, "pbrMetallicRoughness": {"baseColorFactor": rgb + [1.0], "metallicFactor": 0.0, "roughnessFactor": 0.9}}],
+          "buffers": [{"byteLength": off}], "bufferViews": views, "accessors": accs}
+    j = json.dumps(js, separators=(",", ":")).encode()
+    j += b" " * (-len(j) % 4)
+    binc = b"".join(blobs)
+    return (struct.pack("<III", 0x46546C67, 2, 28 + len(j) + len(binc)) + struct.pack("<I", len(j)) + b"JSON" + j
+            + struct.pack("<I", len(binc)) + b"BIN\0" + binc)
 
 
 def objects_model(info, conveyor=None):
-    """belt_objects.robot.json: the belt's slide (along x: its value, where the belt is within BELT_PERIOD, scrolls the
-    texture of the conveyor's belt), each object on its own free mount, then the conveyor (its 3D file, if given, as
-    fixed parts; its belt a part of its own, with that texture)"""
+    """belt_objects.robot.json: each object on its own free mount, then the conveyor (its 3D file, if given, as fixed
+    parts with their finishes; its belt is a 3D file of its own, conveyor_belt.glb)"""
     joints, links = [], [{}]
-    joints.append({"name": "belt_x", "type": "prismatic", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [1, 0, 0]})
-    links.append({})       # (no slats: the belt's own surface carries a texture that the 3D view scrolls with this joint)
     for k, o in enumerate(info):
         par = "base"
         for nm, typ, axis in (("x", "prismatic", [1, 0, 0]), ("y", "prismatic", [0, 1, 0]), ("z", "prismatic", [0, 0, 1]),
@@ -2826,12 +2819,9 @@ def objects_model(info, conveyor=None):
             m.add(v, f, quat_R(S.part_quat(eul)), pos)
         links[-1] = m.link(hexcol(o["rgba"]))
     # the conveyor's parts last: the 3D view gives the joint items' values to the joints in their order, fixed ones too
-    for k, (col, m, tex, fin) in enumerate(conveyor or []):
+    for k, (col, m, fin) in enumerate(conveyor or []):
         joints.append({"name": "conveyor_%d" % k, "type": "fixed", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [0, 0, 1]})
-        lk = m.link(col) if not fin else _rig_link([dict(fin, v=np.concatenate(m.v), f=np.concatenate(m.f))])
-        if tex and lk:
-            lk["texture"] = tex
-        links.append(lk)
+        links.append(m.link(col) if not fin else _rig_link([dict(fin, v=np.concatenate(m.v), f=np.concatenate(m.f))]))
     return {"kind": "esasim.robot/1", "robot": OBJS, "units": "mm", "scale": 0.1, "angle_units": "rad", "joints": joints, "links": links,
             "base": {"xyz": [0, 0, 0], "rpy": [0, 0, 0]}}
 
@@ -2869,6 +2859,13 @@ def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=Non
         with open(ctx.output(port, "%s.robot.json.gz" % name), "wb") as fh:
             fh.write(gzip.compress(raw, 9))
         ctx.log("%s.robot.json.gz: %d joints, %d KB." % (name, len(model["joints"]), len(gzip.compress(raw, 9)) // 1024))
+    with open(ctx.output(port, "cell.scene.json"), "w", encoding="utf-8") as fh:
+        json.dump(scene_file(mjm, bool(conv)), fh, indent=1)
+    if conv and CONVEYOR.get("belt_glb"):
+        with open(ctx.output(port, "conveyor_belt.glb"), "wb") as fh:
+            fh.write(CONVEYOR["belt_glb"])
+    ctx.log("cell.scene.json: the cell for the 3D scene view (scene: models/cell.scene.json)%s." % (
+        ", with the belt's own 3D file (conveyor_belt.glb) and its texture %s" % BELT_TEX if conv and CONVEYOR.get("belt_glb") else ""))
 
 
 # ── the arm's angles: inverse kinematics on the hand's pose ───────────────────────────────────────────────────────
@@ -2942,38 +2939,44 @@ class ArmIK:
         return q, e
 
 
-# ── the items the 3D view gets ────────────────────────────────────────────────────────────────────────────────────
-CONVEYOR_DRAWN = {"value": False}     # (set when the objects model carries the conveyor's 3D file)
-
-
-def cell_objects(mjm):
-    """the cell around the robot (scene channel): belt, frame, rails, bin, pedestal, the camera on its pole"""
+# ── the cell for the 3D scene view (esasim.scene/2) ──────────────────────────────────────────────────────────────
+def scene_file(mjm, conveyor):
+    """the cell as the 3D scene view draws it (models/cell.scene.json, in metres, its ground at 0: the cell raised by
+    the pedestal's height): the arm and the objects (their joints from the telemetry channel cell), the conveyor's belt
+    (its texture scrolled by how far the belt has run), the bin, the pedestal, the camera on its pole; the run's events
+    at the top right. Without the conveyor's 3D file, the belt and its frame are boxes"""
     import mujoco
     d = mujoco.MjData(mjm)
     mujoco.mj_forward(mjm, d)
-    objs = []
-    belt_parts = () if CONVEYOR_DRAWN["value"] else (("belt_frame", 0x5a6068), ("rail_l", 0x9aa1aa), ("rail_r", 0x9aa1aa))
-    for nm, col in belt_parts + (("bin_floor", 0x2f6db5), ("bin_w1", 0x3a7fd0),
-                    ("bin_w2", 0x3a7fd0), ("bin_w3", 0x3a7fd0), ("bin_w4", 0x3a7fd0), ("bin_stand", 0x4a4f57)):
+
+    def up(p):
+        return [round(float(p[0]), 4), round(float(p[1]), 4), round(float(p[2]) - FLOOR_Z, 4)]
+    models = [{"id": "arm", "model": "models/%s.robot.json.gz" % ARM, "position": up((S.BASE_POS[0], S.BASE_POS[1], 0)),
+               "rotation": [0, 0, round(math.degrees(S.BASE_YAW), 3)], "joints": "@cell.arm", "angle_units": "rad"},
+              {"id": "objects", "model": "models/%s.robot.json.gz" % OBJS, "position": up((0, 0, 0)), "joints": "@cell.objects", "angle_units": "rad"}]
+    boxes = [("bin_floor", "#2f6db5"), ("bin_w1", "#3a7fd0"), ("bin_w2", "#3a7fd0"), ("bin_w3", "#3a7fd0"), ("bin_w4", "#3a7fd0"), ("bin_stand", "#4a4f57")]
+    if conveyor and CONVEYOR.get("belt_glb"):
+        models.append({"id": "belt", "model": "models/conveyor_belt.glb", "up": "z", "position": up((0, 0, 0)),
+                       "materials": {"belt": {"texture": BELT_TEX, "scroll": [{"expr": "@cell.travel / %.6f" % CONVEYOR["belt_period"]}, 0],
+                                              "roughness": 0.88, "metalness": 0.0}}})
+    elif not conveyor:
+        boxes = [("belt_frame", "#5a6068"), ("rail_l", "#9aa1aa"), ("rail_r", "#9aa1aa")] + boxes
+        models.append({"id": "belt", "shape": "box", "position": up((S.BELT_X0, S.BELT_CY, -0.012)), "size": [round(CONVEYOR_LEN, 4), round(S.BELT_W, 4), 0.024], "color": "#1d1f23"})
+    for nm, col in boxes:
         g = mjm.geom(nm).id
-        objs.append({"id": nm, "kind": "box", "center": [round(float(x) * 1000, 1) for x in d.geom_xpos[g]],
-                     "size": [round(float(x) * 2000, 1) for x in mjm.geom_size[g]], "color": col})
-    if not CONVEYOR_DRAWN["value"]:
-        objs.append({"id": "belt", "kind": "box", "center": [round(S.BELT_X0 * 1000, 1), round(S.BELT_CY * 1000, 1), -12.0],
-                     "size": [round(CONVEYOR_LEN * 1000, 1), round(S.BELT_W * 1000, 1), 24.0], "color": 0x1d1f23, "roughness": 0.95})
-    objs.append({"id": "pedestal", "kind": "box", "center": [round(1000 * S.BASE_POS[0], 1), round(1000 * S.BASE_POS[1], 1), -375.0], "size": [180.0, 180.0, 750.0], "color": 0x3a3f47})
-    cam = mjm.camera("cam").id
-    R = d.cam_xmat[cam].reshape(3, 3)
-    objs.append({"id": "camera", "kind": "camera", "pos": [round(float(x) * 1000, 1) for x in d.cam_xpos[cam]],
-                 "forward": [round(float(x), 4) for x in -R[:, 2]], "up": [round(float(x), 4) for x in R[:, 1]],
-                 "hfov": round(2 * math.degrees(math.atan(math.tan(math.radians(S.CAM_FOVY) / 2) * S.CAM_W / S.CAM_H)), 1),
-                 "aspect": round(S.CAM_W / S.CAM_H, 3), "frustum": 250, "stand_to": -750})
-    # (the camera's picture is shown in a view of its own, beside the 3D view: not on a sheet in the cell)
-    # the two robots where the simulation has them: the xArm's base on its pedestal at the origin, the objects' mounts
-    # at the origin too (else the view stands robots without a place 0.8 m apart)
-    objs.append({"id": ARM, "kind": "robot", "robot": ARM, "pos": [round(1000 * S.BASE_POS[0], 1), round(1000 * S.BASE_POS[1], 1), 0], "rpy": [0, 0, round(S.BASE_YAW, 6)]})
-    objs.append({"id": OBJS, "kind": "robot", "robot": OBJS, "pos": [0, 0, 0], "rpy": [0, 0, 0]})
-    return {"units": "mm", "up": "z", "floor": -750, "objects": objs}
+        models.append({"id": nm, "shape": "box", "position": up(d.geom_xpos[g]), "size": [round(float(x) * 2, 4) for x in mjm.geom_size[g]], "color": col})
+    models.append({"id": "pedestal", "shape": "box", "position": up((S.BASE_POS[0], S.BASE_POS[1], FLOOR_Z / 2)), "size": [0.18, 0.18, round(-FLOOR_Z, 4)], "color": "#3a3f47"})
+    cp = d.cam_xpos[mjm.camera("cam").id]
+    models.append({"id": "camera", "shape": "box", "position": up(cp), "size": [0.07, 0.07, 0.06], "color": "#20242c"})
+    models.append({"id": "camera_pole", "shape": "cylinder", "radius": 0.012, "height": round(float(cp[2]) - FLOOR_Z, 4),
+                   "position": up((cp[0], cp[1], (float(cp[2]) + FLOOR_Z) / 2)), "color": "#8e959f"})
+    c = ((S.BASE_POS[0] + S.BELT_X0) / 2, (S.BASE_POS[1] + S.BELT_CY) / 2, 0.0)
+    return {"format": "esasim.scene/2", "title": "Conveyor grasping", "units": "m", "up": "z",
+            "data": {"delay": 1.5, "smooth": 0.1, "events": "events"},
+            "environment": {"sky": "day", "ground": {"type": "concrete", "size": 60}},
+            "models": models,
+            "cameras": [{"id": "cell", "type": "orbit", "position": up((c[0] + 1.6, c[1] - 1.9, 1.1)), "look_at": up(c)}], "start": "cell",
+            "overlay": [{"type": "events", "at": "top-right", "count": 4}]}
 
 
 class Pose3D:
@@ -2992,9 +2995,7 @@ class Pose3D:
         self.fq_t = env.t.as_tensor(self.fq, device=env.dev)
         self.nobj = len(env.info)
         self.err = 0.0
-        self.scene = cell_objects(mjm)      # (sent again every few seconds: a view opened later still gets the cell)
         self.n_sent = 0
-        self.last_slide = None
         self.last_obj, self.last_eul = None, None
         self.n_q = None
 
@@ -3020,48 +3021,34 @@ class Pose3D:
         return {c: (q[k], f[k], fq[k], int(ob[k]), op[k], oq[k], float(bt[k])) for k, c in enumerate(cells)}
 
     def items(self, sn):
+        """one item of the channel cell: the arm's joints (its six, the hand fixed, the fingers), the objects' (each on
+        its free mount: the one in play where it is, the others under the floor) and how far the belt has run (m)"""
         q, _, fq, o, op, oq, belt = sn            # (the arm's angles are the simulated arm's own)
         arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq]
         if o != self.last_obj:
             self.last_eul = None
         self.last_obj = o
         r, p, y = self.last_eul = rpy_near(quat_R(oq), self.last_eul)
-        gap = BELT_PERIOD
-        slide = round((belt % gap) * 1000, 1)               # (the texture repeats every gap: where in it the belt is)
-        # when the slats wrap round to the start of a gap, the view must not slide them back across it (it eases
-        # between items): that item carries no value for them, so they jump, unseen, to where the next one puts them
-        wrap = self.last_slide is not None and slide > self.last_slide + 0.5 * gap * 1000
-        self.last_slide = slide
-        if wrap:
-            slide = None
-        objs = [slide] + [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0] * self.nobj      # (every item complete: the objects not in play under the floor)
-        objs[1 + 6 * o:7 + 6 * o] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000, 1), round(y, 4), round(p, 4), round(r, 4)]
+        objs = [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0] * self.nobj      # (every item complete: the objects not in play under the floor)
+        objs[6 * o:6 * o + 6] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000, 1), round(y, 4), round(p, 4), round(r, 4)]
         self.n_q = (len(arm), len(objs))
-        return ({"robot": ARM, "units": "rad", "q": arm}, {"robot": OBJS, "units": "rad", "q": objs})
+        return {"arm": arm, "objects": objs, "travel": round(-float(belt), 4)}
 
     def cut(self, ctx):
         """a break between two episodes: the 3D view eases from one item to the next, so without it the arm and the
-        object would glide from where one episode ended to where the next begins (an object flying across the cell,
-        or up from under the floor where the objects not in play wait). An item with no values in it is not eased
-        to or from: the view holds the last pose, then jumps to the next episode's first one"""
-        self.last_slide, self.last_obj, self.last_eul = None, None, None
+        object would glide from where one episode ended to where the next begins. An item with no values in it is not
+        eased to or from: the view holds the last pose, then jumps to the next episode's first one"""
+        self.last_obj, self.last_eul = None, None
         if not self.n_q:
             return
-        ctx.telemetry("joints", {"robot": ARM, "units": "rad", "q": [None] * self.n_q[0]})
-        time.sleep(0.002)
-        ctx.telemetry("joints", {"robot": OBJS, "units": "rad", "q": [None] * self.n_q[1]})
+        ctx.telemetry("cell", {"arm": [None] * self.n_q[0], "objects": [None] * self.n_q[1], "travel": None})
         time.sleep(0.03)
 
     def send(self, ctx, sn):
-        if self.n_sent % 40 == 0:
-            ctx.telemetry("scene", self.scene)
         self.n_sent += 1
-        a, o = self.items(sn)
         if sn[1] is not None and self.n_sent % 3 == 1:
             ctx.telemetry("touch", touch_row(sn[1]))
-        ctx.telemetry("joints", a)
-        time.sleep(0.002)       # (the 3D view takes two items of a channel with the same time stamp for one: the objects' would be lost)
-        ctx.telemetry("joints", o)
+        ctx.telemetry("cell", self.items(sn))
 
 
 def touch_row(f):
@@ -3091,7 +3078,7 @@ class TelemetryBudget:
       episodes are bought before they are played (afford), so what is shown is shown smoothly, and the view waits
       between them rather than stuttering through all of them"""
     CAP = 20000
-    LIVE = ("joints", "touch", "camera_picture")
+    LIVE = ("cell", "touch", "camera_picture")
 
     def __init__(self, send, seconds, cap=19400, reserve=3000, log=None):
         import threading
@@ -3953,7 +3940,6 @@ def see_run(ctx):
         ctx.log("Continuing from %s." % prev["name"])
     ctx.log("Learning to see on %s: %d cells at once, for up to %.0f minutes. The camera (%dx%d, depth and colour) looks at the belt; "
             "the network learns where the object is, how big, and which way it lies." % (label, n, minutes, S.CAM_W, S.CAM_H))
-    ctx.telemetry("scene", viz.cell_objects(lib[0]))
     pose = viz.Pose3D(env)
     cap = min(16384, 12 * n)
     B_img = torch.zeros(cap, 6, S.CAM_H, S.CAM_W, dtype=torch.float16, device=dev)
@@ -4149,8 +4135,6 @@ def learn_run(ctx, stage):
     pose = viz.Pose3D(env)
     live = None
     want_live = str(p.get("live_cell") or "No").lower().startswith("y")
-    if lead:
-        ctx.telemetry("scene", viz.cell_objects(lib[0]))
     if lead and want_live:
         try:
             live = LiveCell(ctx, stage, seed, CTRL_DT)
@@ -4174,7 +4158,6 @@ def learn_run(ctx, stage):
     hist = collections.deque(maxlen=max(300, min(3000, n)))
     per_obj = collections.defaultdict(lambda: collections.deque(maxlen=60))
     t0, last_tel, last_replay, it, best, stop = time.time(), 0.0, -1e9, 0, -1.0, "time"
-    last_scene = 0.0
     out_path = os.path.join(os.getcwd(), "policy_checkpoint.pt")
     # the 3D view replays whole episodes: many cells are recorded at once (with thousands of cells each one advances
     # slowly: a few seconds of its time take a minute or so), and the episodes they finish wait in a queue to be
@@ -4219,7 +4202,7 @@ def learn_run(ctx, stage):
             row.pop("failed", None)
         return row
 
-    imi = {"t": 0.0, "scene": 0.0, "hist": collections.deque(maxlen=300), "fresh": []}
+    imi = {"t": 0.0, "hist": collections.deque(maxlen=300), "fresh": []}
 
     def watch(done, info, doing):
         """while the policy learns from the demonstrations (within the first update, many minutes): the 3D view goes on
@@ -4255,9 +4238,6 @@ def learn_run(ctx, stage):
             if len(h) >= 20:
                 row["imitation_success"] = round(100.0 * sum(h) / len(h), 1)
             ctx.telemetry(ch_train, row)
-            if lead and time.time() - imi["scene"] > 8:
-                imi["scene"] = time.time()
-                ctx.telemetry("scene", pose.scene)
 
     env.watch = watch
     try:
@@ -4320,9 +4300,6 @@ def learn_run(ctx, stage):
                 last_stats.update({"steps_per_s": round(sps), "std": round(stats["std"], 3), "kl": round(stats["kl"], 4)})
                 row = tel_row(it, steps_done)
                 ctx.telemetry(ch_train, row)
-                if lead and time.time() - last_scene > 8:        # (the cell itself, for a view opened since: it shows at once)
-                    last_scene = time.time()
-                    ctx.telemetry("scene", pose.scene)
                 cw.writerow([row["minutes"], it, steps_done, row.get("success", ""), row.get("failed", ""), row["episode_s"], row["reward"], row["steps_per_s"]])
                 curve.flush()
                 ctx.progress(min(99, 100 * (time.time() - t0) / (minutes * 60 + 1)), "%s: %.0f%% success%s · ends %.1f cm from the object · %.1f M steps" % (STAGE_NAME[stage], sc, (" (%.0f%% from rest)" % row["success_from_rest"]) if "success_from_rest" in row and "success_hand_over" in row else "", row["end_dist_cm"], steps_done / 1e6))
@@ -4462,7 +4439,6 @@ def test_run(ctx):
     objs = [o for o in env.info if o["test"]]
     if str(p.get("objects") or "").lower().startswith("all"):
         objs = env.info
-    ctx.telemetry("scene", viz.cell_objects(lib[0]))
     pose = viz.Pose3D(env)
     names = ", ".join(o["label"] for o in env.info if o["test"])
     ctx.telemetry(ch_ev, {"text": "Ready. New to it: %s. Choose an object, how it lies, how it is turned and the belt's speed, "
@@ -4686,7 +4662,6 @@ def run(ctx):
             viz.conveyor_mesh(glb[0].path, lambda *a: None)
         except Exception as e:      # noqa: BLE001
             ctx.log("The conveyor's 3D file could not be read (%s): the belt is drawn with boxes." % e)
-    viz.CONVEYOR_DRAWN["value"] = viz.CONVEYOR["mode"] == "flat" or bool(viz.CONVEYOR["fit"])
     if "model" in what:
         return models_run(ctx)
     if "combine" in what:
