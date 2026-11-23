@@ -144,6 +144,17 @@
             "default": 20
         },
         {
+            "key": "driver",
+            "label": "Test: who drives",
+            "type": "select",
+            "default": "The learned policy",
+            "options": [
+                "The learned policy",
+                "The scripted controller"
+            ],
+            "help": "The scripted controller: the teacher the policy learns from (the same camera network and touch sensors, its steps written by hand)"
+        },
+        {
             "key": "pace",
             "label": "Test pace (1 = real time)",
             "type": "number",
@@ -238,6 +249,6 @@
         "numpy"
     ],
     "esasim": {
-        "version": 91
+        "version": 92
     }
 }

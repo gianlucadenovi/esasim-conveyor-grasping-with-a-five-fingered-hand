@@ -6,7 +6,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 
 | | |
 |---|---|
-| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 91 |
+| Block | `ws-conveyor-grasping-xarm-5-finger-hand` · version 92 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any worker, NVIDIA GPU |
@@ -38,6 +38,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 | `training` Training | select | `"Continue"` | Continue carries on from the best policy of this stage (or the stage before) |
 | `live_cell` Live cell while learning | select | `"No"` | Yes: one extra cell plays the policy in real time for the 3D view. It shares the process with the learning and slows it down several times; No: the 3D view replays episodes of the learning cells instead |
 | `replay_every` Replay every (s) | number | `20` |  |
+| `driver` Test: who drives | select | `"The learned policy"` | The scripted controller: the teacher the policy learns from (the same camera network and touch sensors, its steps written by hand) |
 | `pace` Test pace (1 = real time) | number | `1` | 0: as fast as it can |
 | `drop_cm` Test: drop height (cm) | number | `25` | How high above the belt the chosen object is let go |
 | `autoplay` Test: pick objects when idle | select | `"Yes"` |  |
