@@ -5,8 +5,8 @@
     },
     "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 17,
-    "updated": "2026-11-23 05:29:11",
+    "published_version": 18,
+    "updated": "2026-11-23 05:41:28",
     "graph": {
         "nodes": [
             {
@@ -55,7 +55,7 @@
                 "title": "Make the 3D models",
                 "dest": {
                     "location": 9,
-                    "name": "grasp-3d-models-10",
+                    "name": "grasp-3d-models-11",
                     "folder": "",
                     "live": true,
                     "move": false,
