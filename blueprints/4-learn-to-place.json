@@ -6,7 +6,7 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 15,
-    "updated": "2026-11-23 20:26:30",
+    "updated": "2026-11-23 20:30:41",
     "graph": {
         "nodes": [
             {
@@ -313,19 +313,19 @@
                 },
                 "success": {
                     "x": 6,
-                    "y": 13,
+                    "y": 10,
                     "w": 6,
-                    "h": 9
+                    "h": 6
                 },
                 "reward": {
                     "x": 6,
-                    "y": 22,
+                    "y": 16,
                     "w": 6,
-                    "h": 9
+                    "h": 5
                 },
                 "numbers": {
-                    "x": 6,
-                    "y": 10,
+                    "x": 0,
+                    "y": 15,
                     "w": 6,
                     "h": 3
                 },
@@ -337,7 +337,7 @@
                 },
                 "touchg": {
                     "x": 0,
-                    "y": 15,
+                    "y": 18,
                     "w": 6,
                     "h": 3
                 },
