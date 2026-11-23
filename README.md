@@ -135,7 +135,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 12 blocks · version 14
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 11 blocks · version 18
 - [Learn on all my machines (a round)](blueprints/learn-on-all-my-machines-a-round.json) · 14 blocks
-- [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 4 blocks · version 28
+- [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 3 blocks · version 29
 
 ### Workspace blocks it uses
 
@@ -169,7 +169,5 @@ The files the project's views draw with (3D models, textures, sounds), in [asset
 - [models/xarm_hand.robot.json.gz](assets/models/xarm_hand.robot.json.gz) · 549 KB
 - [textures/esacode-logo.png](assets/textures/esacode-logo.png) · 25 KB
 - [textures/preview (56).webp](assets/textures/preview%20(56).webp) · 46 KB
-
-The data the blueprints read (grasp-networks) stays in EsaSim.
 
 Keys pasted in blocks (secret settings) are not saved here, nor are the team and the results of runs.

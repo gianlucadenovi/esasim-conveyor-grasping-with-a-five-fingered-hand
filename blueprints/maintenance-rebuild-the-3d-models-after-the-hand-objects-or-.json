@@ -5,8 +5,8 @@
     },
     "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 28,
-    "updated": "2026-11-23 17:07:49",
+    "published_version": 29,
+    "updated": "2026-11-23 17:08:01",
     "graph": {
         "nodes": [
             {
@@ -28,18 +28,6 @@
                     "files": "models/xarm6_left_hand_rigged.glb"
                 },
                 "title": "Your robot model (xArm with the left hand, rigged)"
-            },
-            {
-                "id": "nets",
-                "type": "dataset",
-                "x": -320,
-                "y": 0,
-                "params": {
-                    "dataset": "35",
-                    "version": "latest",
-                    "pattern": "README*"
-                },
-                "title": "(runs it on the GPU PC, which uploads its results)"
             },
             {
                 "id": "models",
@@ -65,17 +53,6 @@
             }
         ],
         "edges": [
-            {
-                "id": "nets.files>models.policy",
-                "from": {
-                    "node": "nets",
-                    "port": "files"
-                },
-                "to": {
-                    "node": "models",
-                    "port": "policy"
-                }
-            },
             {
                 "id": "robot.files>models.policy",
                 "from": {
