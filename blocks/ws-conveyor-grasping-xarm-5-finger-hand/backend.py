@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 122 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 123 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2909,6 +2909,7 @@ def belt_glb(items, log):
     uv = np.stack([s.reshape(-1) / period, (p[:, 1] - p[:, 1].min()) / BELT_TEX_ACROSS], 1)
     fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+    CONVEYOR["belt_tri"] = tri                    # (it shades the frame: see frame_glb)
     base, mr, nm = belt_maps()
     log("The belt: one surface %.2f m round its rollers, its rubber %d times round it (one every %.3f m), %.2f m across: "
         "its colour, gloss and relief scroll with it." % (T, round(T / period), period, BELT_TEX_ACROSS))
@@ -2969,6 +2970,44 @@ def _charts(n, link):
     return list(groups.values())
 
 
+def _occlusion(pos, nrm, occ, rays=24, reach=0.15):
+    """how open each point is to the light around it (1: all of it; ambient occlusion): rays over the half of the sky
+    its normal faces (more of them overhead, as light falls), each blocked by the triangles occ (m, 3, 3) nearer than
+    reach (m) blocking it the more the nearer"""
+    import torch
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    f32 = lambda a: torch.as_tensor(np.asarray(a, np.float32), device=dev)     # noqa: E731
+    P, N, T = f32(pos), f32(nrm), f32(occ)
+    v0, e1, e2 = T[:, 0], T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]
+    k = torch.arange(rays, device=dev, dtype=torch.float32) + 0.5
+    r, ph = torch.sqrt(k / rays), k * 2.39996323
+    rng = torch.Generator(device=dev)
+    rng.manual_seed(3)
+    a = torch.where((N[:, 0].abs() < 0.9)[:, None], torch.tensor([1.0, 0, 0], device=dev), torch.tensor([0, 1.0, 0], device=dev))
+    t1 = torch.nn.functional.normalize(torch.cross(N, a, dim=1), dim=1)
+    t2 = torch.cross(N, t1, dim=1)
+    out = torch.ones(len(P), device=dev)
+    step = max(1, int(4e6 // (rays * len(T))))
+    for s in range(0, len(P), step):
+        n_, o_ = N[s:s + step], P[s:s + step] + 0.002 * N[s:s + step]
+        tw = torch.rand(len(n_), 1, generator=rng, device=dev) * 6.2832       # (turned at random point to point: no banding)
+        c, sn, z = r * torch.cos(ph + tw), r * torch.sin(ph + tw), torch.sqrt(1 - r * r).expand(len(n_), rays)
+        D = (c[..., None] * t1[s:s + step, None] + sn[..., None] * t2[s:s + step, None] + z[..., None] * n_[:, None]).reshape(-1, 3)
+        O = o_[:, None].expand(-1, rays, 3).reshape(-1, 3)
+        pv = torch.cross(D[:, None].expand(-1, len(T), 3), e2[None].expand(len(D), -1, 3), dim=2)
+        det = (e1[None] * pv).sum(-1)
+        inv = 1.0 / torch.where(det.abs() < 1e-12, torch.full_like(det, 1e-12), det)
+        tv = O[:, None] - v0[None]
+        u = (tv * pv).sum(-1) * inv
+        q = torch.cross(tv, e1[None].expand(len(D), -1, 3), dim=2)
+        v = (D[:, None] * q).sum(-1) * inv
+        t = (e2[None] * q).sum(-1) * inv
+        hit = (det.abs() > 1e-12) & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 0) & (t < reach)
+        near = torch.where(hit, t, torch.full_like(t, reach)).min(1).values
+        out[s:s + step] = 1 - (1 - near / reach).reshape(-1, rays).mean(1)
+    return out.cpu().numpy()
+
+
 def frame_glb(items, finish, log):
     """the conveyor's frame (and its feet) as a 3D file of its own, in its paint worn as equipment wears: each flat face
     unwrapped to its own place in one picture (at the same scale everywhere), and on it, from the frame's own shape,
@@ -2993,7 +3032,7 @@ def frame_glb(items, finish, log):
         v = np.cross(nrm, u)
         loc = np.stack([pts @ u, pts @ v], 1)
         lo = loc.min(0)
-        flat.append((ch, loc - lo, (loc - lo).max(0)))
+        flat.append((ch, loc - lo, (loc - lo).max(0), (u, v, lo, float(pts[0] @ nrm), nrm)))
     # packed in shelves, the tallest first, at the largest scale that fits
     S, pad = WEAR_ATLAS, 3
     order = sorted(range(len(flat)), key=lambda i: -flat[i][2][1])
@@ -3016,7 +3055,9 @@ def frame_glb(items, finish, log):
     conc_d = np.full((S, S), 1e9)
     corner_d = np.full((S, S), 1e9)
     inside = np.zeros((S, S), bool)
-    for i, (ch, loc, size) in enumerate(flat):
+    AO_STEP = 6                                   # (the occlusion: every 6th pixel each way, then smoothed between)
+    ao_pts, ao_nrm, ao_at = [], [], []
+    for i, (ch, loc, size, (bu, bv, blo, bh, bn)) in enumerate(flat):
         ox, oy = place[i]
         loc3 = loc.reshape(-1, 3, 2)
         for k, t in enumerate(ch):
@@ -3058,6 +3099,12 @@ def frame_glb(items, finish, log):
         ys, xs = (gy.ravel() - 0.5 + oy).astype(int), (gx.ravel() - 0.5 + ox).astype(int)
         ok = ins & (xs >= 0) & (ys >= 0) & (xs < S) & (ys < S)
         inside[ys[ok], xs[ok]] = True
+        sel = ok & (ys % AO_STEP == 0) & (xs % AO_STEP == 0)
+        if sel.any():
+            Q = P[sel] + blo
+            ao_pts.append(Q[:, :1] * bu + Q[:, 1:] * bv + bh * bn)
+            ao_nrm.append(np.repeat(bn[None], int(sel.sum()), 0))
+            ao_at.append((ys[sel] // AO_STEP, xs[sel] // AO_STEP))
         conv_d[ys[ok], xs[ok]] = out["convex"][ok]
         conc_d[ys[ok], xs[ok]] = out["concave"][ok]
         corner_d[ys[ok], xs[ok]] = cd[ok]
@@ -3075,12 +3122,33 @@ def frame_glb(items, finish, log):
     metal = np.clip((wear - 1.05) / 0.08, 0, 1)
     grime = np.clip(np.exp(-conc_d / 0.012) * (0.45 + 0.3 * blobs(0.05)), 0, 0.75)
     fine = blobs(0.002)
+    # the occlusion, from the frame's shape and the belt in it: the channels' insides and the gaps dark
+    occ = np.concatenate([tri] + ([CONVEYOR["belt_tri"]] if CONVEYOR.get("belt_tri") is not None else []))
+    t_ao = time.time()
+    vals = _occlusion(np.concatenate(ao_pts), np.concatenate(ao_nrm), occ)
+    Sc = -(-S // AO_STEP)
+    coarse, have = np.ones((Sc, Sc)), np.zeros((Sc, Sc), bool)
+    cy = np.concatenate([a[0] for a in ao_at])
+    cx = np.concatenate([a[1] for a in ao_at])
+    coarse[cy, cx], have[cy, cx] = vals, True
+    for _ in range(3):            # (spread past each face's edge, so the smoothing takes nothing from the empty picture)
+        acc, cnt = np.zeros_like(coarse), np.zeros_like(coarse)
+        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+            acc += np.roll(np.roll(np.where(have, coarse, 0), dy, 0), dx, 1)
+            cnt += np.roll(np.roll(have, dy, 0), dx, 1)
+        grow = ~have & (cnt > 0)
+        coarse[grow], have = acc[grow] / cnt[grow], have | grow
+    import torch
+    ao = torch.nn.functional.interpolate(torch.as_tensor(coarse, dtype=torch.float32)[None, None], scale_factor=AO_STEP, mode="bilinear", align_corners=False)[0, 0, :S, :S].numpy()
+    ao = np.clip(ao, 0, 1)
+    log("The frame's occlusion: %d points, %d rays each against %d triangles (%.0f s)." % (len(vals), 24, len(occ), time.time() - t_ao))
     paint = np.array([(int(finish["color"]) >> s) & 255 for s in (16, 8, 0)], float) / 255
     mott = 0.025 * blobs(0.06)
     rgb = paint[None, None] * (1 + mott[..., None])
     rgb = rgb * (1 - primer[..., None]) + np.array([0.60, 0.63, 0.66]) * primer[..., None]
     rgb = rgb * (1 - metal[..., None]) + np.array([0.56, 0.57, 0.59]) * metal[..., None]
     rgb = rgb * (1 - 0.6 * grime[..., None]) + np.array([0.10, 0.09, 0.08]) * 0.6 * grime[..., None]
+    rgb = rgb * (0.7 + 0.3 * ao[..., None])        # (dust and shade where it is closed in)
     rough = 0.2 + 0.3 * primer - 0.15 * metal + 0.5 * grime
     height = -0.5 * primer - 0.6 * metal + 0.02 * fine
     # the pictures spread a few pixels past each face, so its edges take no colour from its neighbours in the picture
@@ -3089,7 +3157,7 @@ def frame_glb(items, finish, log):
         for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
             nb = np.roll(np.roll(inside, dy, 0), dx, 1)
             take = nb & ~grown
-            for arr in (rgb, rough, metal, height):
+            for arr in (rgb, rough, metal, height, ao):
                 arr[take] = np.roll(np.roll(arr, dy, 0), dx, 1)[take]
             grown |= nb
         inside = grown
@@ -3098,7 +3166,8 @@ def frame_glb(items, finish, log):
     mr[..., 0], mr[..., 1], mr[..., 2] = 255, (np.clip(rough, 0, 1) * 255).astype(np.uint8), (np.clip(metal, 0, 1) * 255).astype(np.uint8)
     log("The conveyor's frame: %d triangles, %d flat faces unwrapped at %.1f mm a pixel; its paint worn at its outer edges and "
         "corners, grime in its inner ones." % (len(tri), len(flat), 1000 / dens))
-    return glb_bytes(p, _smooth_normals(p, fn), uv, "frame", {"base": base, "mr": _png(mr), "normal": _normal_png(height, 3.0)},
+    aopng = _png(np.repeat((np.clip(ao, 0, 1) * 255).astype(np.uint8)[..., None], 3, -1))
+    return glb_bytes(p, _smooth_normals(p, fn), uv, "frame", {"base": base, "mr": _png(mr), "normal": _normal_png(height, 3.0), "ao": aopng},
                      roughness=1.0, metalness=1.0, clearcoat=finish.get("clearcoat", 0.0))
 
 
@@ -3130,6 +3199,8 @@ def glb_bytes(pos, nrm, uv, material, maps, roughness=1.0, metalness=0.0, clearc
             pbr["baseColorTexture"] = ref
         elif slot == "mr":
             pbr["metallicRoughnessTexture"] = ref
+        elif slot == "ao":
+            mat["occlusionTexture"] = ref
         else:
             mat["normalTexture"] = ref
     mat["pbrMetallicRoughness"] = pbr
