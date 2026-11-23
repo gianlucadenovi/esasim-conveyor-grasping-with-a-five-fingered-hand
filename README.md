@@ -169,6 +169,7 @@ The files the project's views draw with (3D models, textures, sounds), in [asset
 - [models/drop_belt.wav](assets/models/drop_belt.wav) · 28 KB
 - [models/drop_bin.wav](assets/models/drop_bin.wav) · 38 KB
 - [models/floor.glb](assets/models/floor.glb) · 3.0 MB
+- [models/game-ready_security_camera.glb](assets/models/game-ready_security_camera.glb) · 5.5 MB
 - [models/rub.wav](assets/models/rub.wav) · 125 KB
 - [models/servo.wav](assets/models/servo.wav) · 125 KB
 - [models/simple_rubber_conveyor.glb](assets/models/simple_rubber_conveyor.glb) · 2.9 MB

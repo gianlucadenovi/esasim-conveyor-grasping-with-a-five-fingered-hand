@@ -161,6 +161,13 @@
             "in": "repo"
         },
         {
+            "path": "models/game-ready_security_camera.glb",
+            "size": 5775388,
+            "sha256": "3b38eed06f77e536c99ebf821716be66345f474f01173d824b438c4593538933",
+            "zip": "assets/models/game-ready_security_camera.glb",
+            "in": "repo"
+        },
+        {
             "path": "models/rub.wav",
             "size": 128044,
             "sha256": "483b2c5304dfc8a99b08253323fe0643a309275e95ef2853426f70e1c8b0e742",
@@ -210,5 +217,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-23T20:40:26+00:00"
+    "saved": "2026-11-23T21:11:15+00:00"
 }
