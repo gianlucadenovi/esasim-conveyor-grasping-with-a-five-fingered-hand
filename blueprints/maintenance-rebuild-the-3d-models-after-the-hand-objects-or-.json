@@ -5,8 +5,8 @@
     },
     "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 15,
-    "updated": "2026-11-20 22:03:49",
+    "published_version": 16,
+    "updated": "2026-11-23 05:25:05",
     "graph": {
         "nodes": [
             {
@@ -18,6 +18,16 @@
                     "files": "models/simple_rubber_conveyor.glb"
                 },
                 "title": "Your conveyor model"
+            },
+            {
+                "id": "robot",
+                "type": "project-assets",
+                "x": -320,
+                "y": 280,
+                "params": {
+                    "files": "models/xarm6_left_hand_rigged.glb"
+                },
+                "title": "Your robot model (xArm with the left hand, rigged)"
             },
             {
                 "id": "nets",
@@ -39,7 +49,7 @@
                 "params": {
                     "mode": "Make the 3D models",
                     "accelerator": "CPU",
-                    "belt_drawing": "Flat colours (3D file)",
+                    "belt_drawing": "Its own materials (3D file)",
                     "belt_texture": "textures/preview (56).webp"
                 },
                 "title": "Make the 3D models",
@@ -60,6 +70,17 @@
                 "id": "nets.files>models.policy",
                 "from": {
                     "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "models",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "robot.files>models.policy",
+                "from": {
+                    "node": "robot",
                     "port": "files"
                 },
                 "to": {
