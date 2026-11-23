@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 88 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 89 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1460,6 +1460,12 @@ class GraspEnv:
             seen = objpix >= 6
         ok_ = torch.isfinite(c).all(1) & torch.isfinite(e).all(1) & torch.isfinite(yw).all(1)
         seen = seen & ok_
+        # the fingers down round the object hide part of it from the camera and are taken for part of it (its top seen
+        # up to 2 cm too high, its axis turned): then where it is is still followed (touched, it slows down on the
+        # belt), but its height, size and axis are kept as last seen clearly
+        g = self.sim.site_xpos[:, self.gsite].float()
+        hidden = ((g[:, :2] - self.est_c[:, :2]).norm(dim=1) < 0.08) & (g[:, 2] < self.est_c[:, 2] + self.est_e[:, 2] + 0.01)
+        kept_e, kept_y = self.est_e.clone(), self.est_y.clone()
         c, e, yw = torch.nan_to_num(c), torch.nan_to_num(e), torch.nan_to_num(yw)
         old = self.est_c.clone()
         dt = self.est_age.clamp(min=CTRL_DT)
@@ -1469,6 +1475,9 @@ class GraspEnv:
         self.est_c = torch.where(upd[:, None], c, self.est_c)
         self.est_e = torch.where(upd[:, None], e, self.est_e)
         self.est_y = torch.where(upd[:, None], yw, self.est_y)
+        self.est_c[:, 2] = torch.where(hidden, old[:, 2], self.est_c[:, 2])
+        self.est_e = torch.where(hidden[:, None], kept_e, self.est_e)
+        self.est_y = torch.where(hidden[:, None], kept_y, self.est_y)
         self.est_age = torch.where(upd, torch.zeros_like(self.est_age), self.est_age)
         self.last_img = img
         self.last_seg = seg
