@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 126 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 127 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -3282,6 +3282,86 @@ def objects_model(info, conveyor=None):
             "base": {"xyz": [0, 0, 0], "rpy": [0, 0, 0]}}
 
 
+# ── the cell's sounds (the 3D scene view plays them, their levels and hits from the channel cell) ────────────────────────────
+SOUND_RATE = 32000
+
+
+def _wav(x, rate=SOUND_RATE):
+    """a mono 16-bit WAV file of x (peak at 1)"""
+    import struct
+    pcm = (np.clip(x, -1, 1) * 32767).astype("<i2").tobytes()
+    return (b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16)
+            + b"data" + struct.pack("<I", len(pcm)) + pcm)
+
+
+def _band_noise(rng, n, lo, hi, tilt=0.0, rate=SOUND_RATE):
+    """noise between lo and hi Hz that loops without a seam (made in its spectrum), its level falling by tilt dB an octave"""
+    f = np.fft.rfftfreq(n, 1 / rate)
+    spec = rng.standard_normal(len(f)) + 1j * rng.standard_normal(len(f))
+    w = ((f >= lo) & (f <= hi)).astype(float) * (np.maximum(f, 1) / max(lo, 1)) ** (-tilt / 6.02)
+    x = np.fft.irfft(spec * w, n)
+    return x / (np.abs(x).max() + 1e-12)
+
+
+def _peak(x, p):
+    return x / (np.abs(x).max() + 1e-12) * p
+
+
+def sound_files(seed=11):
+    """the cell's sounds (WAV): the belt's motor and rollers (a loop), the arm's servos (a loop, its pitch and level from
+    how fast the joints move), the fingers rubbing on the moving belt (a loop), an object landing on the belt's rubber
+    and one dropping into the plastic bin (each a single hit)"""
+    rng = np.random.default_rng(seed)
+    R = SOUND_RATE
+    out = {}
+    # the belt: a geared motor's hum (twice the mains frequency and its harmonics), its gears' mesh, rising and falling
+    # a little with each turn, the rotor's faint whine, and the belt rolling over its rollers
+    n = 4 * R
+    t = np.arange(n) / R
+    hum = sum(a * np.sin(2 * np.pi * f * t + p) for f, a, p in ((100, 1.0, 0), (200, 0.45, 1.1), (300, 0.22, 2.3), (400, 0.1, 0.4), (600, 0.05, 1.7)))
+    mesh = (0.25 * np.sin(2 * np.pi * 340 * t) + 0.1 * np.sin(2 * np.pi * 680 * t + 0.5)) * (1 + 0.35 * np.sin(2 * np.pi * 7.25 * t))
+    whine = 0.05 * np.sin(2 * np.pi * 1180 * t) * (1 + 0.5 * np.sin(2 * np.pi * 0.5 * t))
+    roll = 0.5 * _band_noise(rng, n, 40, 700, tilt=4) * (1 + 0.2 * np.sin(2 * np.pi * 1.75 * t))
+    out["belt_hum.wav"] = _wav(_peak(0.5 * hum + mesh + whine + roll, 0.7))
+    # the servos: a harmonic drive's whine with its gears' rasp, the drive's switching high above
+    n = 2 * R
+    t = np.arange(n) / R
+    whine = sum(a * np.sin(2 * np.pi * f * t) for f, a in ((520, 1.0), (1040, 0.45), (1560, 0.2), (2080, 0.08)))
+    whine = whine * (1 + 0.15 * np.sin(2 * np.pi * 13 * t))
+    rasp = 0.6 * _band_noise(rng, n, 500, 3000, tilt=3) * (1 + 0.5 * np.sin(2 * np.pi * 26 * t))
+    out["servo.wav"] = _wav(_peak(0.6 * whine + rasp + 0.04 * np.sin(2 * np.pi * 4000 * t), 0.7))
+    # rubbing: rubber scraping on rubber, stick and slip (bursts of it, unevenly, some forty a second)
+    hits = np.zeros(n)
+    for k in rng.integers(0, n, 80):
+        hits[k] += rng.uniform(0.4, 1.0)
+    env = np.real(np.fft.ifft(np.fft.fft(hits) * np.fft.fft(np.exp(-np.arange(n) / (0.012 * R)))))
+    env = 0.35 + env / env.max()
+    out["rub.wav"] = _wav(_peak(_band_noise(rng, n, 250, 2600, tilt=3) * env + 0.25 * _band_noise(rng, n, 60, 250), 0.7))
+    # landing on the belt: a dull thud on the rubber over the steel bed (low, short, damped), a little slap, and a
+    # small second bounce
+    n = int(0.45 * R)
+    t = np.arange(n) / R
+
+    def thud(t0, a):
+        tt, on = np.clip(t - t0, 0, None), (t >= t0).astype(float)
+        body = (np.sin(2 * np.pi * 92 * tt) * np.exp(-tt / 0.06) + 0.5 * np.sin(2 * np.pi * 175 * tt) * np.exp(-tt / 0.035)
+                + 0.25 * np.sin(2 * np.pi * 410 * tt) * np.exp(-tt / 0.02))
+        return a * on * (body + 0.6 * _band_noise(rng, n, 200, 1600, tilt=4) * np.exp(-tt / 0.012))
+    out["drop_belt.wav"] = _wav(_peak(thud(0.0, 1.0) + thud(0.085, 0.25), 0.9))
+    # into the bin: a hollow plastic knock (the box's own ringing, a few modes dying fast) with the click of the hit,
+    # then two smaller bounces as the object settles
+    n = int(0.7 * R)
+    t = np.arange(n) / R
+    modes = ((300, 0.13, 1.0), (690, 0.09, 0.7), (1320, 0.06, 0.45), (2230, 0.04, 0.3), (3350, 0.03, 0.18))
+
+    def knock(t0, a, shift):
+        tt, on = np.clip(t - t0, 0, None), (t >= t0).astype(float)
+        ring = sum(m * np.sin(2 * np.pi * f * shift * tt + rng.uniform(0, 6.3)) * np.exp(-tt / d) for f, d, m in modes)
+        return a * on * (ring + 0.5 * _band_noise(rng, n, 1500, 9000) * np.exp(-tt / 0.003))
+    out["drop_bin.wav"] = _wav(_peak(knock(0.0, 1.0, 1.0) + knock(0.075, 0.4, 1.04) + knock(0.135, 0.15, 0.97), 0.9))
+    return out
+
+
 def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=None):
     links = xarm_links(cache, ctx.log) or simple_xarm_links()
     rig = None
@@ -3325,6 +3405,9 @@ def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=Non
             fh.write(CONVEYOR["frame_glb"])
     with open(ctx.output(port, "floor.glb"), "wb") as fh:
         fh.write(floor_glb())
+    for name, data in sound_files().items():
+        with open(ctx.output(port, name), "wb") as fh:
+            fh.write(data)
     ctx.log("cell.scene.json: the cell for the 3D scene view (scene: models/cell.scene.json)%s." % (
         ", with the conveyor's belt and frame as 3D files of their own (conveyor_belt.glb, conveyor_frame.glb)" if conv else ""))
 
@@ -3441,6 +3524,14 @@ def scene_file(mjm, conveyor):
             "environment": {"sky": "space", "ground": {"type": "none"}},
             "lights": [{"type": "sun", "intensity": 3.2, "color": "#fff3e2", "elevation": 55, "azimuth": 70, "bias": -0.0004, "normal_bias": 0.004, "extent": 2.5}],
             "models": models,
+            # (the sounds: the belt's motor all along; the servos and the fingers rubbing on the belt as loud as the cell
+            # says (their missing values silent); a hit each time an object lands on the belt or in the bin)
+            "sounds": [{"id": "belt_motor", "sound": "models/belt_hum.wav", "volume": 0.45},
+                       {"id": "servos", "sound": "models/servo.wav", "volume": {"expr": "clamp((@cell.servo or 0) * 1.3, 0, 1)"},
+                        "pitch": {"expr": "0.8 + 0.45 * (@cell.servo or 0)"}},
+                       {"id": "rub", "sound": "models/rub.wav", "volume": {"expr": "(@cell.rub or 0)"}},
+                       {"id": "drop_belt", "sound": "models/drop_belt.wav", "on": {"expr": "(@cell.drop_belt or 0) > 0"}, "volume": 0.9},
+                       {"id": "drop_bin", "sound": "models/drop_bin.wav", "on": {"expr": "(@cell.drop_bin or 0) > 0"}, "volume": 0.9}],
             "cameras": [{"id": "cell", "type": "orbit", "position": up((c[0] + 1.6, c[1] - 1.9, 1.1)), "look_at": up(c)}], "start": "cell",
             "overlay": [{"type": "events", "at": "top-right", "count": 4}]}
 
@@ -3464,6 +3555,8 @@ class Pose3D:
         self.n_sent = 0
         self.last_obj, self.last_eul = None, None
         self.n_q = None
+        self.prev = None                     # (the last frame's step, angles, object and its height: for the sounds)
+        self.tsite = env.t.as_tensor([int(mjm.sensor_objid[mjm.sensor("t_" + nm).id]) for nm in S.TOUCH_NAMES], device=env.dev)
 
     def snap(self, i=0):
         """what the 3D view needs of cell i, now (kept to be turned into joint items later, off the learning's way)"""
@@ -3471,7 +3564,8 @@ class Pose3D:
         return (sim.qpos[i, env.qh].float().cpu().numpy().astype(float), env.touches()[i].cpu().numpy().astype(float),
                 sim.qpos[i, self.fq_t].float().cpu().numpy().astype(float), int(env.obj[i]),
                 sim.xpos[i, env.ob].float().cpu().numpy().astype(float), sim.xquat[i, env.ob].float().cpu().numpy().astype(float),
-                -float(env.belt_travel[i]))
+                -float(env.belt_travel[i]), int(env.k), float(sim.site_xpos[i, self.tsite, 2].min()),
+                float(sim.site_xpos[i, env.gsite, 0]), float(sim.site_xpos[i, env.gsite, 1]))
 
     def snap_many(self, cells):
         """snap() for several cells, read from the simulation in one go"""
@@ -3484,12 +3578,14 @@ class Pose3D:
         op = sim.xpos[ix, env.ob].float().cpu().numpy().astype(float)
         oq = sim.xquat[ix, env.ob].float().cpu().numpy().astype(float)
         bt = (-env.belt_travel[ix].float()).tolist()
-        return {c: (q[k], f[k], fq[k], int(ob[k]), op[k], oq[k], float(bt[k])) for k, c in enumerate(cells)}
+        tz = sim.site_xpos[ix][:, self.tsite, 2].min(1).values.tolist()
+        hp = sim.site_xpos[ix, env.gsite, :2].float().tolist()
+        return {c: (q[k], f[k], fq[k], int(ob[k]), op[k], oq[k], float(bt[k]), int(env.k), float(tz[k]), hp[k][0], hp[k][1]) for k, c in enumerate(cells)}
 
     def items(self, sn):
         """one item of the channel cell: the arm's joints (its six, the hand fixed, the fingers), the objects' (each on
         its free mount: the one in play where it is, the others under the floor) and how far the belt has run (m)"""
-        q, _, fq, o, op, oq, belt = sn            # (the arm's angles are the simulated arm's own)
+        q, _, fq, o, op, oq, belt = sn[:7]        # (the arm's angles are the simulated arm's own)
         arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq]
         if o != self.last_obj:
             self.last_eul = None
@@ -3498,13 +3594,39 @@ class Pose3D:
         objs = [0.0] * (6 * self.nobj)      # (every item complete: the objects not in play at rest, under the floor)
         objs[6 * o:6 * o + 6] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000 - PARK_MM, 1), round(y, 4), round(p, 4), round(r, 4)]
         self.n_q = (len(arm), len(objs))
-        return {"arm": arm, "objects": objs, "travel": round(-float(belt), 4)}
+        item = {"arm": arm, "objects": objs, "travel": round(-float(belt), 4)}
+        item.update(self.sounds(sn))
+        return item
+
+    def sounds(self, sn):
+        """what the cell sounds like at this frame, from it and the one before: servo, how fast the arm and the fingers
+        move (0 to 1); rub, how hard the fingertips press on the moving belt (0 to 1); drop_belt and drop_bin, 1 at the
+        frame an object lands on the belt or in the bin (it was falling and has stopped)"""
+        out = {"servo": 0.0, "rub": 0.0, "drop_belt": 0, "drop_bin": 0}
+        if len(sn) < 11:
+            return out
+        q, fq, o, op, k, tipz, hx, hy = np.asarray(sn[0]), np.asarray(sn[2]), sn[3], sn[4], sn[7], sn[8], sn[9], sn[10]
+        pv, self.prev = self.prev, [k, q, fq, o, float(op[2]), None]
+        if abs(hx - S.BELT_X0) < CONVEYOR_LEN / 2 and abs(hy - S.BELT_CY) < S.BELT_W / 2:
+            out["rub"] = round(float(np.clip((0.016 - tipz) / 0.008, 0, 1)), 2)
+        if pv is None or k <= pv[0] or pv[3] != o or (k - pv[0]) * CTRL_DT > 1.0:
+            return out
+        dt = (k - pv[0]) * CTRL_DT
+        v = float(np.linalg.norm(q - pv[1])) / dt + 0.3 * float(np.abs(fq - pv[2]).mean()) / dt
+        out["servo"] = round(min(1.0, v / 1.2), 2)
+        vz = (float(op[2]) - pv[4]) / dt
+        self.prev[5] = vz
+        if pv[5] is not None and -6.0 < pv[5] < -0.3 and vz > -0.08 and op[2] > -0.05:
+            in_bin = abs(op[0] - S.BIN_C[0]) < S.BIN_HALF[0] and abs(op[1] - S.BIN_C[1]) < S.BIN_HALF[1]
+            out["drop_bin" if in_bin else "drop_belt"] = 1
+        return out
 
     def cut(self, ctx):
         """a break between two episodes: the 3D view eases from one item to the next, so without it the arm and the
         object would glide from where one episode ended to where the next begins. An item with no values in it is not
         eased to or from: the view holds the last pose, then jumps to the next episode's first one"""
         self.last_obj, self.last_eul = None, None
+        self.prev = None
         if not self.n_q:
             return
         ctx.telemetry("cell", {"arm": [None] * self.n_q[0], "objects": [None] * self.n_q[1], "travel": None})
