@@ -6,7 +6,7 @@
     "name": "1 · Learn to see",
     "description": "The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.",
     "published_version": 9,
-    "updated": "2026-11-20 21:14:47",
+    "updated": "2026-11-23 06:08:56",
     "graph": {
         "nodes": [
             {
@@ -20,6 +20,16 @@
                     "pattern": "*.pt"
                 },
                 "title": "Networks so far"
+            },
+            {
+                "id": "robot",
+                "type": "project-assets",
+                "x": -460,
+                "y": 200,
+                "params": {
+                    "files": "models/xarm6_left_hand_rigged.glb"
+                },
+                "title": "Your robot model (what the camera sees)"
             },
             {
                 "id": "learn",
@@ -150,6 +160,17 @@
                 "id": "nets.files>learn.policy",
                 "from": {
                     "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "learn",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "robot.files>learn.policy",
+                "from": {
+                    "node": "robot",
                     "port": "files"
                 },
                 "to": {
