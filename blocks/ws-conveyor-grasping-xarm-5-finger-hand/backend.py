@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 95 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 96 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -73,7 +73,8 @@ BELT_X0 = 0.2                                    # belt centre (x): the conveyor
 BELT_HALF_LEN = 1.0 * CONV_S
 BELT_START_X, BELT_END_X = BELT_X0 + BELT_HALF_LEN, BELT_X0 - BELT_HALF_LEN
 SPAWN_X = (0.28, 0.93)                           # (training) where objects are put on the belt, upstream of the robot
-TEST_SPAWN_X = BELT_START_X - 0.10               # (the test) dropped near the start of the belt: it travels the whole way
+TEST_SPAWN_X = BELT_START_X - 0.25               # (the test) dropped near the start of the belt, far enough in that it
+                                                 # does not bounce off its end; it travels the whole way to the robot
 EXIT_X = BELT_END_X - 0.10                       # past here an object has gone off the end of the belt (and falls)
 BELT_V = (0.05, 0.10)                            # the belt's speed (m/s) in training
 BASE_POS = np.array([0.0, -0.10, 0.0])           # the xArm's base on its pedestal: 13 cm back from the conveyor's frame, so
