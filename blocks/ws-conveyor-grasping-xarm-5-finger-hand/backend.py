@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 119 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 120 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -896,8 +896,9 @@ import scene as S
 from sims import CTRL_DT
 
 ACT_DIM = 12
-OBS_DIM = 89
-PRIV_DIM = 132
+OBS_DIM = 99
+PRIV_DIM = 142
+PHASE_DIM = 10                     # the task's phase (see GraspEnv.phase_obs): the last inputs of both
 CAM_EVERY = 4                      # a camera frame every 4 control steps (6 per second)
 STAGES = ("reach", "grasp", "place")
 EP_SECONDS = {"reach": 12.0, "grasp": 18.0, "place": 25.0}
@@ -1264,6 +1265,12 @@ class GraspEnv:
         self.k = 0
         self.n_bad = 0
         self.assist = {"reach": 0.0, "grasp": 0.5, "place": 0.3}[stage]   # a share of episodes start with the hand over the object
+        # the task's phase (over the object, down, closing, lifting, carrying, letting go), followed from what the robot
+        # senses as the scripted controller follows it, whoever drives: the policy's memory of where it is in the task.
+        # demo_a: what the controller would do now (what the policy imitates)
+        self.phaser = Demo(self)
+        self.demo_a = z(n, ACT_DIM)
+        self.restart_phase(torch.arange(n, device=dev))
         if stage in ("grasp", "place") and n > 1:
             install_imitation(self)
 
@@ -1385,6 +1392,20 @@ class GraspEnv:
         self.est_c[idx] = torch.stack([x0, y0, -zlow / 2], -1)
         self.est_e[idx] = 0.03
         self.est_y[idx] = torch.tensor([1.0, 0.0], device=dev)
+        self.restart_phase(idx)
+
+    def restart_phase(self, idx):
+        """the task from its start: over the object first, the hand open"""
+        self.phaser.reset(idx)
+        self.demo_a[idx] = 0.0
+        self.demo_a[idx, 6:] = -1.0
+
+    def phase_obs(self):
+        torch = self.t
+        ph = self.phaser
+        oh = torch.nn.functional.one_hot(ph.phase.clamp(0, 5), 6).float()
+        return torch.cat([oh, (ph.timer / 40.0).clamp(max=1.5)[:, None], torch.cos(ph.plan_yaw)[:, None], torch.sin(ph.plan_yaw)[:, None],
+                          (ph.plan_z * 10)[:, None]], 1)
 
     def restart_clock(self, idx):
         """(after a dropped object has landed) the episode starts now: its clock and counters from zero"""
@@ -1540,6 +1561,7 @@ class GraspEnv:
             info["d"] = torch.nan_to_num(info["d"], nan=0.0, posinf=0.0, neginf=0.0)
         self.prev_a = a
         self.ep_ret += rew
+        self.demo_a = self.phaser.act()
         return rew, done, info
 
     # ── rewards, success and failure ──────────────────────────────────────────────────────────────────────────────
@@ -1679,15 +1701,17 @@ class GraspEnv:
             (self.est_age.clamp(max=3) / 3)[:, None], (self.belt_v * 10)[:, None], (self.est_v * 10)[:, None],   # 3
             (drop - g) * 3,                                           # 3
             self.prev_a,                                              # 12
-            tn[:, 9:],                                                # 10: the phalanges' sensors (added last, see S.TOUCH_NAMES)
+            tn[:, 9:],                                                # 10: the phalanges' sensors (see S.TOUCH_NAMES)
         ], 1)
+        ph = self.phase_obs()                                         # 10: the task's phase (last, in both)
         op, oq, c, e, y = self.truth()
         ov = sim.qvel[:, self.do_:self.do_ + 6].float()
         st = torch.zeros(self.n, 3, device=self.dev)
         st[:, STAGES.index(self.stage)] = 1
         priv = torch.cat([obs, (c - g) * 5, oq, ov[:, :3], ov[:, 3:] * 0.1, e * 10, y, ((op[:, 2] - self.z_rest) * 10)[:, None],
                           (f[:, :9] > 0.3).float(), st, (self.steps.float() / self.max_steps)[:, None], self.lifted_ever.float()[:, None],
-                          (f[:, 9:] > 0.3).float()], 1)
+                          (f[:, 9:] > 0.3).float(), ph], 1)
+        obs = torch.cat([obs, ph], 1)
         return torch.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0).clamp(-100, 100), torch.nan_to_num(priv, nan=0.0, posinf=0.0, neginf=0.0).clamp(-100, 100)
 
 
@@ -1825,12 +1849,11 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
     O, A = [], []
 
     def collect(r_, drive_policy):
-        demo = Demo(env)
         env.reset_all()
         env.perceive()
         ok = tot = 0
         for k in range(steps):
-            a = demo.act()
+            a = env.demo_a                # (the controller, following the task's phase, says what it would do here)
             o, _ = env.obs()
             if k % 2 == 0:            # (kept in the computer's memory, not the GPU's)
                 O.append(o.half().cpu())
@@ -1849,7 +1872,6 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
                 tot += len(idx)
                 env.reset(idx)
                 env.sim.refresh()
-                demo.reset(idx)
             if k % 20 == 0:
                 prog(0, "Learning from demonstrations: round %d of %d, step %d of %d" % (r_ + 1, rounds + 1, k, steps))
         return ok, tot
@@ -1883,14 +1905,16 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
         log("Round %d (the policy drives, the controller corrects): %.0f%% of %d episodes succeeded; error %.3f on %d examples (%.0f s)." % (
             r_ + 1, 100.0 * ok / max(1, tot), tot, err, N, time.time() - t0))
     with torch.no_grad():
-        algo.ac.log_std.fill_(math.log(0.12))
-    # the demonstrations stay with PPO for a while: a term that keeps the policy near them, fading out
+        algo.ac.log_std.fill_(math.log(0.08))
+    # the demonstrations stay with PPO: a term that keeps the policy near them, fading to half (PPO improves on them
+    # where the rewards say so, it does not wander off them)
     keep = min(len(O), 600)
     algo.bc = (torch.cat(O[-keep:]), torch.cat(A[-keep:]))
     algo.bc_coef = 1.0
-    # (small, capped steps from here: the adaptive step size grows while the demonstrations hold the policy still,
-    # and at 1e-2 PPO undid in a few updates what the policy had imitated)
-    algo.lr, algo.lr_max = 1e-4, 3e-4
+    # (small, capped steps from here, and a smaller move per batch: at 1e-4 to 3e-4 PPO undid in an hour most of
+    # what the policy had imitated, 60% down to 15%)
+    algo.lr, algo.lr_max = 3e-5, 1e-4
+    algo.kl_want = 0.005
     for g in algo.opt.param_groups:
         g["lr"] = algo.lr
     env.reset_all()
@@ -1900,6 +1924,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
 def policy_rate(env, algo, steps):
     """the share of episodes the policy (without exploration noise) ends with the object in the bin"""
     torch = env.t
+    watch = getattr(env, "watch", None) or (lambda *a: None)     # (the block's telemetry goes on meanwhile)
     env.reset_all()
     env.perceive()
     ok = tot = 0
@@ -1907,6 +1932,7 @@ def policy_rate(env, algo, steps):
         o, p = env.obs()
         a = algo.act(o, p, deterministic=True)
         r, done, info = env.step(a)
+        watch(done, info, "checking the policy without exploration")
         if bool(done.any()):
             idx = done.nonzero().flatten()
             ok += int(info["success"][idx].sum())
@@ -1934,9 +1960,12 @@ def install_imitation(env):
                 rate, tot = policy_rate(env, self, env.max_steps + 10)
                 env.log("The policy as it is succeeds in %.0f%% of %d episodes." % (rate, tot))
             if rate < 50:
-                imitate(env, self, env.log, steps=500, rounds=2)
+                imitate(env, self, env.log, steps=500, rounds=3)
+                cb = getattr(env, "after_imitation", None)
+                if cb is not None:
+                    cb(self)
                 env.log("Now PPO, from what it imitated (its critic first learns what the states are worth).")
-                state["critic"] = 10
+                state["critic"] = 20
         if state["critic"] > 0:
             state["critic"] -= 1
             critic_only = True
@@ -3728,7 +3757,7 @@ class PPO:
                 self.opt.step()
                 stats["kl"], stats["vloss"], stats["ploss"] = float(kl), float(vl.detach()), float(pl.detach())
         if getattr(self, "bc", None) is not None and not critic_only:
-            self.bc_coef = max(0.1, getattr(self, "bc_coef", 1.0) * 0.993)
+            self.bc_coef = max(0.5, getattr(self, "bc_coef", 1.0) * 0.998)
             self.lr = min(self.lr, getattr(self, "lr_max", 1e-3))
             for g in self.opt.param_groups:
                 g["lr"] = self.lr
@@ -4472,9 +4501,9 @@ def learn_run(ctx, stage):
     def score():
         return 100.0 * sum(h[0] for h in hist) / len(hist) if len(hist) >= 50 else 0.0
 
-    def save(note):
+    def save(note, sc_=None):
         st = algo.state()
-        st.update({"format": FORMAT, "stage": stage, "cell": cell_signature(), "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": ACT_DIM, "score": score(), "note": note,
+        st.update({"format": FORMAT, "stage": stage, "cell": cell_signature(), "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": ACT_DIM, "score": score() if sc_ is None else sc_, "note": note,
                    "steps": steps_done, "round_steps": steps_done - steps_start, "device": label, "minutes": (time.time() - t0) / 60, "ctrl_dt": CTRL_DT,
                    "episodes": len(hist), "arm": "xarm6-in-physics", "round_task": (t_idx + 1) if n_tasks > 1 else 0,
                    "per_object": {k: round(100 * sum(v) / max(1, len(v))) for k, v in per_obj.items()}})
@@ -4541,6 +4570,29 @@ def learn_run(ctx, stage):
             ctx.telemetry(ch_train, row)
 
     env.watch = watch
+    # (place) the policy kept is the best one checked without exploration on every cell: right after it imitated the
+    # controller, then every CHECK_EVERY updates and at the end (PPO's own rate, with exploration and the episodes
+    # that start with the hand over the object, is not what the test sees)
+    use_check = stage == "place" and n_tasks <= 1
+    chk = {"best": -1.0, "last": 0}
+
+    def check(note):
+        import grasp_env as GE
+        rate, tot = GE.policy_rate(env, algo, env.max_steps + 10)
+        ctx.log("Checked without exploration (%s): %.0f%% of %d episodes in the bin." % (note, rate, tot))
+        ctx.telemetry(ch_train, {"minutes": round((time.time() - t0) / 60, 2), "iteration": it, "steps_m": round(steps_done / 1e6, 2), "checked_success": round(rate, 1)})
+        chk["last"] = it
+        if rate > chk["best"]:
+            chk["best"] = rate
+            save("checked: %s" % note, rate)
+        env.reset_all()
+        env.perceive()
+        for i in show:
+            recs[i] = []
+            rec_objs[i] = object_item(env, i)
+
+    if use_check:
+        env.after_imitation = lambda algo_: check("as imitated")
     try:
         while time.time() - t0 < minutes * 60:
             if finish_asked(ctx, ch_ctl):
@@ -4588,12 +4640,17 @@ def learn_run(ctx, stage):
                     ctx.telemetry(ch_train, tel_row(it + (t + 1) / algo.T, steps_done + (t + 1) * n))
             stats = algo.update(a_priv, critic_only=it < warm)
             it += 1
+            a_obs, a_priv = env.obs()       # (learning from demonstrations, within the first update, starts the cells again)
             if live is not None:
                 live.update(algo, it)
             steps_done += algo.T * n
             sps = algo.T * n / max(1e-6, time.time() - tt)
             sc = score()
-            if sc > best and len(hist) >= 50 and it > warm + 10:
+            if use_check:
+                if it - chk["last"] >= CHECK_EVERY and it > warm + 10:
+                    check("after %d updates" % it)
+                    a_obs, a_priv = env.obs()
+            elif sc > best and len(hist) >= 50 and it > warm + 10:
                 best = sc
                 save("best so far")
             if True:                    # (after every update, with its own numbers: the spread of the actions, the step)
@@ -4609,7 +4666,9 @@ def learn_run(ctx, stage):
         player.stop()
         if live is not None:
             live.stop()
-    if best < 0 or score() >= best or n_tasks > 1:
+    if use_check:
+        check("at the end")
+    elif best < 0 or score() >= best or n_tasks > 1:
         save("final")
     final = torch.load(out_path, map_location="cpu", weights_only=False)
     name = "grasp_%s_%s_%02d.pt" % (stage, time.strftime("%Y%m%d_%H%M"), int(round(max(0.0, float(final.get("score") or 0)))))
@@ -4719,8 +4778,6 @@ def test_run(ctx):
     # who drives: the learned policy, or the scripted controller it learns from (the same camera network and sensors)
     use_demo = "controller" in str(p.get("driver") or "").lower()
     if use_demo:
-        import grasp_env as GE
-        demo = GE.Demo(env)
         env.stage = "place"
         ctx.log("The test: the scripted controller (the teacher the policy imitates), camera network %s, on %s." % (sp["name"], label))
     else:
@@ -4868,16 +4925,14 @@ def test_run(ctx):
         env.perceive()
         wall0 = time.time()
         grasped, maxf, result = False, 0.0, "ran out of time"
-        if use_demo:
-            demo.reset(idx)
+        env.restart_phase(idx)          # (the task starts now: the hand waited at rest)
         while True:
             if use_demo:
-                a = demo.act()
+                a = env.demo_a.clone()
             else:
                 obs, _ = env.obs()
-                with torch.no_grad():       # (as it acted while it learned: its moves with their spread)
-                    mu = ac.actor(on(obs))
-                    a = mu + ac.log_std.exp() * torch.randn_like(mu)
+                with torch.no_grad():       # (as it was checked and kept in training: without exploration)
+                    a = ac.actor(on(obs))
             r, done, info = env.step(a)
             grasped = grasped or bool(env.lifted_ever[0]) or bool(env.hold_cnt[0] >= 25) or float(info["lift"][0]) > 0.05
             maxf = max(maxf, float(env.touches()[0].max()))
