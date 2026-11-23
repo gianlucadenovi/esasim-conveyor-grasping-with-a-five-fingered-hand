@@ -9,13 +9,34 @@
   "events": "events"
  },
  "environment": {
-  "sky": "day",
+  "sky": "space",
   "ground": {
-   "type": "concrete",
-   "size": 60
+   "type": "none"
   }
  },
+ "lights": [
+  {
+   "type": "sun",
+   "intensity": 3.2,
+   "color": "#fff3e2",
+   "elevation": 55,
+   "azimuth": 70,
+   "bias": -0.0004,
+   "normal_bias": 0.004,
+   "extent": 2.5
+  }
+ ],
  "models": [
+  {
+   "id": "floor",
+   "model": "models/floor.glb",
+   "up": "z",
+   "position": [
+    0,
+    0,
+    0
+   ]
+  },
   {
    "id": "arm",
    "model": "models/xarm_hand.robot.json.gz",

@@ -133,7 +133,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 12 blocks · version 7
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 12 blocks · version 7
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 12 blocks · version 14
-- [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 11 blocks · version 18
+- [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 11 blocks · version 19
 - [Learn on all my machines (a round)](blueprints/learn-on-all-my-machines-a-round.json) · 14 blocks
 - [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 4 blocks · version 30
 
@@ -161,7 +161,7 @@ The files the project's views draw with (3D models, textures, sounds), in [asset
 - [grasp-policy/grasp_see_20261119_2126.pt](assets/grasp-policy/grasp_see_20261119_2126.pt) · 1.4 MB
 - [grasp-policy/grasp_see_20261121_1813.pt](assets/grasp-policy/grasp_see_20261121_1813.pt) · 1.4 MB
 - [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 102 KB
-- [models/cell.scene.json](assets/models/cell.scene.json) · 3.0 KB
+- [models/cell.scene.json](assets/models/cell.scene.json) · 3.3 KB
 - [models/conveyor_belt.glb](assets/models/conveyor_belt.glb) · 1.0 MB
 - [models/conveyor_frame.glb](assets/models/conveyor_frame.glb) · 6.8 MB
 - [models/simple_rubber_conveyor.glb](assets/models/simple_rubber_conveyor.glb) · 2.9 MB
