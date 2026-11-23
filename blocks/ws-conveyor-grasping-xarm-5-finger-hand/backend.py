@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 110 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 111 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2669,6 +2669,22 @@ def part_colour(c, name):
     return 0x9aa1aa
 
 
+def _pieces(v, f):
+    """each triangle's piece: triangles joined by their corners (corners at the same place count as one)"""
+    _, vid = np.unique(np.round(np.asarray(v) / 1e-4).astype(np.int64), axis=0, return_inverse=True)
+    tri = vid.reshape(-1)[np.asarray(f)]
+    lab = np.arange(tri.max() + 1)
+    while True:
+        m = lab[tri].min(1)
+        new = lab.copy()
+        for k in range(3):
+            np.minimum.at(new, tri[:, k], m)
+        new = new[new]
+        if np.array_equal(new, lab):
+            return lab[tri[:, 0]]
+        lab = new
+
+
 def conveyor_mesh(path, log):
     """the conveyor's 3D file at its own proportions: scaled alike in every direction so that its belt's top is on the
     simulated belt (its feet then on the floor), its long side along the belt, its belt centred on the simulated one.
@@ -2715,6 +2731,12 @@ def conveyor_mesh(path, log):
             by_col.setdefault(("belt",), []).append((vs, f, part_colour(c, nm)))
         elif "frame" in nm:
             by_col.setdefault(("frame",), []).append((vs, f, CONVEYOR_FINISH[("frame",)]["color"]))
+            lab = _pieces(v, f)
+            for p_ in np.unique(lab):
+                pv = v[f[lab == p_]].reshape(-1, 3)
+                a_, b_ = pv.min(0), pv.max(0)
+                if min(a_[0] - lo[0], hi[0] - b_[0]) < 0.25:
+                    log("DIAG %s piece %d: %d tri, x %.3f..%.3f y %.3f..%.3f z %.3f..%.3f" % (nm.split()[0], p_, int((lab == p_).sum()), a_[0], b_[0], a_[1], b_[1], a_[2], b_[2]))
         elif "leg" in nm:           # (the feet: the legs' triangles down at the floor)
             low = v[f][:, :, 2].max(1) < lo[2] + FEET_H
             by_col.setdefault(("feet",), []).append((vs, f[low], CONVEYOR_FINISH[("feet",)]["color"]))
