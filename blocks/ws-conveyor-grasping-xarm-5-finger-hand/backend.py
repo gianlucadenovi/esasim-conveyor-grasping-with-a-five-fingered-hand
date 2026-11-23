@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 113 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 114 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2739,8 +2739,39 @@ FEET_H = 0.05                     # (m, in the file) the feet: the legs up to th
 
 # the belt's rubber: a seamless picture in the project's assets (lines across the belt, the grain and wear of the
 # rubber), one every BELT_TEX_ALONG along the belt (a whole number of them round its loop) and BELT_TEX_ACROSS across
-BELT_TEX = "textures/belt_rubber.png"
+BELT_TEX = "models/belt_rubber.png"
 BELT_TEX_ALONG, BELT_TEX_ACROSS = 0.40, 0.34          # (m)
+
+
+def belt_texture_png(w=512, h=448, lines=2, seed=7):
+    """the belt's rubber as a PNG that repeats without a seam both ways (x: along the belt, y: across it): dark rubber,
+    uneven wear and a fine grain (noise shaped in its spectrum, so it wraps round), faint scuffs along the travel,
+    specks and pits, and lines across the belt at equal spaces, each a groove with a lit edge"""
+    import struct
+    import zlib
+    rng = np.random.default_rng(seed)
+
+    def noise(hh, ww, beta):
+        ky, kx = np.fft.fftfreq(hh)[:, None], np.fft.fftfreq(ww)[None, :]
+        k = np.sqrt(kx ** 2 + ky ** 2)
+        k[0, 0] = 1.0
+        n = np.real(np.fft.ifft2(np.fft.fft2(rng.standard_normal((hh, ww))) / k ** beta))
+        return (n - n.mean()) / n.std()
+    img = 0.085 + 0.010 * noise(h, w, 1.6) + 0.010 * noise(h, w, 0.4) + 0.004 * np.repeat(noise(h, 8, 1.0), w // 8, axis=1)
+    for _ in range(260):
+        y, x, r = rng.integers(0, h), rng.integers(0, w), rng.integers(1, 3)
+        img[np.ix_(np.arange(y - r, y + r) % h, np.arange(x - r, x + r) % w)] += rng.choice([0.03, -0.025])
+    groove = {-4: -0.02, -3: -0.04, -2: -0.055, -1: -0.06, 0: -0.06, 1: -0.055, 2: -0.04, 3: 0.03, 4: 0.03, 5: 0.015}
+    for k in range(lines):
+        wob = 1 + 0.15 * noise(h, 1, 1.2)[:, 0]
+        for dx, a in groove.items():
+            img[:, (w * (2 * k + 1) // (2 * lines) + dx) % w] += a * wob
+    rgb = (np.clip(np.stack([img * 0.98, img, img * 1.03], -1), 0, 1) * 255).astype(np.uint8)
+    raw = b"".join(b"\0" + rgb[y].tobytes() for y in range(h))
+
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
 
 
 def belt_glb(items, log):
@@ -2864,6 +2895,8 @@ def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=Non
     if conv and CONVEYOR.get("belt_glb"):
         with open(ctx.output(port, "conveyor_belt.glb"), "wb") as fh:
             fh.write(CONVEYOR["belt_glb"])
+        with open(ctx.output(port, os.path.basename(BELT_TEX)), "wb") as fh:
+            fh.write(belt_texture_png())
     ctx.log("cell.scene.json: the cell for the 3D scene view (scene: models/cell.scene.json)%s." % (
         ", with the belt's own 3D file (conveyor_belt.glb) and its texture %s" % BELT_TEX if conv and CONVEYOR.get("belt_glb") else ""))
 
