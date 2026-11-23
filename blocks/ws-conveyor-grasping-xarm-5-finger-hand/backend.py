@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 128 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 129 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1869,6 +1869,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
         env.perceive()
         ok = tot = 0
         why = collections.Counter()
+        per = collections.defaultdict(lambda: [0, 0])          # (object: in the bin, episodes)
         for k in range(steps):
             a = env.demo_a                # (the controller, following the task's phase, says what it would do here)
             o, _ = env.obs()
@@ -1888,11 +1889,16 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
                 ok += int(info["success"][idx].sum())
                 tot += len(idx)
                 why.update(end_kinds(env, info, idx))
+                for o_, s_ in zip(env.obj[idx].tolist(), info["success"][idx].tolist()):
+                    per[env.info[o_]["label"]][0] += int(s_)
+                    per[env.info[o_]["label"]][1] += 1
                 env.reset(idx)
                 env.sim.refresh()
             if k % 20 == 0:
                 prog(0, "Learning from demonstrations: round %d of %d, step %d of %d" % (r_ + 1, rounds + 1, k, steps))
         log("  how they ended: " + ", ".join("%s %.0f%%" % (w, 100.0 * c / max(1, tot)) for w, c in why.most_common()))
+        if not drive_policy:
+            log("  in the bin by object: " + ", ".join("%s %.0f%%" % (k_, 100.0 * v[0] / v[1]) for k_, v in sorted(per.items(), key=lambda x: x[1][0] / x[1][1])))
         return ok, tot
 
     def fit(n_epochs):
