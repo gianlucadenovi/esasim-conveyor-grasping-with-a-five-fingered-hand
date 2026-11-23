@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 120 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 121 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -897,8 +897,7 @@ from sims import CTRL_DT
 
 ACT_DIM = 12
 OBS_DIM = 99
-PRIV_DIM = 142
-PHASE_DIM = 10                     # the task's phase (see GraspEnv.phase_obs): the last inputs of both
+PRIV_DIM = 142                     # (the last 10 of both: the task's phase, see GraspEnv.phase_obs)
 CAM_EVERY = 4                      # a camera frame every 4 control steps (6 per second)
 STAGES = ("reach", "grasp", "place")
 EP_SECONDS = {"reach": 12.0, "grasp": 18.0, "place": 25.0}
@@ -4410,6 +4409,9 @@ def see_run(ctx):
 
 
 # ── Learn to reach / grasp / place ──────────────────────────────────────────────────────────────────────────────
+CHECK_EVERY = 30                   # (place) updates between checks of the policy without exploration
+
+
 def learn_run(ctx, stage):
     import torch
     p = ctx.params
