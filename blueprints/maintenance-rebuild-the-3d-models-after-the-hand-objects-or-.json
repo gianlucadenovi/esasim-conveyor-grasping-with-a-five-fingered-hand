@@ -5,8 +5,8 @@
     },
     "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 33,
-    "updated": "2026-11-23 20:55:27",
+    "published_version": 34,
+    "updated": "2026-11-23 21:15:30",
     "graph": {
         "nodes": [
             {
@@ -35,7 +35,7 @@
                 "x": -320,
                 "y": 420,
                 "params": {
-                    "files": "models/security_camera.glb"
+                    "files": "models/game-ready_security_camera.glb"
                 },
                 "title": "Your camera model (security camera)"
             },
