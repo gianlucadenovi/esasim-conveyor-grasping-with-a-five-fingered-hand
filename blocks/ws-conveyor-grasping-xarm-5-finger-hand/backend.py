@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 86 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 87 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -4195,6 +4195,8 @@ def diagnose_run(ctx):
     env.perceive()
     held = torch.zeros(n, dtype=torch.bool, device=dev)
     tries = torch.zeros(n, device=dev)
+    ph_t = torch.zeros(n, 6, device=dev)
+    dmin = torch.full((n,), 9.0, device=dev)
     snap = torch.full((n, 7), float("nan"), device=dev)
     snap0 = torch.full((n, 3), float("nan"), device=dev)
     eps, t0, k = [], time.time(), 0
@@ -4221,13 +4223,19 @@ def diagnose_run(ctx):
                                dyaw.abs() * (te[:, 0] > 1.3 * te[:, 1]).float(), (g[:, :2] - tc[:, :2]).norm(dim=1), g[:, 2] - (tc[:, 2] + te[:, 2]),
                                env.est_age, te[:, 2] * 2], -1)
             snap = torch.where(start[:, None], row, snap)
+        ph_t[torch.arange(n, device=dev), demo.phase.clamp(0, 5)] += 1
+        g_, _ = env.hand_state()
+        op_ = sim.xpos[:, env.ob].float()
+        dd = (g_[:, :2] - env.est_c[:, :2]).norm(dim=1)
+        dmin = torch.where((demo.phase == 0) & (op_[:, 0] < GE.GRASP_WAIT_X), torch.minimum(dmin, dd), dmin)
         r, done, info = env.step(a)
         k += 1
         held = held | env.lifted_ever
         if bool(done.any()):
             idx = done.nonzero().flatten()
             for i in idx.tolist():
-                eps.append((int(env.obj[i]), bool(info["success"][i]), bool(held[i]), snap[i].tolist() + snap0[i].tolist(), float(tries[i]), float(env.steps[i]) * GE.CTRL_DT))
+                eps.append((int(env.obj[i]), bool(info["success"][i]), bool(held[i]), snap[i].tolist() + snap0[i].tolist(), float(tries[i]), float(env.steps[i]) * GE.CTRL_DT,
+                            (ph_t[i] * GE.CTRL_DT).tolist(), float(dmin[i]), op_[i].tolist(), (g_[i] - op_[i]).tolist(), float(env.est_age[i])))
             env.reset(idx)
             sim.refresh()
             demo.reset(idx)
@@ -4235,6 +4243,8 @@ def diagnose_run(ctx):
             snap[idx] = float("nan")
             snap0[idx] = float("nan")
             tries[idx] = 0
+            ph_t[idx] = 0
+            dmin[idx] = 9.0
         if k % 25 == 0:
             ctx.progress(min(99, (time.time() - t0) / 4.8), "%d episodes, %d in the bin" % (len(eps), sum(e[1] for e in eps)))
     m = max(1, len(eps))
@@ -4251,6 +4261,9 @@ def diagnose_run(ctx):
         ctx.log("%s grasp attempts: %d episodes, %.0f%% in the bin, ended after %.0f s (median)" % (nt if nt < 3 else "3+", len(sel), 100.0 * sum(e[1] for e in sel) / max(1, len(sel)), float(np.median([e[5] for e in sel])) if sel else 0))
     never = [e for e in eps if math.isnan(e[3][0])]
     ctx.log("Never closed: %d of %d (%d of them in the bin)" % (len(never), len(eps), sum(e[1] for e in never)))
+    for e in never[:25]:
+        ctx.log("  never: %-10s s in phases %s  closest in phase 0 %.1f cm  object at end %s  hand-object %s  frame age %.1f s" % (
+            env.info[e[0]]["label"], [round(v, 1) for v in e[6]], 100 * e[7], [round(100 * v) for v in e[8]], [round(100 * v) for v in e[9]], e[10]))
     for lab in sorted(per):
         for ok in (True, False):
             rows = np.array([e[3] for e in eps if env.info[e[0]]["label"] == lab and e[1] == ok and not math.isnan(e[3][0]) and not math.isnan(e[3][7])])
