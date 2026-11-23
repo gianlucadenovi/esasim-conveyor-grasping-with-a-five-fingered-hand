@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 98 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 99 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2253,6 +2253,9 @@ def simple_xarm_links():
     return out
 
 
+N_PADS = 16                       # (the hand's parts with pressure sensors: the palm and the 15 phalanges; see arm_model)
+
+
 def arm_model(mjm, links):
     """xarm_hand.robot.json: the xArm's 6 joints, then the hand fixed on the flange, then the hand's 15 finger joints
     (taken from the simulated model: every finger body with its hinge and its capsules)"""
@@ -2301,6 +2304,32 @@ def arm_model(mjm, links):
                 m.add(v, f, quat_R(mjm.geom_quat[g]), mjm.geom_pos[g])
                 col = hexcol(mjm.geom_rgba[g])
         out_links.append(m.link(col))
+    # the 19 pressure sensors, drawn where they are, on the palm's side of the palm and of each phalanx (orange pads):
+    # the palm is never taken for the back of the hand. Each body's pads are a part fixed to it, after all the joints
+    pads = {}
+    want = np.array([0.0, -0.5 * S.SIDE, -0.75])          # (the thumb's pads face where it curls: as thumb_flex_axis)
+    u = np.asarray(S.THUMB_U, float)
+    dth = want - (want @ u) * u
+    dth = dth / np.linalg.norm(dth)
+    for nm in S.TOUCH_NAMES:
+        sid = mjm.site(nm).id
+        b = int(mjm.site_bodyid[sid])
+        p = np.array(mjm.site_pos[sid], float)
+        sz = np.array(mjm.site_size[sid], float)
+        if nm.startswith("palm"):
+            n, along, hl, hw, off = np.array([0.0, 0.0, -1.0]), np.array([1.0, 0.0, 0.0]), sz[0] * 0.9, sz[1] * 0.9, 0.0012
+        else:
+            along, n = (u, dth) if nm.startswith("thumb") else (np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, -1.0]))
+            r = sz[0] / 1.45
+            hl = sz[1] if int(mjm.site_type[sid]) == 3 else 0.006
+            hw, off = r * 0.75, r + 0.0008
+        Rp = np.stack([along, np.cross(n, along), n], 1)
+        v, f = prim("box", [hl, hw, 0.0012])
+        pads.setdefault(b, Mesh()).add(v, f, Rp, p + n * off)
+    for b, m in pads.items():
+        parent = "hand" if b == hb else names[b]
+        joints.append({"name": "pads_%s" % parent, "type": "fixed", "parent": parent, "xyz": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0], "axis": [0, 0, 1]})
+        out_links.append(m.link(0xff7a1a))
     model = {"kind": "esasim.robot/1", "robot": ARM, "units": "mm", "scale": 0.1, "angle_units": "rad", "tool": "hand",
              "joints": joints, "links": out_links,
              "license": "xArm meshes and kinematics: xarm_ros by UFACTORY (github.com/xArm-Developer/xarm_ros), BSD 3-Clause."}
@@ -2729,7 +2758,7 @@ class Pose3D:
 
     def items(self, sn):
         q, _, fq, o, op, oq, belt = sn            # (the arm's angles are the simulated arm's own)
-        arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq]
+        arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq] + [0.0] * N_PADS
         if o != self.last_obj:
             self.last_eul = None
         self.last_obj = o
