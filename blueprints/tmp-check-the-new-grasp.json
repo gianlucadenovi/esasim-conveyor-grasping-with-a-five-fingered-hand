@@ -6,7 +6,7 @@
     "name": "tmp · check the new grasp",
     "description": "Temporary: the scripted controller with the new grasp, on 1024 cells. To be deleted.",
     "published_version": 1,
-    "updated": "2026-11-22 21:23:58",
+    "updated": "2026-11-23 00:41:24",
     "graph": {
         "nodes": [
             {
