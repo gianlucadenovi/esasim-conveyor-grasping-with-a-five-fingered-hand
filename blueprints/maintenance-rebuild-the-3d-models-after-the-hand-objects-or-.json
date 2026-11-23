@@ -5,8 +5,8 @@
     },
     "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 29,
-    "updated": "2026-11-23 17:08:01",
+    "published_version": 30,
+    "updated": "2026-11-23 17:09:17",
     "graph": {
         "nodes": [
             {
@@ -30,6 +30,18 @@
                 "title": "Your robot model (xArm with the left hand, rigged)"
             },
             {
+                "id": "nets",
+                "type": "dataset",
+                "x": -320,
+                "y": 0,
+                "params": {
+                    "dataset": "35",
+                    "version": "latest",
+                    "pattern": "README*"
+                },
+                "title": "(runs it on the GPU PC, which uploads its results)"
+            },
+            {
                 "id": "models",
                 "type": "ws-conveyor-grasping-xarm-5-finger-hand",
                 "x": 0,
@@ -42,7 +54,7 @@
                 "title": "Make the 3D models",
                 "dest": {
                     "location": 9,
-                    "name": "grasp-3d-models-21",
+                    "name": "grasp-3d-models-22",
                     "folder": "",
                     "live": true,
                     "move": false,
@@ -53,6 +65,17 @@
             }
         ],
         "edges": [
+            {
+                "id": "nets.files>models.policy",
+                "from": {
+                    "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "models",
+                    "port": "policy"
+                }
+            },
             {
                 "id": "robot.files>models.policy",
                 "from": {
