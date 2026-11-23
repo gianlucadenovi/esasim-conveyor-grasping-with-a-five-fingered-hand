@@ -6,7 +6,7 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 13,
-    "updated": "2026-11-23 07:11:43",
+    "updated": "2026-11-23 16:24:44",
     "graph": {
         "nodes": [
             {
@@ -66,7 +66,7 @@
                 "y": -580,
                 "params": {
                     "interval": 0.5,
-                    "channels": "joints,scene,events,camera_picture,train,touch",
+                    "channels": "cell,events,camera_picture,train,touch",
                     "keep": 300
                 },
                 "title": "Episodes for the view"
@@ -85,19 +85,13 @@
             },
             {
                 "id": "view",
-                "type": "viewer-3d",
+                "type": "scene-3d",
                 "x": 760,
                 "y": -480,
                 "params": {
-                    "environment": "outdoor",
+                    "scene": "models/cell.scene.json",
                     "quality": "high",
-                    "floor": true,
-                    "grid": false,
-                    "joints_channel": "joints",
-                    "scene_channel": "scene",
-                    "delay": 1.5,
-                    "numbers": "",
-                    "events_channel": "events",
+                    "overlay": true,
                     "controls": "button Finish now",
                     "control_channel": "control"
                 },
@@ -231,14 +225,14 @@
                 }
             },
             {
-                "id": "tel_robot.stream>view.scene",
+                "id": "tel_robot.stream>view.data",
                 "from": {
                     "node": "tel_robot",
                     "port": "stream"
                 },
                 "to": {
                     "node": "view",
-                    "port": "scene"
+                    "port": "data"
                 }
             },
             {
