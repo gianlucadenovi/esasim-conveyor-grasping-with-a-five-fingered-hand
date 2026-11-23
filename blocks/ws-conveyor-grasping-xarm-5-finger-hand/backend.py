@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 124 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 125 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1833,6 +1833,22 @@ class Demo:
         return a
 
 
+def end_kinds(env, info, idx):
+    """how the episodes idx ended: in the bin; dropped once lifted; never lifted (it went off the belt); timed out
+    holding it, or empty-handed"""
+    out = []
+    for i in idx.tolist():
+        if bool(info["success"][i]):
+            out.append("in the bin")
+        elif bool(env.lifted_ever[i]):
+            out.append("dropped once lifted" if bool(info["fail"][i]) else "timed out lifted")
+        elif bool(info["fail"][i]):
+            out.append("never lifted, off the belt")
+        else:
+            out.append("timed out, never lifted")
+    return out
+
+
 def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
     """the policy learns to act as the scripted controller does. First the controller drives the cells (with a little
     noise) while (what the policy senses, what the controller does) pairs are kept, and the policy's network is fitted
@@ -1851,6 +1867,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
         env.reset_all()
         env.perceive()
         ok = tot = 0
+        why = collections.Counter()
         for k in range(steps):
             a = env.demo_a                # (the controller, following the task's phase, says what it would do here)
             o, _ = env.obs()
@@ -1869,10 +1886,12 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
                 idx = done.nonzero().flatten()
                 ok += int(info["success"][idx].sum())
                 tot += len(idx)
+                why.update(end_kinds(env, info, idx))
                 env.reset(idx)
                 env.sim.refresh()
             if k % 20 == 0:
                 prog(0, "Learning from demonstrations: round %d of %d, step %d of %d" % (r_ + 1, rounds + 1, k, steps))
+        log("  how they ended: " + ", ".join("%s %.0f%%" % (w, 100.0 * c / max(1, tot)) for w, c in why.most_common()))
         return ok, tot
 
     def fit(n_epochs):
@@ -1912,8 +1931,9 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
     algo.bc_coef = 1.0
     # (small, capped steps from here, and a smaller move per batch: at 1e-4 to 3e-4 PPO undid in an hour most of
     # what the policy had imitated, 60% down to 15%)
-    algo.lr, algo.lr_max = 3e-5, 1e-4
+    algo.lr, algo.lr_max = 1e-5, 3e-5
     algo.kl_want = 0.005
+    algo.on_frozen = True          # (the input scaling it imitated with stays: PPO's own episodes moved it, and the policy with it)
     for g in algo.opt.param_groups:
         g["lr"] = algo.lr
     env.reset_all()
@@ -1959,7 +1979,7 @@ def install_imitation(env):
                 rate, tot = policy_rate(env, self, env.max_steps + 10)
                 env.log("The policy as it is succeeds in %.0f%% of %d episodes." % (rate, tot))
             if rate < 50:
-                imitate(env, self, env.log, steps=500, rounds=3)
+                imitate(env, self, env.log, steps=500, rounds=4)
                 cb = getattr(env, "after_imitation", None)
                 if cb is not None:
                     cb(self)
@@ -3872,12 +3892,13 @@ class PPO:
                 self.opt.step()
                 stats["kl"], stats["vloss"], stats["ploss"] = float(kl), float(vl.detach()), float(pl.detach())
         if getattr(self, "bc", None) is not None and not critic_only:
-            self.bc_coef = max(0.5, getattr(self, "bc_coef", 1.0) * 0.998)
+            self.bc_coef = max(1.0, getattr(self, "bc_coef", 1.0) * 0.998)
             self.lr = min(self.lr, getattr(self, "lr_max", 1e-3))
             for g in self.opt.param_groups:
                 g["lr"] = self.lr
         with torch.no_grad():     # (the input scaling follows what it sees, after the update that used the old one)
-            self.on.update(obs)
+            if not getattr(self, "on_frozen", False):
+                self.on.update(obs)
             self.pn.update(priv)
         stats["std"] = float(self.ac.log_std.detach().exp().mean())
         stats["lr"] = self.lr
