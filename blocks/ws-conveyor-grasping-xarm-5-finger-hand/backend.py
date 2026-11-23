@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 117 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 118 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2970,8 +2970,8 @@ def objects_model(info, conveyor=None):
         for nm, typ, axis in (("x", "prismatic", [1, 0, 0]), ("y", "prismatic", [0, 1, 0]), ("z", "prismatic", [0, 0, 1]),
                               ("a", "revolute", [0, 0, 1]), ("b", "revolute", [0, 1, 0]), ("c", "revolute", [1, 0, 0])):
             jn = "%s_%s" % (o["key"], nm)
-            joints.append({"name": jn, "type": typ, "parent": par, "xyz": [0, 0, 0],
-                           "rpy": [0, 0, 0], "axis": axis})
+            joints.append({"name": jn, "type": typ, "parent": par, "xyz": [0, 0, PARK_MM if par == "base" else 0],
+                           "rpy": [0, 0, 0], "axis": axis})       # (at rest, its joints at 0: under the floor, out of sight)
             par = jn
             links.append({})
         m = Mesh()
@@ -3195,8 +3195,8 @@ class Pose3D:
             self.last_eul = None
         self.last_obj = o
         r, p, y = self.last_eul = rpy_near(quat_R(oq), self.last_eul)
-        objs = [0.0, 0.0, PARK_MM, 0.0, 0.0, 0.0] * self.nobj      # (every item complete: the objects not in play under the floor)
-        objs[6 * o:6 * o + 6] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000, 1), round(y, 4), round(p, 4), round(r, 4)]
+        objs = [0.0] * (6 * self.nobj)      # (every item complete: the objects not in play at rest, under the floor)
+        objs[6 * o:6 * o + 6] = [round(op[0] * 1000, 1), round(op[1] * 1000, 1), round(op[2] * 1000 - PARK_MM, 1), round(y, 4), round(p, 4), round(r, 4)]
         self.n_q = (len(arm), len(objs))
         return {"arm": arm, "objects": objs, "travel": round(-float(belt), 4)}
 
