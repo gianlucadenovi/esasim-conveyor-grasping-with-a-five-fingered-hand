@@ -5,8 +5,8 @@
     },
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
-    "published_version": 16,
-    "updated": "2026-11-23 06:09:56",
+    "published_version": 17,
+    "updated": "2026-11-23 08:21:01",
     "graph": {
         "nodes": [
             {
@@ -50,8 +50,8 @@
                     "mode": "Test with new objects",
                     "accelerator": "auto",
                     "worlds": 1,
-                    "minutes": 30,
-                    "driver": "The scripted controller",
+                    "minutes": 10,
+                    "driver": "The learned policy",
                     "pace": 1,
                     "drop_cm": 25,
                     "autoplay": "Yes",
