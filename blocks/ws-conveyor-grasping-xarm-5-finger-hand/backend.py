@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 97 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 98 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -117,6 +117,17 @@ THUMB = {"base": (-0.024, 0.036, -0.010), "len": (0.048, 0.033, 0.028), "r": 0.0
 THUMB_U = np.array([0.62, 0.72, -0.30]); THUMB_U = THUMB_U / np.linalg.norm(THUMB_U)      # the thumb's direction, open (beside the palm)
 THUMB_OPP = np.array([-0.403, -0.034, -0.915]); THUMB_OPP = THUMB_OPP / np.linalg.norm(THUMB_OPP)   # the axis it turns about to oppose
 THUMB_FLEX = np.array([0.0, 0.0, 1.0])            # (set below) its knuckle's and end joint's axis: curls the tip across the palm
+# the hand the xArm carries: the shapes above are a right hand's; a left hand is their mirror image across the hand's y
+# (its thumb on -y; the axes the thumb turns about mirrored, and turning the other way round, so that it still closes)
+HAND = "left"
+SIDE = -1 if HAND == "left" else 1
+if SIDE < 0:
+    _M = np.array([1.0, -1.0, 1.0])
+    GRASP_PT = (GRASP_PT[0], -GRASP_PT[1], GRASP_PT[2])
+    FINGERS = [(n, -y0, lens, r, -splay) for n, y0, lens, r, splay in FINGERS]
+    THUMB = dict(THUMB, base=tuple(np.array(THUMB["base"]) * _M))
+    THUMB_U = THUMB_U * _M
+    THUMB_OPP = -(THUMB_OPP * _M)
 # what the policy moves: where the hand should be (the arm's six servos take it there) and 6 finger motors: each finger's curl (its three
 # joints together, as tendons do) and the thumb's opposition; the thumb's curl is the 5th
 CURL_MAX = (1.57, 1.75, 1.22)                    # MCP, PIP, DIP at a full fist (rad)
@@ -279,7 +290,7 @@ def arm_close_xml():
 def thumb_flex_axis():
     """the thumb's flexion axis (MCP and IP): across the thumb, so that flexing moves its tip towards the palm's middle
     and its palm side (-z, -y) as a thumb does"""
-    want = np.array([0.0, -0.5, -0.75])                 # where flexion takes the tip, with the thumb beside the palm
+    want = np.array([0.0, -0.5 * SIDE, -0.75])          # where flexion takes the tip, with the thumb beside the palm
     d = want - (want @ THUMB_U) * THUMB_U
     d = d / np.linalg.norm(d)
     a = np.cross(THUMB_U, d)                            # (a rotation about a moves THUMB_U towards d)
@@ -912,7 +923,7 @@ EP_SECONDS = {"reach": 12.0, "grasp": 18.0, "place": 25.0}
 # the camera's errors): the line along which the thumb closes against the fingers is not the hand's x but turned from it,
 # so the hand is turned GRASP_YAW further than square across the object's long axis; the palm level; the grasp point
 # GRASP_DZ lower and GRASP_DY towards the thumb's side (the hand's -y)
-GRASP_YAW, GRASP_DZ, GRASP_DY = 0.6981, -0.01, 0.01
+GRASP_YAW, GRASP_DZ, GRASP_DY = 0.6981 * S.SIDE, -0.01, 0.01     # (the turn mirrored for a left hand)
 GRASP_DY_W = 0.6                   # (and further, by this much of its half-width over 1.5 cm: a wide object between thumb and fingers)
 GRASP_WAIT_X = 0.42                # (the hand waits for an object until it is this near: the arm turns the hand freely there)
 LIFT_OK, HOLD_STEPS = 0.08, 25     # a grasp: lifted 8 cm and held for 1 s (pushed about in the last half)
@@ -1752,7 +1763,7 @@ class Demo:
         # (the grasp point a little towards the thumb's side: along the hand's -y, as the hand will be turned)
         dy = torch.where(down, self.plan_dy, GRASP_DY + GRASP_DY_W * (ee[:, 1] - 0.015).clamp(min=0))
         dy_g = dy.clone()
-        T = T - dy[:, None] * torch.stack([-torch.sin(want), torch.cos(want), torch.zeros_like(want)], -1)
+        T = T - (dy * S.SIDE)[:, None] * torch.stack([-torch.sin(want), torch.cos(want), torch.zeros_like(want)], -1)
         # carrying and over the bin: the fingers pointing away from the arm's base (a pose the arm reaches well there)
         out = torch.atan2(env.tgt_p[:, 1] - S.BASE_POS[1], env.tgt_p[:, 0] - S.BASE_POS[0])
         out = torch.where(out > YAW_MAX, out - 2 * math.pi, torch.where(out < -YAW_MAX, out + 2 * math.pi, out)).clamp(-YAW_MAX, YAW_MAX)
