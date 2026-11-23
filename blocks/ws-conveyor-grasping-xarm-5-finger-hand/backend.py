@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 141 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 142 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1980,7 +1980,7 @@ def gentle(algo):
 
 
 def policy_rate(env, algo, steps):
-    """the share of episodes the policy (without exploration noise) ends with the object in the bin"""
+    """the share of episodes the policy, as it acts (with its small exploration), ends with the object in the bin"""
     torch = env.t
     watch = getattr(env, "watch", None) or (lambda *a: None)     # (the block's telemetry goes on meanwhile)
     env.reset_all()
@@ -1988,9 +1988,9 @@ def policy_rate(env, algo, steps):
     ok = tot = 0
     for k in range(steps):
         o, p = env.obs()
-        a = algo.act(o, p, deterministic=True)
+        a = algo.act(o, p)
         r, done, info = env.step(a)
-        watch(done, info, "checking the policy without exploration")
+        watch(done, info, "checking the policy")
         if bool(done.any()):
             idx = done.nonzero().flatten()
             ok += int(info["success"][idx].sum())
@@ -5087,7 +5087,7 @@ def learn_run(ctx, stage):
     def check(note):
         import grasp_env as GE
         rate, tot = GE.policy_rate(env, algo, env.max_steps + 10)
-        ctx.log("Checked without exploration (%s): %.0f%% of %d episodes in the bin." % (note, rate, tot))
+        ctx.log("Checked (%s): %.0f%% of %d episodes in the bin." % (note, rate, tot))
         ctx.telemetry(ch_train, {"minutes": round((time.time() - t0) / 60, 2), "iteration": it, "steps_m": round(steps_done / 1e6, 2), "checked_success": round(rate, 1)})
         chk["last"] = it
         if rate > chk["best"]:
@@ -5439,8 +5439,9 @@ def test_run(ctx):
                 a = env.demo_a.clone()
             else:
                 obs, _ = env.obs()
-                with torch.no_grad():       # (as it was checked and kept in training: without exploration)
-                    a = ac.actor(on(obs))
+                with torch.no_grad():       # (as it was checked and kept in training: with its small exploration)
+                    mu = ac.actor(on(obs))
+                    a = mu + ac.log_std.exp() * torch.randn_like(mu)
             r, done, info = env.step(a)
             grasped = grasped or bool(env.lifted_ever[0]) or bool(env.hold_cnt[0] >= 25) or float(info["lift"][0]) > 0.05
             maxf = max(maxf, float(env.touches()[0].max()))
