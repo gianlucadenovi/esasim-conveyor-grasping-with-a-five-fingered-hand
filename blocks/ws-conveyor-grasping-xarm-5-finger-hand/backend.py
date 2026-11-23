@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 89 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 90 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -3994,19 +3994,27 @@ def test_run(ctx):
     env.assist = 0.0
     see, sp = load_see(ctx, dev, need=True)
     env.see = see
-    pols = pick_policy(ctx, find_files(ctx, "policy", "policy_checkpoint.pt", FORMAT), "place")
-    if not pols:
-        raise RuntimeError("No policy yet: run Learn to reach, Learn to grasp and Learn to place first.")
-    pol = pols[0]
-    st = pol["st"]
-    env.stage = pol["stage"]
+    # who drives: the learned policy, or the scripted controller it learns from (the same camera network and sensors)
+    use_demo = "controller" in str(p.get("driver") or "").lower()
+    if use_demo:
+        import grasp_env as GE
+        demo = GE.Demo(env)
+        env.stage = "place"
+        ctx.log("The test: the scripted controller (the teacher the policy imitates), camera network %s, on %s." % (sp["name"], label))
+    else:
+        pols = pick_policy(ctx, find_files(ctx, "policy", "policy_checkpoint.pt", FORMAT), "place")
+        if not pols:
+            raise RuntimeError("No policy yet: run Learn to reach, Learn to grasp and Learn to place first.")
+        pol = pols[0]
+        st = pol["st"]
+        env.stage = pol["stage"]
+        ac = make_ac(torch, OBS_DIM, PRIV_DIM, st["act_dim"]).to(dev)
+        ac.load_state_dict(widen(torch, st["ac"], OBS_DIM, PRIV_DIM))     # (a policy from before the phalanges' sensors: they start unweighted)
+        ac.eval()
+        on = Norm(torch, OBS_DIM, dev)
+        on.load(st["obs_norm"], dev)
+        ctx.log("The test: %s policy (%s, %.0f%% in training), camera network %s, on %s." % (STAGE_NAME[pol["stage"]], pol["name"], float(st.get("score") or 0), sp["name"], label))
     env.max_steps = int(60.0 / CTRL_DT)       # (the object travels the whole belt: the episode ends when it is picked or falls off)
-    ac = make_ac(torch, OBS_DIM, PRIV_DIM, st["act_dim"]).to(dev)
-    ac.load_state_dict(widen(torch, st["ac"], OBS_DIM, PRIV_DIM))     # (a policy from before the phalanges' sensors: they start unweighted)
-    ac.eval()
-    on = Norm(torch, OBS_DIM, dev)
-    on.load(st["obs_norm"], dev)
-    ctx.log("The test: %s policy (%s, %.0f%% in training), camera network %s, on %s." % (STAGE_NAME[pol["stage"]], pol["name"], float(st.get("score") or 0), sp["name"], label))
     objs = [o for o in env.info if o["test"]]
     if str(p.get("objects") or "").lower().startswith("all"):
         objs = env.info
@@ -4139,11 +4147,16 @@ def test_run(ctx):
         env.perceive()
         wall0 = time.time()
         grasped, maxf, result = False, 0.0, "ran out of time"
+        if use_demo:
+            demo.reset(idx)
         while True:
-            obs, _ = env.obs()
-            with torch.no_grad():       # (as it acted while it learned: its moves with their spread)
-                mu = ac.actor(on(obs))
-                a = mu + ac.log_std.exp() * torch.randn_like(mu)
+            if use_demo:
+                a = demo.act()
+            else:
+                obs, _ = env.obs()
+                with torch.no_grad():       # (as it acted while it learned: its moves with their spread)
+                    mu = ac.actor(on(obs))
+                    a = mu + ac.log_std.exp() * torch.randn_like(mu)
             r, done, info = env.step(a)
             grasped = grasped or bool(env.lifted_ever[0]) or bool(env.hold_cnt[0] >= 25) or float(info["lift"][0]) > 0.05
             maxf = max(maxf, float(env.touches()[0].max()))
