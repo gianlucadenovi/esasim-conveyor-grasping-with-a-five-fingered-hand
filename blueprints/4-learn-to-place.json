@@ -6,7 +6,7 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 11,
-    "updated": "2026-11-23 05:31:49",
+    "updated": "2026-11-23 06:11:42",
     "graph": {
         "nodes": [
             {
@@ -20,6 +20,16 @@
                     "pattern": "*.pt"
                 },
                 "title": "Networks so far"
+            },
+            {
+                "id": "robot",
+                "type": "project-assets",
+                "x": -580,
+                "y": -220,
+                "params": {
+                    "files": "models/xarm6_left_hand_rigged.glb"
+                },
+                "title": "Your robot model (what the camera sees)"
             },
             {
                 "id": "learn",
@@ -180,6 +190,17 @@
                 "id": "nets.files>learn.policy",
                 "from": {
                     "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "learn",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "robot.files>learn.policy",
+                "from": {
+                    "node": "robot",
                     "port": "files"
                 },
                 "to": {
