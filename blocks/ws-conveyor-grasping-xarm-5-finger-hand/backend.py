@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 92 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 93 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1214,6 +1214,7 @@ class GraspEnv:
         tmpl, models, gs, ob, arrays, pts, info = lib
         self.info = info
         self.mjm = mjm = tmpl
+        self.models = models                                           # (each object's own model: the finer picture for the view)
         self.gs, self.ob = gs, ob
         self.gen = torch.Generator(device=dev)
         self.gen.manual_seed(seed)
@@ -2918,11 +2919,32 @@ class Replayer:
 
 
 def rgb_png(pic):
-    """a camera picture kept with a replay (rgb (h, w, 3) uint8, its background mask) as a PNG, twice its size"""
-    rgb, bg = pic
+    """a camera picture kept with a replay (rgb (h, w, 3) uint8, its background mask, and maybe (scale, lines): the
+    lines to draw over it at that scale) as a PNG, enlarged (twice, or to the lines' scale)"""
+    rgb, bg = pic[0], pic[1]
+    lines = pic[2] if len(pic) > 2 else None
+    k = 2 if lines is None else int(lines[0])
     rgb = np.where(bg[..., None], np.array([28, 30, 34], np.uint8), rgb)
-    rgb = np.repeat(np.repeat(rgb, 2, 0), 2, 1)
-    return png_rgb(np.ascontiguousarray(rgb))
+    rgb = np.ascontiguousarray(np.repeat(np.repeat(rgb, k, 0), k, 1))
+    for ln in (lines[1] if lines else ()):
+        draw_line(rgb, *ln)
+    return png_rgb(rgb)
+
+
+def draw_line(img, a, b, colour, width=1):
+    """a line from a to b ((column, row), in pixels; None: not drawn) on an (h, w, 3) uint8 picture"""
+    if a is None or b is None:
+        return
+    n = int(max(abs(b[0] - a[0]), abs(b[1] - a[1]))) + 1
+    t = np.linspace(0, 1, max(2, n * 2))
+    cs = np.round(a[0] + (b[0] - a[0]) * t).astype(int)
+    rs = np.round(a[1] + (b[1] - a[1]) * t).astype(int)
+    h, w = img.shape[:2]
+    for dr in range(-width + 1, width):
+        for dc in range(-width + 1, width):
+            rr, cc = rs + dr, cs + dc
+            ok = (rr >= 0) & (rr < h) & (cc >= 0) & (cc < w)
+            img[rr[ok], cc[ok]] = colour
 
 
 def png_rgb(rgb):
@@ -3221,10 +3243,15 @@ def camera_pics(env, n):
     rgb = (img[:, 3:6].clamp(0, 1) * 255).byte().permute(0, 2, 3, 1).cpu().numpy()
     bg = (env.last_seg[:n] < 0)
     bg = (bg[..., 0] if bg.dim() == 4 else bg).cpu().numpy()
-    return [(rgb[i], bg[i]) for i in range(n)]
+    try:                   # (with the lines to draw over each when it is shown: kept small, drawn then)
+        lines = overlay_lines(env, list(range(n)))
+        return [(rgb[i], bg[i], (PIC_SCALE, lines[i])) for i in range(n)]
+    except Exception:      # noqa: BLE001
+        return [(rgb[i], bg[i]) for i in range(n)]
 
 
-PIC_SCALE = 3                     # (the camera's picture shown three times its size, so the lines drawn on it read well)
+PIC_SCALE = 3                     # (the camera's picture shown three times finer than the network's, the lines drawn on it)
+HI_W, HI_H = S.CAM_W * PIC_SCALE, S.CAM_H * PIC_SCALE
 
 
 def _cam_geometry(env):
@@ -3251,28 +3278,63 @@ def _to_pixel(env, p):
     return (col + 0.5) * PIC_SCALE - 0.5, (row + 0.5) * PIC_SCALE - 0.5
 
 
-def _line(img, a, b, colour, width=1):
-    if a is None or b is None:
-        return
-    n = int(max(abs(b[0] - a[0]), abs(b[1] - a[1]))) + 1
-    t = np.linspace(0, 1, max(2, n * 2))
-    cs = np.round(a[0] + (b[0] - a[0]) * t).astype(int)
-    rs = np.round(a[1] + (b[1] - a[1]) * t).astype(int)
-    h, w = img.shape[:2]
-    for dr in range(-width + 1, width):
-        for dc in range(-width + 1, width):
-            rr, cc = rs + dr, cs + dc
-            ok = (rr >= 0) & (rr < h) & (cc >= 0) & (cc < w)
-            img[rr[ok], cc[ok]] = colour
+def hires_rgb(env, i):
+    """the camera's picture of cell i drawn again, PIC_SCALE times finer than the network's (HI_W x HI_H), with the same
+    colours and shading: only for whoever watches (the network keeps its own picture). The camera's rays are cast on the
+    CPU against the cell as it is now, in the model of the object in it"""
+    import mujoco
+    from sims import CAM_GROUPS
+    if getattr(env, "_hi", None) is None:
+        fy = 0.5 * HI_H / math.tan(math.radians(S.CAM_FOVY) / 2)
+        X, Y = np.meshgrid((np.arange(HI_W) + 0.5 - HI_W / 2) / fy, -(np.arange(HI_H) + 0.5 - HI_H / 2) / fy)
+        d = np.stack([X, Y, -np.ones_like(X)], -1).reshape(-1, 3)
+        env._hi = {"dirs": d / np.linalg.norm(d, axis=1, keepdims=True), "data": {}}
+    o = int(env.obj[i])
+    m = env.models[o]
+    d = env._hi["data"].get(o)
+    if d is None:
+        d = env._hi["data"][o] = mujoco.MjData(m)
+    d.qpos[:] = env.sim.qpos[i].double().cpu().numpy()
+    mujoco.mj_kinematics(m, d)
+    mujoco.mj_camlight(m, d)
+    cid = m.camera("cam").id
+    pnt = d.cam_xpos[cid].copy()
+    dirs = env._hi["dirs"] @ d.cam_xmat[cid].reshape(3, 3).T
+    nr = len(dirs)
+    dist, gid = np.zeros(nr), np.zeros(nr, np.int32)
+    mujoco.mj_multiRay(m, d, pnt, dirs.reshape(-1).copy(), CAM_GROUPS, 1, -1, gid, dist, None, nr, 10.0)
+    hit = gid >= 0
+    P = (pnt + dirs * np.where(hit, dist, 0.0)[:, None]).reshape(HI_H, HI_W, 3)
+    rgba = env.rgba[i].float().cpu().numpy()
+    if rgba.shape[0] != m.ngeom:
+        rgba = np.array(m.geom_rgba)
+    col = rgba[np.clip(gid, 0, None), :3].reshape(HI_H, HI_W, 3)
+    gx, gy = np.zeros_like(P), np.zeros_like(P)        # (shaded by the surface's slope, lit from above: as the network's)
+    gx[:, 1:-1] = P[:, 2:] - P[:, :-2]
+    gy[1:-1] = P[2:] - P[:-2]
+    nrm = np.cross(gx, gy)
+    nrm /= np.linalg.norm(nrm, axis=-1, keepdims=True) + 1e-9
+    col = col * (0.45 + 0.55 * np.abs(nrm[..., 2]))[..., None]
+    rgb = (np.clip(col, 0, 1) * 255).astype(np.uint8)
+    rgb[~hit.reshape(HI_H, HI_W)] = (28, 30, 34)
+    return np.ascontiguousarray(rgb)
 
 
 def camera_png(env, i):
-    """the camera's picture of cell i as the network sees it (its colours, shaded), as a PNG for the 3D view"""
-    img = env.last_img[i]
-    rgb = (img[3:6].clamp(0, 1) * 255).byte().permute(1, 2, 0).cpu().numpy()
-    seg = env.last_seg[i].cpu().numpy()
-    rgb = np.where((seg < 0)[..., None], np.array([28, 30, 34], np.uint8), rgb)
-    rgb = np.ascontiguousarray(np.repeat(np.repeat(rgb, PIC_SCALE, 0), PIC_SCALE, 1))
+    """the camera's picture of cell i (its colours, shaded), as a PNG for the camera view: drawn finer than the network's
+    own (hires_rgb), or else the network's own enlarged; with the lines of draw_grasp_overlay over it"""
+    rgb = None
+    if not getattr(env, "_hi_off", False):
+        try:
+            rgb = hires_rgb(env, i)
+        except Exception:      # noqa: BLE001  (the network's own picture, enlarged)
+            env._hi_off = True
+    if rgb is None:
+        img = env.last_img[i]
+        rgb = (img[3:6].clamp(0, 1) * 255).byte().permute(1, 2, 0).cpu().numpy()
+        seg = env.last_seg[i].cpu().numpy()
+        rgb = np.where((seg < 0)[..., None], np.array([28, 30, 34], np.uint8), rgb)
+        rgb = np.ascontiguousarray(np.repeat(np.repeat(rgb, PIC_SCALE, 0), PIC_SCALE, 1))
     try:
         draw_grasp_overlay(rgb, env, i)
     except Exception:          # noqa: BLE001  (a picture without its lines rather than none)
@@ -3284,9 +3346,21 @@ def draw_grasp_overlay(img, env, i):
     """over the camera's picture, for whoever watches (the policy never sees it): the object's box as the camera network
     sees it (yellow) and its long axis (orange), and the hand's grasping axis, from the thumb's tip to the middle of the
     index's and the middle finger's tips (cyan). In a good grasp the cyan line crosses the orange one"""
-    c = env.est_c[i].float().cpu().numpy()
-    e = env.est_e[i].float().cpu().numpy()
-    y = env.est_y[i].float().cpu().numpy()
+    for ln in overlay_lines(env, [i])[0]:
+        viz.draw_line(img, *ln)
+
+
+def overlay_lines(env, cells):
+    """the lines of draw_grasp_overlay for each of the cells now: (from, to, colour, width), in the picture's pixels"""
+    C = env.est_c[cells].float().cpu().numpy()
+    E = env.est_e[cells].float().cpu().numpy()
+    Y = env.est_y[cells].float().cpu().numpy()
+    SX = env.sim.site_xpos[cells].float().cpu().numpy()
+    return [_cell_lines(env, C[k], E[k], Y[k], SX[k]) for k in range(len(cells))]
+
+
+def _cell_lines(env, c, e, y, sx):
+    out = []
     psi = 0.5 * math.atan2(float(y[1]), float(y[0]))
     u = np.array([math.cos(psi), math.sin(psi), 0.0])
     v = np.array([-math.sin(psi), math.cos(psi), 0.0])
@@ -3294,14 +3368,14 @@ def draw_grasp_overlay(img, env, i):
     corners = [top + sa * e[0] * u + sb * e[1] * v for sa, sb in ((1, 1), (1, -1), (-1, -1), (-1, 1))]
     px = [_to_pixel(env, p) for p in corners]
     for k in range(4):
-        _line(img, px[k], px[(k + 1) % 4], (255, 214, 10), 1)
-    _line(img, _to_pixel(env, top - 1.3 * e[0] * u), _to_pixel(env, top + 1.3 * e[0] * u), (255, 120, 20), 2)
+        out.append((px[k], px[(k + 1) % 4], (255, 214, 10), 1))
+    out.append((_to_pixel(env, top - 1.3 * e[0] * u), _to_pixel(env, top + 1.3 * e[0] * u), (255, 120, 20), 2))
     _, _, _, sid = _cam_geometry(env)
-    sx = env.sim.site_xpos[i].float().cpu().numpy()
     th = sx[sid["thumb_tip"]]
     fi = 0.5 * (sx[sid["index_tip"]] + sx[sid["middle_tip"]])
     mid, half = 0.5 * (th + fi), 0.5 * (fi - th)
-    _line(img, _to_pixel(env, mid - 1.2 * half), _to_pixel(env, mid + 1.2 * half), (40, 220, 255), 2)
+    out.append((_to_pixel(env, mid - 1.2 * half), _to_pixel(env, mid + 1.2 * half), (40, 220, 255), 2))
+    return out
 
 
 def episode_result(info, i, stage):
