@@ -6,7 +6,7 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 11,
-    "updated": "2026-11-23 00:51:34",
+    "updated": "2026-11-23 05:31:49",
     "graph": {
         "nodes": [
             {
@@ -113,7 +113,7 @@
                     "channel": "touch",
                     "max": 30,
                     "scale": "log",
-                    "hand": "right"
+                    "hand": "left"
                 },
                 "title": "Hand pressure map"
             },
