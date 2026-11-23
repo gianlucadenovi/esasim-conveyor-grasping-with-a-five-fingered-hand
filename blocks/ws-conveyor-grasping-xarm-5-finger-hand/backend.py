@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 87 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 88 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1784,6 +1784,8 @@ class Demo:
         nxt |= (phase == 2) & (timer > 12) & (((env.curl.mean(1) > 0.95) & (timer > 24)) | (timer > 40))   # (lifted only once the hand has closed)
         nxt |= (phase == 3) & (env.tgt_p[:, 2] > 0.19) & (timer > 30)
         nxt |= (phase == 4) & ((env.tgt_p - drop).norm(dim=1) < 0.01)
+        # (a descent that does not get there, the arm unable to follow that grasp: planned again from above)
+        stuck = (phase == 1) & ~nxt & (timer > 30)
         go = nxt & (phase == 0)
         self.plan_yaw = torch.where(go, want_g, self.plan_yaw)
         self.plan_z = torch.where(go, z_g, self.plan_z)
@@ -1794,6 +1796,7 @@ class Demo:
         held = ((dig[:, 0] > 0.3) | (f[:, 5:9].max(1).values > 0.3)) & ((dig[:, 1:5] > 0.3).sum(1) >= 1)
         self.empty = torch.where(held | (phase < 3) | (phase > 4), torch.zeros_like(self.empty), self.empty + 1)
         lost = (((phase == 3) & (timer > 8)) | (phase == 4)) & (self.empty >= 4)
+        lost = lost | stuck
         self.phase = torch.where(lost, torch.zeros_like(phase), torch.where(nxt, phase + 1, phase))
         self.timer = torch.where(nxt | lost, torch.zeros_like(timer), timer)
         self.empty = torch.where(lost, torch.zeros_like(self.empty), self.empty)
