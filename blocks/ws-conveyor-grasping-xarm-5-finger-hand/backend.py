@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 134 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 135 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -3265,7 +3265,7 @@ def frame_glb(items, finish, log):
                      roughness=1.0, metalness=1.0, clearcoat=finish.get("clearcoat", 0.0))
 
 
-def glb_bytes(pos, nrm, uv, material, maps, roughness=1.0, metalness=0.0, clearcoat=0.0):
+def glb_bytes(pos, nrm, uv, material, maps, roughness=1.0, metalness=0.0, clearcoat=0.0, color=(1.0, 1.0, 1.0)):
     """a glTF binary of one mesh, its corners not shared (pos, nrm: (n, 3), uv: (n, 2)), with one material by name and
     its pictures (maps: PNG files by their place: base, the colour; mr, the metal-roughness; normal, the relief),
     repeated as its texture coordinates go"""
@@ -3284,7 +3284,7 @@ def glb_bytes(pos, nrm, uv, material, maps, roughness=1.0, metalness=0.0, clearc
         accs.append({"bufferView": blob(arr.tobytes(), {"target": target}), "componentType": 5125 if arr.dtype == np.uint32 else 5126,
                      "count": len(arr), "type": typ})
     accs[0]["min"], accs[0]["max"] = pos.min(0).tolist(), pos.max(0).tolist()
-    pbr = {"baseColorFactor": [1.0, 1.0, 1.0, 1.0], "metallicFactor": metalness, "roughnessFactor": roughness}
+    pbr = {"baseColorFactor": [float(c) for c in color] + [1.0], "metallicFactor": metalness, "roughnessFactor": roughness}
     mat, images = {"name": material}, []
     for slot, png in (maps or {}).items():
         images.append({"bufferView": blob(png, {}), "mimeType": "image/png"})
@@ -3373,34 +3373,27 @@ def sound_files(seed=11):
     rng = np.random.default_rng(seed)
     R = SOUND_RATE
     out = {}
-    # the belt: a low, soft motor hum (the mains' 50 Hz and its first harmonics) and the belt rolling over its rollers,
-    # a deep rumble swelling a little with each turn
+    # the belt: its electric motor's low hum (100 Hz, twice the mains', with the harmonics that make it sound electric)
+    # over a faint, deep rumble of the rollers
     n = 4 * R
     t = np.arange(n) / R
-    hum = sum(a * np.sin(2 * np.pi * f * t + p) for f, a, p in ((50, 1.0, 0), (100, 0.35, 1.1), (150, 0.08, 2.3)))
-    roll = 0.6 * _band_noise(rng, n, 25, 220, tilt=6) * (1 + 0.15 * np.sin(2 * np.pi * 1.75 * t))
-    out["belt_hum.wav"] = _wav(_peak(hum + roll, 0.7))
+    hum = sum(a * np.sin(2 * np.pi * f * t + p) for f, a, p in ((50, 0.35, 0), (100, 1.0, 0.7), (200, 0.4, 1.9), (300, 0.22, 0.3),
+                                                                (400, 0.1, 2.6), (500, 0.05, 1.2), (600, 0.03, 0.8)))
+    roll = 0.12 * _band_noise(rng, n, 25, 160, tilt=6)
+    out["belt_hum.wav"] = _wav(_peak(hum * (1 + 0.03 * np.sin(2 * np.pi * 0.5 * t)) + roll, 0.7))
     # the actuators: gentle electric drives, a soft smooth whir (air and bearings, no hum or whine to it)
     n = 2 * R
     out["servo.wav"] = _wav(_peak(_band_noise(rng, n, 90, 900, tilt=7), 0.7))
-    # rubbing: rubber scraping on rubber, stick and slip (bursts of it, unevenly, some forty a second)
-    hits = np.zeros(n)
-    for k in rng.integers(0, n, 80):
-        hits[k] += rng.uniform(0.4, 1.0)
-    env = np.real(np.fft.ifft(np.fft.fft(hits) * np.fft.fft(np.exp(-np.arange(n) / (0.012 * R)))))
-    env = 0.35 + env / env.max()
-    out["rub.wav"] = _wav(_peak(_band_noise(rng, n, 250, 2600, tilt=3) * env + 0.25 * _band_noise(rng, n, 60, 250), 0.7))
-    # landing on the belt: a dull thud on the rubber over the steel bed (low, short, damped), a little slap, and a
-    # small second bounce
-    n = int(0.45 * R)
+    # rubbing: soft fingertips brushing over the moving rubber, a muffled, low friction (its level wandering slowly, as
+    # the pressure does), no squeal and no grit
+    wander = 0.75 + 0.25 * _band_noise(rng, n, 1.0, 6.0)
+    out["rub.wav"] = _wav(_peak(_band_noise(rng, n, 90, 700, tilt=6) * wander, 0.7))
+    # landing on the belt: a short, dull thud on the rubber over the steel bed (low and quickly damped) with a soft slap
+    n = int(0.15 * R)
     t = np.arange(n) / R
-
-    def thud(t0, a):
-        tt, on = np.clip(t - t0, 0, None), (t >= t0).astype(float)
-        body = (np.sin(2 * np.pi * 92 * tt) * np.exp(-tt / 0.06) + 0.5 * np.sin(2 * np.pi * 175 * tt) * np.exp(-tt / 0.035)
-                + 0.25 * np.sin(2 * np.pi * 410 * tt) * np.exp(-tt / 0.02))
-        return a * on * (body + 0.6 * _band_noise(rng, n, 200, 1600, tilt=4) * np.exp(-tt / 0.012))
-    out["drop_belt.wav"] = _wav(_peak(thud(0.0, 1.0) + thud(0.085, 0.25), 0.9))
+    body = (np.sin(2 * np.pi * 95 * t) * np.exp(-t / 0.025) + 0.5 * np.sin(2 * np.pi * 180 * t) * np.exp(-t / 0.015)
+            + 0.2 * np.sin(2 * np.pi * 410 * t) * np.exp(-t / 0.008))
+    out["drop_belt.wav"] = _wav(_peak(body + 0.5 * _band_noise(rng, n, 200, 1400, tilt=4) * np.exp(-t / 0.006), 0.8))
     # into the bin: a dull knock on thick plastic (low, heavily damped: it does not ring as metal would) with the soft
     # tap of the hit, then two smaller bounces as the object settles
     n = int(0.6 * R)
@@ -3415,7 +3408,160 @@ def sound_files(seed=11):
     return out
 
 
-def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=None):
+# ── the camera on its pole: the security camera's 3D file, its head turned to look as the simulated camera does ──
+CAMERA = {}                        # (the camera's parts for the scene, from its 3D file: see camera_parts)
+SECCAM_SCALE = 0.7                 # (the file's camera, 58 cm tall, at seven tenths: about 40 cm)
+SECCAM_HEAD = {"WiperHolder_low", "WiperBase_low", "Wiper_low", "LensSmall_low", "Screw_low", "ProtectiveGlass_low", "MainSphere_low",
+               "LensBig_low", "Screw2_low", "ProtectiveGlass2_low", "LensBig2_low"}   # (its head: the ball, its lenses, glass and wiper)
+POLE_W = 0.04                       # (m) the pole: a 40 x 40 mm aluminium extrusion, on a steel base plate
+POLE_BASE = (0.24, 0.012)           # (m) the base plate's side and thickness
+
+
+def _glb_split(raw):
+    """a glTF binary's JSON and binary chunk"""
+    import struct
+    n = struct.unpack("<I", raw[12:16])[0]
+    return json.loads(raw[20:20 + n]), raw[20 + n + 8:]
+
+
+def _glb_join(js, binc):
+    import struct
+    j = json.dumps(js, separators=(",", ":")).encode()
+    j += b" " * (-len(j) % 4)
+    binc = binc + b"\0" * (-len(binc) % 4)
+    return (struct.pack("<III", 0x46546C67, 2, 28 + len(j) + len(binc)) + struct.pack("<I", len(j)) + b"JSON" + j
+            + struct.pack("<I", len(binc)) + b"BIN\0" + binc)
+
+
+def _gl_matrix(nd):
+    if "matrix" in nd:
+        return np.array(nd["matrix"], float).reshape(4, 4).T
+    M = np.eye(4)
+    if "translation" in nd:
+        M[:3, 3] = nd["translation"]
+    if "rotation" in nd:
+        x, y, z, w = nd["rotation"]
+        M[:3, :3] = quat_R([w, x, y, z])
+    if "scale" in nd:
+        M[:3, :3] = M[:3, :3] * np.asarray(nd["scale"], float)
+    return M
+
+
+def camera_parts(raw, cam_pos, cam_R, log):
+    """the security camera's 3D file (glTF binary, y up) as two files placed for the scene (z up, metres, about the
+    camera's place): its mount upright, its plate against the pole behind it; its head, turned about the ball's centre,
+    so that its lenses look where the simulated camera looks (and its top is the camera's up); and where the pole goes.
+    The file's head looks along its z, its mount's plate faces its x, at its top"""
+    js, binc = _glb_split(raw)
+    nodes = js["nodes"]
+    W = {}
+
+    def walk(i, P):
+        W[i] = P @ _gl_matrix(nodes[i])
+        for c in nodes[i].get("children", []):
+            walk(c, W[i])
+    root = js["scenes"][js.get("scene", 0)]["nodes"]
+    for r in root:
+        walk(r, np.eye(4))
+    # the ball's centre (its pivot) in the file's frame
+    ball = [i for i, nd in enumerate(nodes) if str(nd.get("name", "")).startswith("MainSphere") and "children" in nd]
+    pivot = W[ball[0]][:3, 3] if ball else np.zeros(3)
+    view = -np.asarray(cam_R)[:, 2]                     # (a MuJoCo camera looks along its -z, its up its y)
+    up = np.asarray(cam_R)[:, 1]
+    s = SECCAM_SCALE
+
+    def placed(R):
+        """the file's frame into the scene's: about the pivot, turned by R (the file's x, y, z into the scene's), scaled"""
+        M = np.eye(4)
+        M[:3, :3] = R * s
+        M[:3, 3] = -(R * s) @ pivot
+        return M
+    # the head: the file's z (its lenses) along the view, its y along the camera's up
+    head_R = np.stack([np.cross(up, view), up, view], 1)
+    # the mount: upright (the file's y up), its plate (the file's x) towards the pole, behind the camera
+    back = -np.array([view[0], view[1], 0.0])
+    back = back / max(np.linalg.norm(back), 1e-9)
+    mount_R = np.stack([back, [0.0, 0.0, 1.0], np.cross(back, [0.0, 0.0, 1.0])], 1)
+    out = {}
+    for part, R in (("head", head_R), ("mount", mount_R)):
+        j2 = json.loads(json.dumps(js))
+        for r in root:                                   # (the top node turned and placed; its parts chosen below it)
+            j2["nodes"][r]["matrix"] = list((placed(R) @ _gl_matrix(nodes[r])).T.reshape(-1))
+            for k in ("translation", "rotation", "scale"):
+                j2["nodes"][r].pop(k, None)
+        for i, nd in enumerate(nodes):                   # (the node whose children are the parts: the file's RootNode)
+            ch = nd.get("children", [])
+            if len(ch) > 4:
+                is_head = [str(nodes[c].get("name", "")) in SECCAM_HEAD for c in ch]
+                j2["nodes"][i]["children"] = [c for c, h in zip(ch, is_head) if h == (part == "head")]
+        out[part] = _glb_join(j2, binc)
+    # where the pole stands: behind the camera, against the mount's plate (the file's furthest x), up to the plate's top
+    pts = []
+    for i, nd in enumerate(nodes):
+        if "mesh" in nd:
+            for pr in js["meshes"][nd["mesh"]]["primitives"]:
+                a = js["accessors"][pr["attributes"]["POSITION"]]
+                lo, hi = np.asarray(a["min"]), np.asarray(a["max"])
+                corners = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
+                pts.append((W[i][:3, :3] @ corners.T).T + W[i][:3, 3])
+    pts = np.concatenate(pts) - pivot
+    reach, top = float(pts[:, 0].max()) * s, float(pts[:, 1].max()) * s
+    pole_xy = np.asarray(cam_pos[:2], float) + (reach + POLE_W / 2) * back[:2]
+    log("The camera: the security camera's 3D file at %.0f%% (%.0f cm tall), its head turned to look as the simulated "
+        "camera does; its mount on a %d mm aluminium pole behind it." % (s * 100, (pts[:, 1].max() - pts[:, 1].min()) * s * 100, POLE_W * 1000))
+    return out["head"], out["mount"], pole_xy, float(cam_pos[2]) + top
+
+
+def pole_glb(height):
+    """the camera's pole: a 40 x 40 mm aluminium extrusion (a groove down each side, its corners chamfered), its foot
+    at 0, its top at height (m), anodised aluminium"""
+    w, g, d, c = POLE_W / 2, 0.004, 0.006, 0.002          # (half width, groove half width and depth, corner chamfer)
+    q = [(w, -g), (w - d, -g), (w - d, g), (w, g), (w, w - c), (w - c, w)]   # (one side's outline, then turned round)
+    ring = []
+    for k in range(4):
+        a = k * math.pi / 2
+        ca, sa = math.cos(a), math.sin(a)
+        ring += [(ca * x - sa * y, sa * x + ca * y) for x, y in q]
+    n = len(ring)
+    tri, nrm = [], []
+    for k in range(n):                                    # the sides, each face flat
+        (x0, y0), (x1, y1) = ring[k], ring[(k + 1) % n]
+        a, b, cc, dd = (x0, y0, 0), (x1, y1, 0), (x1, y1, height), (x0, y0, height)
+        e = np.array([y1 - y0, -(x1 - x0), 0.0])
+        e /= max(np.linalg.norm(e), 1e-12)
+        tri += [a, b, cc, a, cc, dd]
+        nrm += [e] * 6
+    for k in range(n):                                    # the top (the outline is star-shaped about its middle)
+        (x0, y0), (x1, y1) = ring[k], ring[(k + 1) % n]
+        tri += [(0, 0, height), (x0, y0, height), (x1, y1, height)]
+        nrm += [(0, 0, 1.0)] * 3
+    p = np.array(tri, float)
+    return glb_bytes(p, np.array(nrm, float), np.zeros((len(p), 2)), "aluminium", None, roughness=0.32, metalness=1.0, color=(0.80, 0.82, 0.85))
+
+
+def base_glb():
+    """the pole's base: a steel plate, its edges bevelled, dark grey"""
+    a, t, b = POLE_BASE[0] / 2, POLE_BASE[1], 0.003
+    top = [(-a + b, -a + b), (a - b, -a + b), (a - b, a - b), (-a + b, a - b)]
+    bot = [(-a, -a), (a, -a), (a, a), (-a, a)]
+    tri, nrm = [], []
+
+    def quad(p0, p1, p2, p3):
+        n_ = np.cross(np.subtract(p1, p0), np.subtract(p2, p0))
+        n_ = n_ / max(np.linalg.norm(n_), 1e-12)
+        tri.extend([p0, p1, p2, p0, p2, p3])
+        nrm.extend([n_] * 6)
+    quad(*[(x, y, t) for x, y in top])
+    for k in range(4):
+        (x0, y0), (x1, y1) = bot[k], bot[(k + 1) % 4]
+        (u0, v0), (u1, v1) = top[k], top[(k + 1) % 4]
+        quad((x0, y0, 0), (x1, y1, 0), (x1, y1, t - b), (x0, y0, t - b))
+        quad((x0, y0, t - b), (x1, y1, t - b), (u1, v1, t), (u0, v0, t))
+    p = np.array(tri, float)
+    return glb_bytes(p, np.array(nrm, float), np.zeros((len(p), 2)), "steel", None, roughness=0.45, metalness=0.8, color=(0.23, 0.24, 0.26))
+
+
+def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=None, camera_file=None):
     links = xarm_links(cache, ctx.log) or simple_xarm_links()
     rig = None
     if robot_file:
@@ -3448,6 +3594,22 @@ def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=Non
         with open(ctx.output(port, "%s.robot.json.gz" % name), "wb") as fh:
             fh.write(gzip.compress(raw, 9))
         ctx.log("%s.robot.json.gz: %d joints, %d KB." % (name, len(model["joints"]), len(gzip.compress(raw, 9)) // 1024))
+    CAMERA.clear()
+    if camera_file:
+        try:
+            import mujoco
+            d = mujoco.MjData(mjm)
+            mujoco.mj_forward(mjm, d)
+            ci = mjm.camera("cam").id
+            head, mount, pxy, top = camera_parts(open(camera_file, "rb").read(), d.cam_xpos[ci], d.cam_xmat[ci].reshape(3, 3), ctx.log)
+            CAMERA.update(head=head, mount=mount, pole_xy=pxy, top=top)
+        except Exception as e:      # noqa: BLE001
+            ctx.log("The camera's 3D file could not be read (%s): the camera is drawn as a box on a pole." % e)
+    if CAMERA:
+        for name, data in (("camera_head.glb", CAMERA["head"]), ("camera_mount.glb", CAMERA["mount"]), ("camera_base.glb", base_glb()),
+                           ("camera_pole.glb", pole_glb(CAMERA["top"] - FLOOR_Z - POLE_BASE[1] + 0.01))):
+            with open(ctx.output(port, name), "wb") as fh:
+                fh.write(data)
     with open(ctx.output(port, "cell.scene.json"), "w", encoding="utf-8") as fh:
         json.dump(scene_file(mjm, bool(conv)), fh, indent=1)
     if conv and CONVEYOR.get("belt_glb"):
@@ -3566,9 +3728,16 @@ def scene_file(mjm, conveyor):
         models.append({"id": nm, "shape": "box", "position": up(d.geom_xpos[g]), "size": [round(float(x) * 2, 4) for x in mjm.geom_size[g]], "color": col})
     models.append({"id": "pedestal", "shape": "box", "position": up((S.BASE_POS[0], S.BASE_POS[1], FLOOR_Z / 2)), "size": [0.18, 0.18, round(-FLOOR_Z, 4)], "color": "#3a3f47"})
     cp = d.cam_xpos[mjm.camera("cam").id]
-    models.append({"id": "camera", "shape": "box", "position": up(cp), "size": [0.07, 0.07, 0.06], "color": "#20242c"})
-    models.append({"id": "camera_pole", "shape": "cylinder", "radius": 0.012, "height": round(float(cp[2]) - FLOOR_Z, 4),
-                   "position": up((cp[0], cp[1], (float(cp[2]) + FLOOR_Z) / 2)), "color": "#8e959f"})
+    if CAMERA:            # (the security camera, its head turned as the simulated camera looks, on its pole)
+        px, py = (round(float(x), 4) for x in CAMERA["pole_xy"])
+        for nm in ("camera_mount", "camera_head"):
+            models.append({"id": nm, "model": "models/%s.glb" % nm, "up": "z", "position": up(cp)})
+        models.append({"id": "camera_pole", "model": "models/camera_pole.glb", "up": "z", "position": [px, py, POLE_BASE[1]]})
+        models.append({"id": "camera_base", "model": "models/camera_base.glb", "up": "z", "position": [px, py, 0]})
+    else:
+        models.append({"id": "camera", "shape": "box", "position": up(cp), "size": [0.07, 0.07, 0.06], "color": "#20242c"})
+        models.append({"id": "camera_pole", "shape": "cylinder", "radius": 0.012, "height": round(float(cp[2]) - FLOOR_Z, 4),
+                       "position": up((cp[0], cp[1], (float(cp[2]) + FLOOR_Z) / 2)), "color": "#8e959f"})
     c = ((S.BASE_POS[0] + S.BELT_X0) / 2, (S.BASE_POS[1] + S.BELT_CY) / 2, 0.0)
     return {"format": "esasim.scene/2", "title": "Conveyor grasping", "units": "m", "up": "z",
             "renderer": {"bloom": {"strength": 0.35, "radius": 0.5, "threshold": 0.85}},     # (the highlights glow a little)
@@ -3580,10 +3749,10 @@ def scene_file(mjm, conveyor):
             "models": models,
             # (the sounds: the belt's motor all along; the servos and the fingers rubbing on the belt as loud as the cell
             # says (their missing values silent); a hit each time an object lands on the belt or in the bin)
-            "sounds": [{"id": "belt_motor", "sound": "models/belt_hum.wav", "volume": 0.08},
+            "sounds": [{"id": "belt_motor", "sound": "models/belt_hum.wav", "volume": 0.05},
                        {"id": "servos", "sound": "models/servo.wav", "volume": {"expr": "clamp((@cell.servo or 0) * 0.25, 0, 0.15)"}},
-                       {"id": "rub", "sound": "models/rub.wav", "volume": {"expr": "0.6 * (@cell.rub or 0)"}},
-                       {"id": "drop_belt", "sound": "models/drop_belt.wav", "on": {"expr": "(@cell.drop_belt or 0) > 0"}, "volume": 0.8},
+                       {"id": "rub", "sound": "models/rub.wav", "volume": {"expr": "0.35 * (@cell.rub or 0)"}},
+                       {"id": "drop_belt", "sound": "models/drop_belt.wav", "on": {"expr": "(@cell.drop_belt or 0) > 0"}, "volume": 0.55},
                        {"id": "drop_bin", "sound": "models/drop_bin.wav", "on": {"expr": "(@cell.drop_bin or 0) > 0"}, "volume": 0.8}],
             "cameras": [{"id": "cell", "type": "orbit", "position": up((c[0] + 1.6, c[1] - 1.9, 1.1)), "look_at": up(c)}], "start": "cell",
             "overlay": [{"type": "events", "at": "top-right", "count": 4}]}
@@ -5303,12 +5472,14 @@ def models_run(ctx):
     import cell
     lib = cell.compile_library(mujoco)
     glb = [f.path for f in (ctx.inputs.get("conveyor") or []) + (ctx.inputs.get("policy") or []) if str(f.name).lower().endswith(".glb")]
-    # the robot's rigged model (a file named for the hand or the rig) and the conveyor's (any other)
-    robot = [g for g in glb if "hand" in os.path.basename(g).lower() or "rig" in os.path.basename(g).lower()]
-    conv = [g for g in glb if g not in robot]
+    # the camera's model (a file named for a camera), the robot's rigged model (named for the hand or the rig) and the
+    # conveyor's (any other)
+    cam = [g for g in glb if "camera" in os.path.basename(g).lower()]
+    robot = [g for g in glb if g not in cam and ("hand" in os.path.basename(g).lower() or "rig" in os.path.basename(g).lower())]
+    conv = [g for g in glb if g not in robot and g not in cam]
     if not conv:
         ctx.log("No conveyor 3D file wired in (Conveyor model input): the belt is drawn with boxes.")
-    viz.write_models(ctx, "models", lib[0], lib[6], mesh_cache(), conv[0] if conv else None, robot[0] if robot else None)
+    viz.write_models(ctx, "models", lib[0], lib[6], mesh_cache(), conv[0] if conv else None, robot[0] if robot else None, cam[0] if cam else None)
     return {"models": [viz.ARM, viz.OBJS], "conveyor_from_file": bool(conv), "robot_from_file": bool(robot)}
 
 
