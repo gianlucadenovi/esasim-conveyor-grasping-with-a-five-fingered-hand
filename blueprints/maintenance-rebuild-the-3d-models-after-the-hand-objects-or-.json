@@ -6,14 +6,14 @@
     "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
     "published_version": 30,
-    "updated": "2026-11-23 17:09:17",
+    "updated": "2026-11-23 17:25:50",
     "graph": {
         "nodes": [
             {
                 "id": "belt",
                 "type": "project-assets",
                 "x": -320,
-                "y": 140,
+                "y": 260,
                 "params": {
                     "files": "models/simple_rubber_conveyor.glb"
                 },
@@ -23,7 +23,7 @@
                 "id": "robot",
                 "type": "project-assets",
                 "x": -320,
-                "y": 280,
+                "y": 100,
                 "params": {
                     "files": "models/xarm6_left_hand_rigged.glb"
                 },
@@ -33,7 +33,7 @@
                 "id": "nets",
                 "type": "dataset",
                 "x": -320,
-                "y": 0,
+                "y": -100,
                 "params": {
                     "dataset": "35",
                     "version": "latest",
@@ -44,8 +44,8 @@
             {
                 "id": "models",
                 "type": "ws-conveyor-grasping-xarm-5-finger-hand",
-                "x": 0,
-                "y": 0,
+                "x": 220,
+                "y": 20,
                 "params": {
                     "mode": "Make the 3D models",
                     "accelerator": "CPU",
