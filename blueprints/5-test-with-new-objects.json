@@ -6,14 +6,14 @@
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
     "published_version": 12,
-    "updated": "2026-11-23 02:14:18",
+    "updated": "2026-11-23 02:15:13",
     "graph": {
         "nodes": [
             {
                 "id": "nets",
                 "type": "dataset",
-                "x": -460,
-                "y": 40,
+                "x": -640,
+                "y": -42,
                 "params": {
                     "dataset": "36",
                     "version": "latest",
@@ -24,8 +24,8 @@
             {
                 "id": "belt",
                 "type": "project-assets",
-                "x": -460,
-                "y": 200,
+                "x": -640,
+                "y": 189,
                 "params": {
                     "files": "models/simple_rubber_conveyor.glb"
                 },
@@ -35,7 +35,7 @@
                 "id": "test",
                 "type": "ws-conveyor-grasping-xarm-5-finger-hand",
                 "x": -140,
-                "y": 20,
+                "y": 40,
                 "params": {
                     "mode": "Test with new objects",
                     "accelerator": "auto",
@@ -54,8 +54,8 @@
             {
                 "id": "tel",
                 "type": "telemetry",
-                "x": 280,
-                "y": -60,
+                "x": 300,
+                "y": 132,
                 "params": {
                     "interval": 0.5,
                     "channels": "joints,scene,events,camera_picture,test,touch",
@@ -67,7 +67,7 @@
                 "id": "view",
                 "type": "viewer-3d",
                 "x": 1180,
-                "y": -640,
+                "y": -200,
                 "params": {
                     "environment": "outdoor",
                     "quality": "high",
@@ -86,8 +86,8 @@
             {
                 "id": "camview",
                 "type": "ws-camera-picture",
-                "x": 1180,
-                "y": -400,
+                "x": 1500,
+                "y": -20,
                 "params": {
                     "channel": "camera_picture",
                     "pixels": "smooth"
@@ -97,8 +97,8 @@
             {
                 "id": "hand",
                 "type": "ws-hand-pressure-map",
-                "x": 1180,
-                "y": 60,
+                "x": 1500,
+                "y": 306,
                 "params": {
                     "channel": "touch",
                     "max": 30,
@@ -126,7 +126,7 @@
                 "id": "score",
                 "type": "gauge-view",
                 "x": 1180,
-                "y": -160,
+                "y": 121,
                 "params": {
                     "fields": "test.trials,test.grasped,test.placed,test.placed_pct",
                     "style": "number",
@@ -137,8 +137,8 @@
             {
                 "id": "table",
                 "type": "table-view",
-                "x": 760,
-                "y": 260,
+                "x": 300,
+                "y": -99,
                 "params": [],
                 "title": "Trials"
             }
