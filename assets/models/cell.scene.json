@@ -231,23 +231,20 @@
   {
    "id": "belt_motor",
    "sound": "models/belt_hum.wav",
-   "volume": 0.45
+   "volume": 0.08
   },
   {
    "id": "servos",
    "sound": "models/servo.wav",
    "volume": {
-    "expr": "clamp((@cell.servo or 0) * 1.3, 0, 1)"
-   },
-   "pitch": {
-    "expr": "0.8 + 0.45 * (@cell.servo or 0)"
+    "expr": "clamp((@cell.servo or 0) * 0.25, 0, 0.15)"
    }
   },
   {
    "id": "rub",
    "sound": "models/rub.wav",
    "volume": {
-    "expr": "(@cell.rub or 0)"
+    "expr": "0.6 * (@cell.rub or 0)"
    }
   },
   {
@@ -256,7 +253,7 @@
    "on": {
     "expr": "(@cell.drop_belt or 0) > 0"
    },
-   "volume": 0.9
+   "volume": 0.8
   },
   {
    "id": "drop_bin",
@@ -264,7 +261,7 @@
    "on": {
     "expr": "(@cell.drop_bin or 0) > 0"
    },
-   "volume": 0.9
+   "volume": 0.8
   }
  ],
  "cameras": [
