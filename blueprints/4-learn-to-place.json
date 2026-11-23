@@ -5,8 +5,8 @@
     },
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
-    "published_version": 12,
-    "updated": "2026-11-23 06:11:42",
+    "published_version": 13,
+    "updated": "2026-11-23 07:11:43",
     "graph": {
         "nodes": [
             {
@@ -150,11 +150,11 @@
                 "params": {
                     "kind": "line",
                     "x": "minutes",
-                    "y": "success,success_from_rest,success_hand_over,failed",
+                    "y": "imitation_success,success,success_from_rest,success_hand_over,failed",
                     "channel": "train",
                     "ymin": "0",
                     "ymax": "100",
-                    "title": "Put in the bin (%): all, from the hand at rest, from the hand over it; dropped (%)"
+                    "title": "Put in the bin (%): while learning from demonstrations; then all, from the hand at rest, from the hand over it; dropped (%)"
                 },
                 "title": "Success"
             },
@@ -178,7 +178,7 @@
                 "x": 760,
                 "y": 320,
                 "params": {
-                    "fields": "train.success,train.success_from_rest,train.success_hand_over,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
+                    "fields": "train.imitation_success,train.success,train.success_from_rest,train.success_hand_over,train.failed,train.episode_s,train.steps_m,train.steps_per_s,train.minutes",
                     "style": "number",
                     "decimals": 1
                 },
