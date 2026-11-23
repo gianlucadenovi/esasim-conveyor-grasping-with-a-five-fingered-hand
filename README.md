@@ -132,7 +132,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 10 blocks · version 10
 - [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 12 blocks · version 7
 - [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 12 blocks · version 7
-- [4 · Learn to place](blueprints/4-learn-to-place.json) · 12 blocks · version 15
+- [4 · Learn to place](blueprints/4-learn-to-place.json) · 12 blocks · version 16
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 11 blocks · version 19
 - [Learn on all my machines (a round)](blueprints/learn-on-all-my-machines-a-round.json) · 14 blocks
 - [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 5 blocks · version 34
@@ -163,10 +163,14 @@ The files the project's views draw with (3D models, textures, sounds), in [asset
 - [grasp-policy/grasp_see_20261121_1813.pt](assets/grasp-policy/grasp_see_20261121_1813.pt) · 1.4 MB
 - [models/belt_hum.wav](assets/models/belt_hum.wav) · 250 KB
 - [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 75 KB
-- [models/cell.scene.json](assets/models/cell.scene.json) · 2.8 KB
+- [models/camera_base.glb](assets/models/camera_base.glb) · 2.9 KB
+- [models/camera_head.glb](assets/models/camera_head.glb) · 5.5 MB
+- [models/camera_mount.glb](assets/models/camera_mount.glb) · 5.5 MB
+- [models/camera_pole.glb](assets/models/camera_pole.glb) · 8.7 KB
+- [models/cell.scene.json](assets/models/cell.scene.json) · 4.3 KB
 - [models/conveyor_belt.glb](assets/models/conveyor_belt.glb) · 1.0 MB
 - [models/conveyor_frame.glb](assets/models/conveyor_frame.glb) · 8.3 MB
-- [models/drop_belt.wav](assets/models/drop_belt.wav) · 28 KB
+- [models/drop_belt.wav](assets/models/drop_belt.wav) · 9.4 KB
 - [models/drop_bin.wav](assets/models/drop_bin.wav) · 38 KB
 - [models/floor.glb](assets/models/floor.glb) · 3.0 MB
 - [models/game-ready_security_camera.glb](assets/models/game-ready_security_camera.glb) · 5.5 MB

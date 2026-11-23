@@ -107,21 +107,49 @@
         {
             "path": "models/belt_hum.wav",
             "size": 256044,
-            "sha256": "11366031e8803710c1702d3510825ee66726593682fda829f06d816b7e1551d6",
+            "sha256": "594b2732328c0d04357ceaeec01159f2e38ef120e938ba366aa77920f790090c",
             "zip": "assets/models/belt_hum.wav",
             "in": "repo"
         },
         {
             "path": "models/belt_objects.robot.json.gz",
             "size": 76427,
-            "sha256": "d19e1f01ef98a6555b5edf4bd0821deaaa9ec80230cbe9b2e98468aafa3baafd",
+            "sha256": "d9e5a77549e85dd72a42a1e8a36912974ad74ce3346d798fc825c71d3fbfdeb8",
             "zip": "assets/models/belt_objects.robot.json.gz",
             "in": "repo"
         },
         {
+            "path": "models/camera_base.glb",
+            "size": 3020,
+            "sha256": "c44fff536ab9e0577087e40f39d79685e051aeaa2148c6b50c6a581214b38cd3",
+            "zip": "assets/models/camera_base.glb",
+            "in": "repo"
+        },
+        {
+            "path": "models/camera_head.glb",
+            "size": 5775456,
+            "sha256": "bb41fd4120b89c271a1beba0f46c91d43b972faed6312fc57ac41057c83dea47",
+            "zip": "assets/models/camera_head.glb",
+            "in": "repo"
+        },
+        {
+            "path": "models/camera_mount.glb",
+            "size": 5775468,
+            "sha256": "155b75a082adc500ec7632d9a7fecf72f43a99a6782a9527af4bd5508a145fc8",
+            "zip": "assets/models/camera_mount.glb",
+            "in": "repo"
+        },
+        {
+            "path": "models/camera_pole.glb",
+            "size": 8876,
+            "sha256": "d05c6caff21a4aef80fecf2a4c9af3094162da646d90f2acd78bc4aae3754373",
+            "zip": "assets/models/camera_pole.glb",
+            "in": "repo"
+        },
+        {
             "path": "models/cell.scene.json",
-            "size": 2851,
-            "sha256": "1b662f8efaf821b5e3cf872a9e60a20da4a36949bd54f02fae3df1ed40f15397",
+            "size": 4399,
+            "sha256": "01968713079c1e34073566341a7429c6f7244873eb3c450835ceddd52cbc6ef9",
             "zip": "assets/models/cell.scene.json",
             "in": "repo"
         },
@@ -141,15 +169,15 @@
         },
         {
             "path": "models/drop_belt.wav",
-            "size": 28844,
-            "sha256": "d650324eb0c0d540ea19d57c8a5110bd24366807053700b78b8ed5c574c4e91c",
+            "size": 9644,
+            "sha256": "897826190ae7e1dc6360e17cd8ac131e4221e5e94825ca9fa903d2d5993e5cb6",
             "zip": "assets/models/drop_belt.wav",
             "in": "repo"
         },
         {
             "path": "models/drop_bin.wav",
             "size": 38444,
-            "sha256": "4b91583134726e70f502e5d9853afbce88ad87d4b2c2f4fc10e6caff462aa24a",
+            "sha256": "a7fca408ed2057c64eea463e334cc905a9cf32d8f80130c616c64cd45106889c",
             "zip": "assets/models/drop_bin.wav",
             "in": "repo"
         },
@@ -170,7 +198,7 @@
         {
             "path": "models/rub.wav",
             "size": 128044,
-            "sha256": "483b2c5304dfc8a99b08253323fe0643a309275e95ef2853426f70e1c8b0e742",
+            "sha256": "df21be2f630cf7f6afcf69c2ddf775108cd02c8e25e0694912d062f30cea9e6c",
             "zip": "assets/models/rub.wav",
             "in": "repo"
         },
@@ -198,7 +226,7 @@
         {
             "path": "models/xarm_hand.robot.json.gz",
             "size": 452082,
-            "sha256": "86b29be6818b304493df16c051c6685cc8adc7bc7f2df3d469562ff677448740",
+            "sha256": "eb3c16e18c3ec723f49381fdee7492d4a2d4de46ad2ec7b00b5f4b1437c9df78",
             "zip": "assets/models/xarm_hand.robot.json.gz",
             "in": "repo"
         },
@@ -217,5 +245,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-23T21:11:15+00:00"
+    "saved": "2026-11-23T22:11:49+00:00"
 }
