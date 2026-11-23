@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 93 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 94 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -3327,8 +3327,9 @@ def camera_png(env, i):
     if not getattr(env, "_hi_off", False):
         try:
             rgb = hires_rgb(env, i)
-        except Exception:      # noqa: BLE001  (the network's own picture, enlarged)
+        except Exception as e:      # noqa: BLE001  (the network's own picture, enlarged)
             env._hi_off = True
+            env.log("Camera view: the finer picture could not be drawn (%s); the network's own is shown, enlarged." % e)
     if rgb is None:
         img = env.last_img[i]
         rgb = (img[3:6].clamp(0, 1) * 255).byte().permute(1, 2, 0).cpu().numpy()
