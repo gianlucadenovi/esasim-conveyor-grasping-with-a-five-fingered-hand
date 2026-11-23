@@ -6,7 +6,7 @@
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
     "published_version": 15,
-    "updated": "2026-11-23 04:10:20",
+    "updated": "2026-11-23 05:31:34",
     "graph": {
         "nodes": [
             {
@@ -104,7 +104,7 @@
                     "channel": "touch",
                     "max": 30,
                     "scale": "log",
-                    "hand": "right"
+                    "hand": "left"
                 },
                 "title": "Hand pressure map"
             },
