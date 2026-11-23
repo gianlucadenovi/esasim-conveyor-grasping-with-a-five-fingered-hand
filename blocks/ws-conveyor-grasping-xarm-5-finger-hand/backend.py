@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 140 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 141 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -5517,7 +5517,7 @@ def mesh_cache():
 def run(ctx):
     what = str(ctx.params.get("mode") or "Learn to reach").lower()
     viz.budget_telemetry(ctx, 60.0 * float(ctx.params.get("minutes") or 60))      # (EsaSim keeps 20 000 live items a run)
-    rig = [f for f in (ctx.inputs.get("policy") or []) if str(f.name).lower().endswith(".glb")]
+    rig = [f for f in (ctx.inputs.get("policy") or []) if str(f.name).lower().endswith(".glb") and "camera" not in str(f.name).lower()]
     S.ARM_MESHES = viz.camera_arm_meshes(mesh_cache(), ctx.log, str(rig[0].path) if rig else None)   # (the camera sees the arm as it is)
     bd = str(ctx.params.get("belt_drawing") or "flat").lower()
     viz.CONVEYOR["mode"] = "boxes" if bd.startswith("box") else "textured" if ("material" in bd or "textur" in bd) else "flat"
