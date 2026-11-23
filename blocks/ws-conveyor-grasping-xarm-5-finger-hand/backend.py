@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 108 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 109 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2712,10 +2712,22 @@ def conveyor_mesh(path, log):
                        "pos": [round(float(x) * 1000, 1) for x in shift]}
     by_col = {}
     for v, f, c, nm in parts:
-        key = ("belt",) if "belt" in nm else part_colour(c, nm)     # (the belt apart: it carries the moving texture)
-        by_col.setdefault(key, []).append((v * sc + shift, f, part_colour(c, nm)))
+        vs = v * sc + shift
+        if "belt" in nm:            # (the belt apart: it carries the moving texture)
+            by_col.setdefault(("belt",), []).append((vs, f, part_colour(c, nm)))
+        elif "frame" in nm:
+            by_col.setdefault(("frame",), []).append((vs, f, CONVEYOR_FINISH[("frame",)]["color"]))
+        elif "leg" in nm:           # (the feet: the legs' triangles down at the floor)
+            low = v[f][:, :, 2].max(1) < lo[2] + FEET_H
+            by_col.setdefault(("feet",), []).append((vs, f[low], CONVEYOR_FINISH[("feet",)]["color"]))
+            by_col.setdefault(part_colour(c, nm), []).append((vs, f[~low], part_colour(c, nm)))
+        else:
+            by_col.setdefault(part_colour(c, nm), []).append((vs, f, part_colour(c, nm)))
     links = []
     for key, items in by_col.items():
+        items = [it for it in items if len(it[1])]
+        if not items:
+            continue
         m = Mesh()
         for v, f, _ in items:
             vv, ff = decimate(v[f] * 1000.0, 2.0) if len(f) > 3000 else (v * 1000.0, f)
@@ -2731,8 +2743,14 @@ def conveyor_mesh(path, log):
                             "period": round(BELT_PERIOD * 1000, 1), "across": round(across * 1000, 1)})
                 log("The belt's own texture: one picture every %.2f m along the belt (%.2f m in the file), %.2f m across; it "
                     "scrolls with the belt (a 3D view that draws link textures)." % (BELT_PERIOD, pic["along"] * float(sc[0]), across))
-        links.append((items[0][2], m, tex))
+        links.append((items[0][2], m, tex, CONVEYOR_FINISH.get(key)))
     return links
+
+
+# the conveyor's look: its frame glossy blue, its feet metal (the legs keep the file's colour)
+CONVEYOR_FINISH = {("frame",): {"color": 0x1f5fc4, "roughness": 0.18, "metalness": 0.1, "clearcoat": 1.0},
+                   ("feet",): {"color": 0xc9cdd3, "roughness": 0.22, "metalness": 1.0, "clearcoat": 0.0}}
+FEET_H = 0.05                     # (m, in the file) the feet: the legs up to this height above the floor
 
 
 # the texture of the belt's surface, for the 3D view: rubber with a fine grain and chevrons pointing the way the belt
@@ -2766,9 +2784,9 @@ def objects_model(info, conveyor=None):
             m.add(v, f, quat_R(S.part_quat(eul)), pos)
         links[-1] = m.link(hexcol(o["rgba"]))
     # the conveyor's parts last: the 3D view gives the joint items' values to the joints in their order, fixed ones too
-    for k, (col, m, tex) in enumerate(conveyor or []):
+    for k, (col, m, tex, fin) in enumerate(conveyor or []):
         joints.append({"name": "conveyor_%d" % k, "type": "fixed", "parent": "base", "xyz": [0, 0, 0], "rpy": [0, 0, 0], "axis": [0, 0, 1]})
-        lk = m.link(col)
+        lk = m.link(col) if not fin else _rig_link([dict(fin, v=np.concatenate(m.v), f=np.concatenate(m.f))])
         if tex and lk:
             lk["texture"] = tex
         links.append(lk)
