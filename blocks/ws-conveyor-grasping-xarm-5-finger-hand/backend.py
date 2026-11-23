@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 135 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 136 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1731,11 +1731,17 @@ class Demo:
         self.plan_yaw = t.zeros(env.n, device=env.dev)   # (the grasp chosen from above: the hand's turn and height)
         self.plan_z = t.zeros(env.n, device=env.dev)
         self.plan_dy = t.zeros(env.n, device=env.dev)
+        self.top = t.zeros(env.n, dtype=t.long, device=env.dev)      # (this episode: the furthest phase reached,
+        self.n_lost = t.zeros(env.n, dtype=t.long, device=env.dev)   # how often the object slipped from the hand,
+        self.n_stuck = t.zeros(env.n, dtype=t.long, device=env.dev)  # how often the descent got stuck)
 
     def reset(self, idx):
         self.phase[idx] = 0
         self.timer[idx] = 0
         self.empty[idx] = 0
+        self.top[idx] = 0
+        self.n_lost[idx] = 0
+        self.n_stuck[idx] = 0
 
     def act(self):
         env, torch = self.env, self.env.t
@@ -1826,8 +1832,11 @@ class Demo:
         held = ((dig[:, 0] > 0.3) | (f[:, 5:9].max(1).values > 0.3)) & ((dig[:, 1:5] > 0.3).sum(1) >= 1)
         self.empty = torch.where(held | (phase < 3) | (phase > 4), torch.zeros_like(self.empty), self.empty + 1)
         lost = (((phase == 3) & (timer > 8)) | (phase == 4)) & (self.empty >= 4)
+        self.n_lost += lost.long()
+        self.n_stuck += stuck.long()
         lost = lost | stuck
         self.phase = torch.where(lost, torch.zeros_like(phase), torch.where(nxt, phase + 1, phase))
+        self.top = torch.max(self.top, self.phase)
         self.timer = torch.where(nxt | lost, torch.zeros_like(timer), timer)
         self.empty = torch.where(lost, torch.zeros_like(self.empty), self.empty)
         return a
@@ -1842,10 +1851,14 @@ def end_kinds(env, info, idx):
             out.append("in the bin")
         elif bool(env.lifted_ever[i]):
             out.append("dropped once lifted" if bool(info["fail"][i]) else "timed out lifted")
-        elif bool(info["fail"][i]):
-            out.append("never lifted, off the belt")
         else:
-            out.append("timed out, never lifted")
+            ph = getattr(env, "phaser", None)
+            why = ""
+            if ph is not None:      # (how far the controller got: over it, down to it, closed on it, lifting it)
+                top, nl, ns = int(ph.top[i]), int(ph.n_lost[i]), int(ph.n_stuck[i])
+                why = (" (never over it)" if top == 0 else " (stuck going down)" if ns and top <= 1 else
+                       " (closed, slipped out lifting)" if nl else " (never closed on it)" if top <= 1 else " (closed, never lifted)")
+            out.append(("never lifted, off the belt" if bool(info["fail"][i]) else "timed out, never lifted") + why)
     return out
 
 
