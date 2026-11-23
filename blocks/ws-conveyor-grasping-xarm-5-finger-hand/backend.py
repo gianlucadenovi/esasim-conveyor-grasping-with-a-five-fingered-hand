@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 115 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 116 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2747,8 +2747,6 @@ def belt_texture_png(w=512, h=448, lines=2, seed=7):
     """the belt's rubber as a PNG that repeats without a seam both ways (x: along the belt, y: across it): dark rubber,
     uneven wear and a fine grain (noise shaped in its spectrum, so it wraps round), faint scuffs along the travel,
     specks and pits, and lines across the belt at equal spaces, each a groove with a lit edge"""
-    import struct
-    import zlib
     rng = np.random.default_rng(seed)
 
     def noise(hh, ww, beta):
@@ -2766,7 +2764,34 @@ def belt_texture_png(w=512, h=448, lines=2, seed=7):
         wob = 1 + 0.15 * noise(h, 1, 1.2)[:, 0]
         for dx, a in groove.items():
             img[:, (w * (2 * k + 1) // (2 * lines) + dx) % w] += a * wob
-    rgb = (np.clip(np.stack([img * 0.98, img, img * 1.03], -1), 0, 1) * 255).astype(np.uint8)
+    return _png((np.clip(np.stack([img * 0.98, img, img * 1.03], -1), 0, 1) * 255).astype(np.uint8))
+
+
+def belt_gloss_png(h=512, seed=11):
+    """where the belt shines, as a glTF metal-roughness picture (green: the roughness): the same all along the belt, so
+    it holds while the belt runs, and changing across it: lanes polished by what rides and slips on it, fine streaks
+    of wear, duller rubber between (its v runs across the belt, as the rubber's picture)"""
+    rng = np.random.default_rng(seed)
+
+    def wave(beta):
+        k = np.abs(np.fft.fftfreq(h))
+        k[0] = 1.0
+        n = np.real(np.fft.ifft(np.fft.fft(rng.standard_normal(h)) / k ** beta))
+        return (n - n.mean()) / n.std()
+    v = np.arange(h) / h
+    lanes = np.exp(-((v - 0.5) / 0.22) ** 2)                 # (the middle of each picture across: where objects ride)
+    rough = np.clip(0.86 - 0.42 * lanes + 0.07 * wave(1.5) + 0.05 * wave(0.3), 0.3, 1.0)
+    rgb = np.zeros((h, 16, 3), np.uint8)
+    rgb[..., 0] = 255
+    rgb[..., 1] = (rough * 255).astype(np.uint8)[:, None]
+    return _png(rgb)
+
+
+def _png(rgb):
+    """an RGB picture (h, w, 3, bytes) as a PNG file"""
+    import struct
+    import zlib
+    h, w = rgb.shape[:2]
     raw = b"".join(b"\0" + rgb[y].tobytes() for y in range(h))
 
     def chunk(tag, data):
@@ -2802,11 +2827,12 @@ def belt_glb(items, log):
     nrm = nrm[key] / np.maximum(np.linalg.norm(nrm[key], axis=1, keepdims=True), 1e-12)
     log("The belt: one surface %.2f m round its rollers, its texture %d times round it (one every %.3f m), %.2f m across."
         % (T, round(T / period), period, BELT_TEX_ACROSS))
-    return glb_bytes(p, nrm, uv, "belt", 0x1d1f23), period
+    return glb_bytes(p, nrm, uv, "belt", 0x1d1f23, belt_gloss_png()), period
 
 
-def glb_bytes(pos, nrm, uv, material, color):
-    """a glTF binary of one mesh, its corners not shared (pos, nrm: (n, 3), uv: (n, 2)), with one material by name"""
+def glb_bytes(pos, nrm, uv, material, color, gloss=None):
+    """a glTF binary of one mesh, its corners not shared (pos, nrm: (n, 3), uv: (n, 2)), with one material by name;
+    gloss: a PNG of where it shines (its metal-roughness picture), repeated as its texture coordinates go"""
     import struct
     pos, nrm, uv = (np.asarray(a, np.float32) for a in (pos, nrm, uv))
     idx = np.arange(len(pos), dtype=np.uint32)
@@ -2818,11 +2844,20 @@ def glb_bytes(pos, nrm, uv, material, color):
         blobs.append(b + b"\0" * (-len(b) % 4))
         off += len(blobs[-1])
     accs[0]["min"], accs[0]["max"] = pos.min(0).tolist(), pos.max(0).tolist()
+    pbr = {"metallicFactor": 0.0, "roughnessFactor": 1.0 if gloss else 0.9}
+    extra = {}
+    if gloss:
+        views.append({"buffer": 0, "byteOffset": off, "byteLength": len(gloss)})
+        blobs.append(gloss + b"\0" * (-len(gloss) % 4))
+        off += len(blobs[-1])
+        extra = {"images": [{"bufferView": len(views) - 1, "mimeType": "image/png"}], "samplers": [{"wrapS": 10497, "wrapT": 10497}],
+                 "textures": [{"source": 0, "sampler": 0}]}
+        pbr["metallicRoughnessTexture"] = {"index": 0}
     rgb = [((int(color) >> sh) & 255) / 255.0 for sh in (16, 8, 0)]
     js = {"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0, "name": material}],
           "meshes": [{"name": material, "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, "indices": 3, "material": 0}]}],
-          "materials": [{"name": material, "pbrMetallicRoughness": {"baseColorFactor": rgb + [1.0], "metallicFactor": 0.0, "roughnessFactor": 0.9}}],
-          "buffers": [{"byteLength": off}], "bufferViews": views, "accessors": accs}
+          "materials": [{"name": material, "pbrMetallicRoughness": dict(pbr, baseColorFactor=rgb + [1.0])}],
+          "buffers": [{"byteLength": off}], "bufferViews": views, "accessors": accs, **extra}
     j = json.dumps(js, separators=(",", ":")).encode()
     j += b" " * (-len(j) % 4)
     binc = b"".join(blobs)
@@ -2991,7 +3026,7 @@ def scene_file(mjm, conveyor):
     if conveyor and CONVEYOR.get("belt_glb"):
         models.append({"id": "belt", "model": "models/conveyor_belt.glb", "up": "z", "position": up((0, 0, 0)),
                        "materials": {"belt": {"texture": BELT_TEX, "scroll": [{"expr": "@cell.travel / %.6f" % CONVEYOR["belt_period"]}, 0],
-                                              "roughness": 0.88, "metalness": 0.0}}})
+                                              "roughness": 1.0, "metalness": 0.0}}})
     elif not conveyor:
         boxes = [("belt_frame", "#5a6068"), ("rail_l", "#9aa1aa"), ("rail_r", "#9aa1aa")] + boxes
         models.append({"id": "belt", "shape": "box", "position": up((S.BELT_X0, S.BELT_CY, -0.012)), "size": [round(CONVEYOR_LEN, 4), round(S.BELT_W, 4), 0.024], "color": "#1d1f23"})
