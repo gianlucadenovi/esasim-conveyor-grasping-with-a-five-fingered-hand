@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 139 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 140 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1804,7 +1804,7 @@ class Demo:
         arc = torch.where(((env.tgt_p[:, :2] - drop[:, :2]).norm(dim=1) < 0.03)[:, None], drop, arc)
         tgt = torch.where((phase >= 4)[:, None], arc, tgt)
         sp = torch.where(phase >= 3, 0.6, 1.0)
-        sp = torch.where((phase == 3) & (timer < 15), 0.25, sp)              # (the first centimetres of the lift slowly: the grip settles)
+        sp = torch.where((phase == 3) & (timer < 30), 0.2, sp)               # (the first centimetres of the lift slowly: the grip settles)
         a[:, :3] = ((tgt - env.tgt_p) / 0.018).clamp(-1, 1) * sp[:, None]   # (carrying: steadier)
         # (the first moments of the lift: the hand keeps going with the belt, while the object's underside still touches
         # it; standing still, it let the belt drag the object out of the fingers)
@@ -1838,7 +1838,7 @@ class Demo:
         # the fingers alone, the thumb and the palm not touching it)
         held = ((dig > 0.2).sum(1) + (f[:, 5:9].max(1).values > 0.2).long()) >= 2
         self.empty = torch.where(held | (phase < 3) | (phase > 4), torch.zeros_like(self.empty), self.empty + 1)
-        lost = (((phase == 3) & (timer > 8)) | (phase == 4)) & (self.empty >= 4)
+        lost = (((phase == 3) & (timer > 8)) | (phase == 4)) & (self.empty >= 8)
         self.n_lost += lost.long()
         up = env.sim.xpos[:, env.ob, 2].float() > env.z_rest + 0.02     # (for the log only: was it still up, held?)
         self.n_false += (lost & up).long()
