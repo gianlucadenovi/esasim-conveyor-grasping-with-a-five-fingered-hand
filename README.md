@@ -22,7 +22,7 @@ Objects of 18 training shapes are dropped onto a belt running at 5 to 10 cm/s: u
 
 1. **See**: a small convolutional network learns, from the camera's depth and colour, which pixels belong to the object and from them its box: where it is, how big, which way its long side lies.
 2. **Place** (the main stage): the policy first learns from a scripted pick-and-place controller that uses only what the robot senses (its hand, its touch sensors and the camera's box): it imitates it, then drives itself while the controller corrects it (DAgger). Then PPO fine-tunes it on the real reward (object in the bin), with a fading term that keeps it close to the demonstrations and a capped step size.
-3. **Test**: one cell in real time, on 12 shapes it never trained on (a banana, a stepped cone, a drill, a pear, a duck and others).
+3. **Test**: one cell in real time, on 12 shapes it never trained on (a banana, a stepped cone, a drill, a pear, a duck and others), driven by the learned policy or by the scripted controller.
 
 **Reach** and **Grasp** are also available as stages of their own (grasp learns from the same demonstrations); they are not needed before Place.
 
@@ -42,23 +42,34 @@ Every flow has the **Conveyor grasping (xArm + 5-finger hand)** block in the mat
 ## The View
 
 - **The cell** in 3D: the belt, the bin, the camera on its pole, the object, the hand with every finger joint, and the xArm.
-- The **camera box**, in yellow: where the camera network thinks the object is.
-- **Touch**: the force on each digit and palm zone, in newtons.
-- **What the camera sees**: the picture the network gets, with its box.
-- During training, episodes of the learning cells are replayed with their result.
-- **Test with a new object**: choose the object, how it lies, how it is turned and the belt speed (5 to 10 cm/s, the range it trained on), then press **Put it on the belt**. The object is dropped at the start of the belt; the hand waits at rest until the object reaches the stretch where training objects start, then picks it.
+- **What the camera sees**: the camera's picture, drawn three times finer than the network's own 96×72 for whoever watches (the network keeps its own). Over it:
+  - in **yellow**, the object's box as the camera network sees it, and in **orange** its long axis;
+  - in **cyan**, the hand's grasping axis, from the thumb's tip to the middle of the index and middle fingertips. In a good grasp the cyan line crosses the orange one;
+  - the hand's **pressure sensors** as dots, grey when they feel nothing, yellow to red up to 10 N. They are drawn only when the palm side of the hand faces the camera, so the palm is never taken for the back of the hand.
+- **Touch**: the force on each digit and palm zone, in newtons, and the hand's pressure map.
+- During training, episodes of the learning cells are replayed with their result (their camera pictures carry the same lines).
+- **Test with a new object**: choose the object, how it lies, how it is turned and the belt speed (5 to 10 cm/s, the range it trained on), then press **Put it on the belt**. The object is dropped 25 cm in from the start of the belt; the hand waits at rest until the object reaches the stretch where training objects start, then picks it.
+
+## The grasp
+
+The hand grasps across the object, not along it: the line along which the thumb closes against the fingers lies across the object's long axis, and the palm stays level. Measured on the hand alone and then in the whole cell:
+
+- The hand is turned 40° beyond square to the object's long axis (the thumb-to-fingers line is not the hand's own x axis), and the grasp point sits towards the thumb's side, further for wide objects (a disc lying flat: 42% → 92% held on the hand alone).
+- The grasp (the hand's turn, height and offset) is chosen from the camera's clear view, before the hand comes down. As the fingers come round the object they hide part of it and the camera network takes them for part of it (its top seen up to 2 cm too high, its axis turned). So while the fingers are down round it, the cell keeps the object's height, size and axis as last seen clearly and only goes on following where it is (touched, an object slows down on the belt). The policy sees the same.
+- The hand follows the object where the camera sees it, without leading it. It goes down once over it, closes even when the belt or the object stops it short of the grasp height, and gives up a descent the arm cannot complete and plans it again from above (before this, one object in eight passed by while the hand was stuck mid-descent).
+- It feels the object: if its touch sensors say the hand holds nothing while it lifts or carries, it opens and tries again, instead of carrying an empty hand to the bin.
 
 ## What is computed
 
 | Part | How |
 |---|---|
 | **Physics** | MuJoCo 3 (CPU) or MuJoCo Warp (GPU): 2 ms steps, 40 ms control steps; elliptic friction cones |
-| **Arm** | xArm 6 with UFACTORY's kinematics; position servos with the motors' torques, gravity compensated; the policy says where the hand should be (x, y, z, yaw, pitch, roll) and inverse kinematics sets the joints |
+| **Arm** | xArm 6 with UFACTORY's kinematics; position servos with the motors' torques, gravity compensated; the policy says where the hand should be (x, y, z, yaw, pitch, roll) and inverse kinematics sets the joints. The hand sits on an adapter 11.8 cm from the flange |
 | **Hand** | 5 fingers, 15 joints, position servos with limited torque. The policy sets each finger's curl and the thumb's swing under the palm |
 | **Touch** | 19 MuJoCo touch sensors, all of them given to the policy |
-| **Camera** | 96×72 depth, colour and segmentation, 6 frames a second |
-| **Camera network** | encoder-decoder CNN: an object mask, then the box (centre, half sizes, yaw) |
-| **Scripted controller** | over the object, down, close the hand fully, lift slowly at first, carry round the arm's base, open over the bin. It feels the object: if its touch sensors say the hand holds nothing (no thumb or palm with a finger pressing) while it lifts or carries, it opens and goes back to try again instead of carrying an empty hand to the bin |
+| **Camera** | 96×72 depth, colour and segmentation, 6 frames a second (the picture shown in the View is drawn again at 288×216) |
+| **Camera network** | encoder-decoder CNN on each pixel's 3D point (from the depth) and its shaded colour: an object mask, then the box (centre, half sizes, yaw). The policy gets the box, not the picture |
+| **Scripted controller** | over the object, down, close the hand, lift slowly at first, carry round the arm's base, open over the bin; the grasp as above |
 | **Policy** | behaviour cloning + DAgger from the controller, then PPO with an asymmetric critic (the policy sees only what the robot could sense; the critic also sees the true object state). Network 512-256-128 |
 | **Rewards** | place: distance gained towards the bin with the object in hand, released over the bin, resting in it; dropping it or knocking it off costs |
 
@@ -82,7 +93,7 @@ Every flow has the **Conveyor grasping (xArm + 5-finger hand)** block in the mat
 
 ## Settings worth knowing
 
-On the **Conveyor grasping** block: **What to do** (the mode), **Run on**, **Cells learning at once** (1024 on an 8 GB GPU), **Minutes**, **Training** (Continue or Start over), **Live cell while learning** (No by default: a real-time cell in the same process slows learning several times; the view then replays episodes of the learning cells), and for the test: **pace**, **pick objects when idle**, **Test objects** (new only or all).
+On the **Conveyor grasping** block: **What to do** (the mode), **Run on**, **Cells learning at once** (1024 on an 8 GB GPU), **Minutes**, **Training** (Continue or Start over), **Live cell while learning** (No by default: a real-time cell in the same process slows learning several times; the view then replays episodes of the learning cells), and for the test: **Test: who drives** (the learned policy, or the scripted controller it learns from), **pace**, **pick objects when idle**, **Test objects** (new only or all).
 
 ## Which policy is used
 
@@ -96,9 +107,9 @@ Policies are carried on from (and tested) only if they were learned in the same 
 
 ## How well it does now
 
-- The scripted controller puts about 72% of training objects in the bin (measured on 600 episodes).
-- The learned policy, in the test (60 s per object, new objects dropped from 25 cm): about 30% in the bin, on shapes it trained on and on new shapes alike. When it lifts and holds an object it nearly always delivers it; the misses are grasps that do not close on the object.
-- The figure the learning shows during training (the best snapshot's, from the first episodes after imitation) runs well above what the test measures: judge by the test.
+- **The scripted controller**: about 89% of training objects in the bin when they come from upstream as in the test (898 episodes), and 15 of 17 of the new test objects (88%). When the hand gets one clean attempt, 97% end in the bin. The weakest are objects lying flat (flat box, disc) and the rod.
+- **The learned policy** imitates the controller closely on the controller's own data but, driving alone, succeeds only 34–39% of the time, and PPO has not improved on that. The controller keeps memory of where it is in the task (its phase, how long it has been going down, the grasp it chose from above); the policy sees only the present moment. Giving it that memory (a recurrent network, or the task's phase as an input) is the next step. Until then, test with **Test: who drives: The scripted controller**.
+- After the belt lane moved, the cell's fingerprint changed: policies learned before do not apply to it.
 
 ## Data and licences
 
@@ -107,8 +118,7 @@ The xArm's kinematics and meshes come from [xarm_ros](https://github.com/xArm-De
 ## Notes
 
 - Success during learning is counted with the policy's exploration noise, over the episodes that have ended; early in a run the short episodes end first, so the first figures run low or high before they settle.
-- The hardest objects to hold are the small and round ones (rod, small ball, egg, cube); boxes, cans, mugs, bottles and T blocks go in most reliably.
-- PPO after imitation has so far not improved on the imitated policy within an hour on one RTX 3070 (about 900 steps a second); more demonstrations and DAgger rounds have helped more.
+- EsaSim keeps 20 000 live items per run, so the block spreads the 3D view's episodes over the run's minutes: during learning an episode is shown every couple of minutes, and none while the demonstrations are being collected.
 - A cell whose physics blows up (rare, among thousands) is restarted, and the log counts how often.
 
 <!-- esasim: files of the project -->
