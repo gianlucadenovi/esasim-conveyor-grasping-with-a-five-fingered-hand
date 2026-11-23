@@ -5,8 +5,8 @@
     },
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
-    "published_version": 14,
-    "updated": "2026-11-23 03:29:34",
+    "published_version": 15,
+    "updated": "2026-11-23 04:10:20",
     "graph": {
         "nodes": [
             {
@@ -47,7 +47,7 @@
                     "autoplay": "Yes",
                     "idle": 15,
                     "objects": "New objects only",
-                    "belt_drawing": "Flat colours (3D file)",
+                    "belt_drawing": "Its own materials (3D file)",
                     "seed": 1
                 },
                 "title": "Test with new objects"
