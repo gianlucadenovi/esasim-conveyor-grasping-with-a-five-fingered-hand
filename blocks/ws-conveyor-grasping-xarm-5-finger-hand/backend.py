@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 123 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 124 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2987,14 +2987,28 @@ def _occlusion(pos, nrm, occ, rays=24, reach=0.15):
     t1 = torch.nn.functional.normalize(torch.cross(N, a, dim=1), dim=1)
     t2 = torch.cross(N, t1, dim=1)
     out = torch.ones(len(P), device=dev)
-    step = max(1, int(4e6 // (rays * len(T))))
+    tlo, thi = T.min(1).values, T.max(1).values
+    for s0 in range(0, len(P), 256):        # (a patch of points, against the triangles within reach of it)
+        plo, phi = P[s0:s0 + 256].min(0).values - reach, P[s0:s0 + 256].max(0).values + reach
+        near_t = ((tlo <= phi) & (thi >= plo)).all(1)
+        if not bool(near_t.any()):
+            continue
+        out[s0:s0 + 256] = _occlusion_part(torch, P[s0:s0 + 256], N[s0:s0 + 256], t1[s0:s0 + 256], t2[s0:s0 + 256],
+                                           v0[near_t], e1[near_t], e2[near_t], r, ph, rng, rays, reach)
+    return out.cpu().numpy()
+
+
+def _occlusion_part(torch, P, N, t1, t2, v0, e1, e2, r, ph, rng, rays, reach):
+    dev = P.device
+    out = torch.ones(len(P), device=dev)
+    step = max(1, int(4e6 // (rays * len(v0))))
     for s in range(0, len(P), step):
         n_, o_ = N[s:s + step], P[s:s + step] + 0.002 * N[s:s + step]
         tw = torch.rand(len(n_), 1, generator=rng, device=dev) * 6.2832       # (turned at random point to point: no banding)
         c, sn, z = r * torch.cos(ph + tw), r * torch.sin(ph + tw), torch.sqrt(1 - r * r).expand(len(n_), rays)
         D = (c[..., None] * t1[s:s + step, None] + sn[..., None] * t2[s:s + step, None] + z[..., None] * n_[:, None]).reshape(-1, 3)
         O = o_[:, None].expand(-1, rays, 3).reshape(-1, 3)
-        pv = torch.cross(D[:, None].expand(-1, len(T), 3), e2[None].expand(len(D), -1, 3), dim=2)
+        pv = torch.cross(D[:, None].expand(-1, len(v0), 3), e2[None].expand(len(D), -1, 3), dim=2)
         det = (e1[None] * pv).sum(-1)
         inv = 1.0 / torch.where(det.abs() < 1e-12, torch.full_like(det, 1e-12), det)
         tv = O[:, None] - v0[None]
@@ -3005,7 +3019,7 @@ def _occlusion(pos, nrm, occ, rays=24, reach=0.15):
         hit = (det.abs() > 1e-12) & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 0) & (t < reach)
         near = torch.where(hit, t, torch.full_like(t, reach)).min(1).values
         out[s:s + step] = 1 - (1 - near / reach).reshape(-1, rays).mean(1)
-    return out.cpu().numpy()
+    return out
 
 
 def frame_glb(items, finish, log):
