@@ -1,5 +1,5 @@
 <!-- esasim: cover -->
-![Conveyor grasping with a five-fingered hand](assets/cover.svg)
+![Conveyor grasping with a five-fingered hand](assets/cover.jpg)
 <!-- /esasim: cover -->
 
 <div align="center">
@@ -138,6 +138,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 The files the project's views draw with (3D models, textures, sounds), in [assets/](assets/):
 
+- [covers/37d82793-5abc-4476-91d0-99524aba329e.png](assets/covers/37d82793-5abc-4476-91d0-99524aba329e.png) · 921 KB
 - [grasp-policy/grasp_grasp_20261119_0649_86.pt](assets/grasp-policy/grasp_grasp_20261119_0649_86.pt) · 4.9 MB
 - [grasp-policy/grasp_grasp_20261120_0000_87.pt](assets/grasp-policy/grasp_grasp_20261120_0000_87.pt) · 5.1 MB
 - [grasp-policy/grasp_place_20261119_0849_67.pt](assets/grasp-policy/grasp_place_20261119_0849_67.pt) · 4.9 MB

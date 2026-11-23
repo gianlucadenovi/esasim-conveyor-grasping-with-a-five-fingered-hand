@@ -7,6 +7,13 @@
     "datasets": [],
     "assets": [
         {
+            "path": "covers/37d82793-5abc-4476-91d0-99524aba329e.png",
+            "size": 943401,
+            "sha256": "72c07a12c468e759378bf8dd08e610277788a805cd84517792c38d545447050a",
+            "zip": "assets/covers/37d82793-5abc-4476-91d0-99524aba329e.png",
+            "in": "repo"
+        },
+        {
             "path": "grasp-policy/grasp_grasp_20261119_0649_86.pt",
             "size": 5173285,
             "sha256": "b9cc80faed145695e58ce0a4fb440721f297267deeb1e202cfc1b788dfe32fd9",
@@ -126,5 +133,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-22T15:01:34+00:00"
+    "saved": "2026-11-23T01:42:19+00:00"
 }

@@ -7,8 +7,8 @@
     "name": "Conveyor grasping with a five-fingered hand",
     "description": "An xArm with a five-fingered hand learns to see objects coming on a conveyor belt, reach them, grasp them with real contact forces (touch sensors in the fingertips and palm) and put them in a bin; then it is tested on objects it never saw, chosen by you.",
     "type": "robotics",
-    "cover": "c2",
-    "cover_file": "assets/cover.svg",
+    "cover": "upload",
+    "cover_file": "assets/cover.jpg",
     "readme": "README.md",
     "blueprints": [
         {
