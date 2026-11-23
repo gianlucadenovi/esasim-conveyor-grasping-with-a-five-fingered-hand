@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 121 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 122 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2832,6 +2832,31 @@ def belt_maps(w=512, h=448, lines=2, seed=7):
     return base, _mr_png(np.clip(rough, 0.2, 1.0)), _normal_png(height, 2.5)
 
 
+FLOOR_SIZE, FLOOR_TILE = 24.0, 2.0      # (m) the floor round the cell, and its slabs (one picture each)
+
+
+def floor_glb(px=1024, seed=5):
+    """the floor as a 3D file of its own: dark polished concrete in slabs, its pictures repeating slab by slab: colour
+    (mottled, with fine aggregate and the slabs' saw-cut joints), gloss (polished, duller in patches and in the joints,
+    so that the light and the cell show in it unevenly) and relief (the joints, a faint grain)"""
+    rng = np.random.default_rng(seed)
+    mott, cloud, grain = _noise(rng, px, px, 1.5), _noise(rng, px, px, 2.2), _noise(rng, px, px, 0.3)
+    i = np.arange(px)
+    d = np.minimum(i, px - 1 - i)                                    # (pixels from the slab's edge)
+    joint = np.maximum(np.exp(-(d[:, None] / 2.5) ** 2), np.exp(-(d[None, :] / 2.5) ** 2))
+    img = 0.115 + 0.014 * mott + 0.006 * cloud + 0.01 * grain - 0.06 * joint
+    for _ in range(900):                                              # (specks of the aggregate, light and dark)
+        y, x = rng.integers(0, px, 2)
+        img[y:y + 2, x:x + 2] += rng.choice([0.05, -0.03])
+    base = _png((np.clip(np.stack([img, img * 1.01, img * 1.04], -1), 0, 1) * 255).astype(np.uint8))
+    rough = 0.3 + 0.12 * np.clip(cloud, -1.5, 2.5) + 0.05 * mott + 0.45 * joint
+    height = -joint + 0.04 * grain
+    s, k = FLOOR_SIZE / 2, FLOOR_SIZE / FLOOR_TILE
+    p = np.array([[-s, -s, 0], [s, -s, 0], [s, s, 0], [-s, -s, 0], [s, s, 0], [-s, s, 0]], float)
+    uv = (p[:, :2] + s) / FLOOR_SIZE * k
+    return glb_bytes(p, np.tile([0.0, 0.0, 1.0], (6, 1)), uv, "floor", {"base": base, "mr": _mr_png(np.clip(rough, 0.15, 1.0)), "normal": _normal_png(height, 1.5)})
+
+
 def _png(rgb):
     """an RGB picture (h, w, 3, bytes) as a PNG file"""
     import struct
@@ -3192,6 +3217,8 @@ def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=Non
     if conv and CONVEYOR.get("frame_glb"):
         with open(ctx.output(port, "conveyor_frame.glb"), "wb") as fh:
             fh.write(CONVEYOR["frame_glb"])
+    with open(ctx.output(port, "floor.glb"), "wb") as fh:
+        fh.write(floor_glb())
     ctx.log("cell.scene.json: the cell for the 3D scene view (scene: models/cell.scene.json)%s." % (
         ", with the conveyor's belt and frame as 3D files of their own (conveyor_belt.glb, conveyor_frame.glb)" if conv else ""))
 
@@ -3279,7 +3306,8 @@ def scene_file(mjm, conveyor):
 
     def up(p):
         return [round(float(p[0]), 4), round(float(p[1]), 4), round(float(p[2]) - FLOOR_Z, 4)]
-    models = [{"id": "arm", "model": "models/%s.robot.json.gz" % ARM, "position": up((S.BASE_POS[0], S.BASE_POS[1], 0)),
+    models = [{"id": "floor", "model": "models/floor.glb", "up": "z", "position": [0, 0, 0]},
+              {"id": "arm", "model": "models/%s.robot.json.gz" % ARM, "position": up((S.BASE_POS[0], S.BASE_POS[1], 0)),
                "rotation": [0, 0, round(math.degrees(S.BASE_YAW), 3)], "joints": "@cell.arm", "angle_units": "rad"},
               {"id": "objects", "model": "models/%s.robot.json.gz" % OBJS, "position": up((0, 0, 0)), "joints": "@cell.objects", "angle_units": "rad"}]
     boxes = [("bin_floor", "#2f6db5"), ("bin_w1", "#3a7fd0"), ("bin_w2", "#3a7fd0"), ("bin_w3", "#3a7fd0"), ("bin_w4", "#3a7fd0"), ("bin_stand", "#4a4f57")]
@@ -3302,7 +3330,10 @@ def scene_file(mjm, conveyor):
     c = ((S.BASE_POS[0] + S.BELT_X0) / 2, (S.BASE_POS[1] + S.BELT_CY) / 2, 0.0)
     return {"format": "esasim.scene/2", "title": "Conveyor grasping", "units": "m", "up": "z",
             "data": {"delay": 1.5, "smooth": 0.1, "events": "events"},
-            "environment": {"sky": "day", "ground": {"type": "concrete", "size": 60}},
+            # (a black space round the cell, the sun its one light: its shadow offsets small, so that the frame's channels
+            # and the gaps between the parts are in shade; it covers the cell's 5 m round the camera's target)
+            "environment": {"sky": "space", "ground": {"type": "none"}},
+            "lights": [{"type": "sun", "intensity": 3.2, "color": "#fff3e2", "elevation": 55, "azimuth": 70, "bias": -0.0004, "normal_bias": 0.004, "extent": 2.5}],
             "models": models,
             "cameras": [{"id": "cell", "type": "orbit", "position": up((c[0] + 1.6, c[1] - 1.9, 1.1)), "look_at": up(c)}], "start": "cell",
             "overlay": [{"type": "events", "at": "top-right", "count": 4}]}
