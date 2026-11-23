@@ -21,13 +21,13 @@
             "name": "2 · Learn to reach",
             "file": "blueprints/2-learn-to-reach.json",
             "published_version": 7,
-            "nodes": 11
+            "nodes": 12
         },
         {
             "name": "3 · Learn to grasp",
             "file": "blueprints/3-learn-to-grasp.json",
             "published_version": 7,
-            "nodes": 11
+            "nodes": 12
         },
         {
             "name": "4 · Learn to place",

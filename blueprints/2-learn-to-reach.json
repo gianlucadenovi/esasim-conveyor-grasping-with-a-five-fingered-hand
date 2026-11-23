@@ -6,7 +6,7 @@
     "name": "2 · Learn to reach",
     "description": "The hand learns to meet the object on the moving belt: grasp point on it, palm down, turned across it, moving with the belt.",
     "published_version": 7,
-    "updated": "2026-11-22 16:48:48",
+    "updated": "2026-11-23 16:25:12",
     "graph": {
         "nodes": [
             {
@@ -20,6 +20,16 @@
                     "pattern": "*.pt"
                 },
                 "title": "Networks so far"
+            },
+            {
+                "id": "robot",
+                "type": "project-assets",
+                "x": -460,
+                "y": 200,
+                "params": {
+                    "files": "models/xarm6_left_hand_rigged.glb"
+                },
+                "title": "Your robot model (what the camera sees)"
             },
             {
                 "id": "learn",
@@ -56,7 +66,7 @@
                 "y": -60,
                 "params": {
                     "interval": 0.5,
-                    "channels": "joints,scene,events,camera_picture,train,touch",
+                    "channels": "cell,events,camera_picture,train,touch",
                     "keep": 300
                 },
                 "title": "Episodes for the view"
@@ -75,19 +85,13 @@
             },
             {
                 "id": "view",
-                "type": "viewer-3d",
+                "type": "scene-3d",
                 "x": 760,
                 "y": -160,
                 "params": {
-                    "environment": "outdoor",
+                    "scene": "models/cell.scene.json",
                     "quality": "high",
-                    "floor": true,
-                    "grid": false,
-                    "joints_channel": "joints",
-                    "scene_channel": "scene",
-                    "delay": 1.5,
-                    "numbers": "",
-                    "events_channel": "events",
+                    "overlay": true,
                     "controls": "button Finish now",
                     "control_channel": "control"
                 },
@@ -113,7 +117,7 @@
                     "channel": "touch",
                     "max": 30,
                     "scale": "log",
-                    "hand": "right"
+                    "hand": "left"
                 },
                 "title": "Hand pressure map"
             },
@@ -125,11 +129,11 @@
                 "params": {
                     "kind": "line",
                     "x": "minutes",
-                    "y": "success,failed",
+                    "y": "imitation_success,success,failed",
                     "channel": "train",
                     "ymin": "0",
                     "ymax": "100",
-                    "title": "Reached (%) and lost (%)"
+                    "title": "Reached (%): while learning from demonstrations, then all; lost (%)"
                 },
                 "title": "Success"
             },
@@ -188,6 +192,17 @@
                 }
             },
             {
+                "id": "robot.files>learn.policy",
+                "from": {
+                    "node": "robot",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "learn",
+                    "port": "policy"
+                }
+            },
+            {
                 "id": "learn.telemetry>tel_robot.from",
                 "from": {
                     "node": "learn",
@@ -210,14 +225,14 @@
                 }
             },
             {
-                "id": "tel_robot.stream>view.scene",
+                "id": "tel_robot.stream>view.data",
                 "from": {
                     "node": "tel_robot",
                     "port": "stream"
                 },
                 "to": {
                     "node": "view",
-                    "port": "scene"
+                    "port": "data"
                 }
             },
             {

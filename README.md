@@ -130,8 +130,8 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 ### Blueprints in this repository
 
 - [1 · Learn to see](blueprints/1-learn-to-see.json) · 10 blocks · version 10
-- [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 11 blocks · version 7
-- [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 11 blocks · version 7
+- [2 · Learn to reach](blueprints/2-learn-to-reach.json) · 12 blocks · version 7
+- [3 · Learn to grasp](blueprints/3-learn-to-grasp.json) · 12 blocks · version 7
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 12 blocks · version 13
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 11 blocks · version 18
 - [Learn on all my machines (a round)](blueprints/learn-on-all-my-machines-a-round.json) · 14 blocks
