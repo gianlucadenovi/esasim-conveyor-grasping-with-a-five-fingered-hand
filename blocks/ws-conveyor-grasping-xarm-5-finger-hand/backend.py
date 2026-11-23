@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 130 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 132 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1938,13 +1938,22 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
     algo.bc_coef = 1.0
     # (small, capped steps from here, and a smaller move per batch: at 1e-4 to 3e-4 PPO undid in an hour most of
     # what the policy had imitated, 60% down to 15%)
-    algo.lr, algo.lr_max = 1e-5, 3e-5
-    algo.kl_want = 0.005
-    algo.on_frozen = True          # (the input scaling it imitated with stays: PPO's own episodes moved it, and the policy with it)
-    for g in algo.opt.param_groups:
-        g["lr"] = algo.lr
+    gentle(algo)
     env.reset_all()
     env.perceive()
+
+
+def gentle(algo):
+    """PPO on a policy that already does the task: small, capped steps, a smaller move per batch, little exploration,
+    and the input scaling it learned with kept (at 1e-4 to 3e-4, its input scaling following PPO's own episodes, PPO
+    undid what the policy had imitated within a few updates: 72% down to 0%)"""
+    with algo.t.no_grad():
+        algo.ac.log_std.clamp_(max=math.log(0.08))
+    algo.lr, algo.lr_max = 1e-5, 3e-5
+    algo.kl_want = 0.005
+    algo.on_frozen = True
+    for g in algo.opt.param_groups:
+        g["lr"] = algo.lr
 
 
 def policy_rate(env, algo, steps):
@@ -1991,6 +2000,13 @@ def install_imitation(env):
                 if cb is not None:
                     cb(self)
                 env.log("Now PPO, from what it imitated (its critic first learns what the states are worth).")
+                state["critic"] = 20
+            elif rate >= 50:
+                gentle(self)
+                cb = getattr(env, "after_imitation", None)
+                if cb is not None:
+                    cb(self)
+                env.log("Now PPO from it, in small steps (its critic first learns what the states are worth).")
                 state["critic"] = 20
         if state["critic"] > 0:
             state["critic"] -= 1
@@ -4895,7 +4911,7 @@ def learn_run(ctx, stage):
             rec_objs[i] = object_item(env, i)
 
     if use_check:
-        env.after_imitation = lambda algo_: check("as imitated")
+        env.after_imitation = lambda algo_: check("before PPO")
     try:
         while time.time() - t0 < minutes * 60:
             if finish_asked(ctx, ch_ctl):
