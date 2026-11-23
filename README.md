@@ -135,7 +135,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [4 · Learn to place](blueprints/4-learn-to-place.json) · 12 blocks · version 15
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 11 blocks · version 19
 - [Learn on all my machines (a round)](blueprints/learn-on-all-my-machines-a-round.json) · 14 blocks
-- [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 4 blocks · version 33
+- [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 5 blocks · version 33
 
 ### Workspace blocks it uses
 

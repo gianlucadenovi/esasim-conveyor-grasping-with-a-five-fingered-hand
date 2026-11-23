@@ -6,7 +6,7 @@
     "name": "Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)",
     "description": "An empty grid: drag blocks from the menu.",
     "published_version": 33,
-    "updated": "2026-11-23 19:20:59",
+    "updated": "2026-11-23 20:55:27",
     "graph": {
         "nodes": [
             {
@@ -28,6 +28,16 @@
                     "files": "models/xarm6_left_hand_rigged.glb"
                 },
                 "title": "Your robot model (xArm with the left hand, rigged)"
+            },
+            {
+                "id": "camera",
+                "type": "project-assets",
+                "x": -320,
+                "y": 420,
+                "params": {
+                    "files": "models/security_camera.glb"
+                },
+                "title": "Your camera model (security camera)"
             },
             {
                 "id": "nets",
@@ -54,7 +64,7 @@
                 "title": "Make the 3D models",
                 "dest": {
                     "location": 9,
-                    "name": "grasp-3d-models-24",
+                    "name": "grasp-3d-models-25",
                     "folder": "",
                     "live": true,
                     "move": false,
@@ -80,6 +90,17 @@
                 "id": "robot.files>models.policy",
                 "from": {
                     "node": "robot",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "models",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "camera.files>models.policy",
+                "from": {
+                    "node": "camera",
                     "port": "files"
                 },
                 "to": {
