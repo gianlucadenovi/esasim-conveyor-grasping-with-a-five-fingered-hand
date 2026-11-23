@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 101 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 102 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2444,32 +2444,32 @@ def _rig_link(parts):
 N_PADS = 16                       # (the hand's parts with pressure sensors: the palm and the 15 phalanges; see arm_model)
 
 
-def arm_model(mjm, links):
+def arm_model(mjm, links, rig=None):
     """xarm_hand.robot.json: the xArm's 6 joints, then the hand fixed on the flange, then the hand's 15 finger joints
-    (taken from the simulated model: every finger body with its hinge and its capsules)"""
+    (taken from the simulated model: every finger body with its hinge). Drawn from the rigged model's parts (rig, from
+    rig_parts) when there is one, else from the xArm's meshes and the hand's capsules"""
     import mujoco
+    rig = rig or {}
     joints, out_links = [], []
     lk = [Mesh() for _ in range(7)]
     for i, (v, f) in enumerate(links):
         lk[i].add(v, f)
     white, dark = 0xf0f1f3, 0x2a2d33
-    out_links.append(lk[0].link(dark))
+    out_links.append(_rig_link(rig[0]) if rig.get(0) else lk[0].link(dark))
     for i, ((xyz, rpy), lim) in enumerate(zip(XARM6, XARM6_LIM)):
         joints.append({"name": "j%d" % (i + 1), "type": "revolute", "xyz": list(xyz), "rpy": list(rpy), "axis": [0, 0, 1],
                        "limits": list(lim)})
-        out_links.append(lk[i + 1].link(white if i < 5 else dark))
-    # the hand: fixed on the flange (its own geoms, and the adapter between them)
+        out_links.append(_rig_link(rig[i + 1]) if rig.get(i + 1) else lk[i + 1].link(white if i < 5 else dark))
+    # the hand: fixed on the flange
     hb = mjm.body("hand").id
     hand = Mesh()
     for g in range(mjm.ngeom):
         if mjm.geom_bodyid[g] == hb and mjm.geom_rgba[g][3] > 0.02:
             v, f = prim({6: "box", 5: "cylinder", 3: "capsule", 2: "sphere", 4: "ellipsoid"}.get(int(mjm.geom_type[g]), ""), list(mjm.geom_size[g]))
             hand.add(v, f, quat_R(mjm.geom_quat[g]), mjm.geom_pos[g])
-    v, f = _cylinder(0.036, 0.015)
-    hand.add(v, f, R=rot_rpy(0, math.pi / 2, 0), p=(FLANGE_X + 0.015, 0, 0.002))
     r, p, y = rpy_of(R_FH)
     joints.append({"name": "hand", "type": "fixed", "parent": "j6", "xyz": [float(x) * 1000 for x in P_FH], "rpy": [r, p, y], "axis": [0, 0, 1]})
-    out_links.append(hand.link(0xd1d5db))
+    out_links.append(_rig_link(rig["hand"]) if rig.get("hand") else hand.link(0xd1d5db))
     finger_joints = []
     names = {}
     for b in range(mjm.nbody):
@@ -2478,12 +2478,16 @@ def arm_model(mjm, links):
             continue
         j = mjm.body_jntadr[b]
         jn = mujoco.mj_id2name(mjm, mujoco.mjtObj.mjOBJ_JOINT, j)
+        bn = mujoco.mj_id2name(mjm, mujoco.mjtObj.mjOBJ_BODY, b)
         pname = "hand" if par == hb else names[par]
         r, p, y = rpy_of(quat_R(mjm.body_quat[b]))
         joints.append({"name": jn, "type": "revolute", "parent": pname, "xyz": [float(x) * 1000 for x in mjm.body_pos[b]],
                        "rpy": [r, p, y], "axis": [float(x) for x in mjm.jnt_axis[j]]})
         names[b] = jn
         finger_joints.append(int(mjm.jnt_qposadr[j]))
+        if rig.get(bn):
+            out_links.append(_rig_link(rig[bn]))
+            continue
         m = Mesh()
         col = 0xb8bec8
         for g in range(mjm.ngeom):
@@ -2495,10 +2499,6 @@ def arm_model(mjm, links):
     # the 19 pressure sensors, drawn where they are, on the palm's side of the palm and of each phalanx (orange pads):
     # the palm is never taken for the back of the hand. Each body's pads are a part fixed to it, after all the joints
     pads = {}
-    want = np.array([0.0, -0.5 * S.SIDE, -0.75])          # (the thumb's pads face where it curls: as thumb_flex_axis)
-    u = np.asarray(S.THUMB_U, float)
-    dth = want - (want @ u) * u
-    dth = dth / np.linalg.norm(dth)
     for nm in S.TOUCH_NAMES:
         sid = mjm.site(nm).id
         b = int(mjm.site_bodyid[sid])
@@ -2507,9 +2507,14 @@ def arm_model(mjm, links):
         if nm.startswith("palm"):
             n, along, hl, hw, off = np.array([0.0, 0.0, -1.0]), np.array([1.0, 0.0, 0.0]), sz[0] * 0.9, sz[1] * 0.9, 0.0012
         else:
-            along, n = (u, dth) if nm.startswith("thumb") else (np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, -1.0]))
-            r = sz[0] / 1.45
-            hl = sz[1] if int(mjm.site_type[sid]) == 3 else 0.006
+            if int(mjm.site_type[sid]) == 3:            # (along a phalanx: the site's own axis)
+                along, r, hl = quat_R(mjm.site_quat[sid])[:, 2], sz[0] / 1.35, sz[1]
+            else:                                       # (a fingertip: along from its joint)
+                along, r, hl = p / max(1e-9, np.linalg.norm(p)), sz[0] / 1.45, 0.006
+            # the pad faces the palm's side: the fingers' -z; the thumb's, towards the fingers (+y on a left hand)
+            want = np.array([0.0, -0.6 * S.SIDE, -0.8]) if nm.startswith("thumb") else np.array([0.0, 0.0, -1.0])
+            n = want - (want @ along) * along
+            n = n / max(1e-9, np.linalg.norm(n))
             hw, off = r * 0.75, r + 0.0008
         Rp = np.stack([along, np.cross(n, along), n], 1)
         v, f = prim("box", [hl, hw, 0.0012])
@@ -2518,9 +2523,11 @@ def arm_model(mjm, links):
         parent = "hand" if b == hb else names[b]
         joints.append({"name": "pads_%s" % parent, "type": "fixed", "parent": parent, "xyz": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0], "axis": [0, 0, 1]})
         out_links.append(m.link(0xff7a1a))
+    lic = "xArm meshes and kinematics: xarm_ros by UFACTORY (github.com/xArm-Developer/xarm_ros), BSD 3-Clause."
+    if rig:
+        lic = "The robot's model: the project's xarm6_left_hand_rigged.glb. xArm kinematics: xarm_ros by UFACTORY (BSD 3-Clause)."
     model = {"kind": "esasim.robot/1", "robot": ARM, "units": "mm", "scale": 0.1, "angle_units": "rad", "tool": "hand",
-             "joints": joints, "links": out_links,
-             "license": "xArm meshes and kinematics: xarm_ros by UFACTORY (github.com/xArm-Developer/xarm_ros), BSD 3-Clause."}
+             "joints": joints, "links": out_links, "license": lic}
     return model, finger_joints
 
 
@@ -2771,9 +2778,26 @@ def objects_model(info, conveyor=None):
             "base": {"xyz": [0, 0, 0], "rpy": [0, 0, 0]}}
 
 
-def write_models(ctx, port, mjm, info, cache, conveyor_file=None):
+def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=None):
     links = xarm_links(cache, ctx.log) or simple_xarm_links()
-    arm, _ = arm_model(mjm, links)
+    rig = None
+    if robot_file:
+        try:            # (each finger body's place in the hand's frame: its bodies keep the hand's axes)
+            import mujoco
+            hb, bodies = mjm.body("hand").id, {}
+            for b in range(mjm.nbody):
+                if b != hb and _under(mjm, b, hb):
+                    pos, a = np.zeros(3), b
+                    while a != hb:
+                        pos = pos + np.asarray(mjm.body_pos[a], float)
+                        a = mjm.body_parentid[a]
+                    bodies[mujoco.mj_id2name(mjm, mujoco.mjtObj.mjOBJ_BODY, b)] = pos
+            rig = rig_parts(robot_file, bodies)
+            ctx.log("The robot is drawn from its rigged model (%s): %d parts with their finishes." % (os.path.basename(robot_file), sum(len(v) for v in rig.values())))
+        except Exception as e:      # noqa: BLE001
+            ctx.log("The robot's rigged model could not be read (%s): it is drawn from the xArm's meshes and the hand's capsules." % e)
+            rig = None
+    arm, _ = arm_model(mjm, links, rig)
     conv = None
     if conveyor_file and CONVEYOR["mode"] == "textured":
         conveyor_mesh(conveyor_file, ctx.log)
@@ -4540,10 +4564,13 @@ def models_run(ctx):
     import cell
     lib = cell.compile_library(mujoco)
     glb = [f.path for f in (ctx.inputs.get("conveyor") or []) + (ctx.inputs.get("policy") or []) if str(f.name).lower().endswith(".glb")]
-    if not glb:
+    # the robot's rigged model (a file named for the hand or the rig) and the conveyor's (any other)
+    robot = [g for g in glb if "hand" in os.path.basename(g).lower() or "rig" in os.path.basename(g).lower()]
+    conv = [g for g in glb if g not in robot]
+    if not conv:
         ctx.log("No conveyor 3D file wired in (Conveyor model input): the belt is drawn with boxes.")
-    viz.write_models(ctx, "models", lib[0], lib[6], mesh_cache(), glb[0] if glb else None)
-    return {"models": [viz.ARM, viz.OBJS], "conveyor_from_file": bool(glb)}
+    viz.write_models(ctx, "models", lib[0], lib[6], mesh_cache(), conv[0] if conv else None, robot[0] if robot else None)
+    return {"models": [viz.ARM, viz.OBJS], "conveyor_from_file": bool(conv), "robot_from_file": bool(robot)}
 
 
 def mesh_cache():
