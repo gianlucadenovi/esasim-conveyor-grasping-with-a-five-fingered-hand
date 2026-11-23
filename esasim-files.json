@@ -100,7 +100,7 @@
         {
             "path": "models/belt_objects.robot.json.gz",
             "size": 152877,
-            "sha256": "c90b252e2724498869ef7857e32422ed5c528ef14b11114c2f28694c26a9fcdf",
+            "sha256": "1f20e3669d6455bbe9a16adeb558f89bc20a04c662647e821a4f9c3a087db586",
             "zip": "assets/models/belt_objects.robot.json.gz",
             "in": "repo"
         },
@@ -113,15 +113,15 @@
         },
         {
             "path": "models/cell.scene.json",
-            "size": 3047,
-            "sha256": "422c58a781f9f849946ceb0b26eb3edc5ae0d7d2017d1cba923fdbf8fb3e03d8",
+            "size": 3046,
+            "sha256": "9c9106db3a2ac2081ba036965928edde82ae24fa892236f5dda94de780ae3740",
             "zip": "assets/models/cell.scene.json",
             "in": "repo"
         },
         {
             "path": "models/conveyor_belt.glb",
-            "size": 7600,
-            "sha256": "4b0b81b898860c881b636152de28ec83e59554d351a8d11cfaaf71ee856de0d3",
+            "size": 9056,
+            "sha256": "126577744c4b2302377a2bf10363ff2ff772eb359f6010b5de10d1daa52bb9ac",
             "zip": "assets/models/conveyor_belt.glb",
             "in": "repo"
         },
@@ -142,7 +142,7 @@
         {
             "path": "models/xarm_hand.robot.json.gz",
             "size": 561780,
-            "sha256": "e800d96948fa4ce631fa5a5f804dce8252a41dc14fab010c209af716be8cff8c",
+            "sha256": "a43d6d40d8522e40355a73016a22302d60fe6472e5e73588a1a354ffbf165af2",
             "zip": "assets/models/xarm_hand.robot.json.gz",
             "in": "repo"
         },
@@ -161,5 +161,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-23T16:08:34+00:00"
+    "saved": "2026-11-23T16:11:48+00:00"
 }
