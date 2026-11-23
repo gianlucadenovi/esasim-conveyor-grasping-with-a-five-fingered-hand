@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 133 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 134 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -3571,6 +3571,7 @@ def scene_file(mjm, conveyor):
                    "position": up((cp[0], cp[1], (float(cp[2]) + FLOOR_Z) / 2)), "color": "#8e959f"})
     c = ((S.BASE_POS[0] + S.BELT_X0) / 2, (S.BASE_POS[1] + S.BELT_CY) / 2, 0.0)
     return {"format": "esasim.scene/2", "title": "Conveyor grasping", "units": "m", "up": "z",
+            "renderer": {"bloom": {"strength": 0.35, "radius": 0.5, "threshold": 0.85}},     # (the highlights glow a little)
             "data": {"delay": 1.5, "smooth": 0.1, "events": "events"},
             # (a black space round the cell, the sun its one light: its shadow offsets small, so that the frame's channels
             # and the gaps between the parts are in shade; it covers the cell's 5 m round the camera's target)
