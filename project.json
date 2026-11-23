@@ -52,12 +52,6 @@
             "file": "blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json",
             "published_version": 15,
             "nodes": 3
-        },
-        {
-            "name": "tmp · check the new grasp",
-            "file": "blueprints/tmp-check-the-new-grasp.json",
-            "published_version": 1,
-            "nodes": 2
         }
     ],
     "blocks": [
