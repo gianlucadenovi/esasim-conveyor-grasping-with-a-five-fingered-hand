@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 99 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 100 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -97,41 +97,30 @@ XARM6_LIM = [(-178.2, 178.2), (-118.0, 120.0), (-178.2, 11.0), (-178.2, 178.2), 
 ARM_MASS = (2.38, 2.30, 1.98, 1.32, 1.19, 0.17)                  # kg (UFACTORY's figures, rounded)
 ARM_TORQUE = (50.0, 50.0, 32.0, 32.0, 32.0, 20.0)                # N m: what each joint's motor can give
 ARM_R = (0.062, 0.056, 0.052, 0.046, 0.044, 0.038)               # the links' collision capsules (m)
-R_FH = np.array([[0.0, 0.0, 1.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]])   # the hand in the flange's frame
-P_FH = np.array([-0.002, 0.0, 0.118])
-GRASP_PT = (0.072, 0.022, -0.060)                # between the thumb and the fingertips, in the hand's frame
-THUMB_OPEN, THUMB_CLOSED = 0.0, 0.71            # the thumb's opposition (rad): beside the palm, and turned under it facing the fingers
+R_FH = np.array([[0.0100, 0.0137, 0.9999], [0.1106, -0.9938, 0.0126], [0.9938, 0.1104, -0.0115]])   # the hand in the flange's frame
+P_FH = np.array([0.0050, -0.0028, 0.0581])        # (the rigged model's hand on the xArm's flange, as in its 3D file)
+GRASP_PT = (0.085, -0.020, -0.060)                # between the thumb and the fingertips, in the hand's frame
+THUMB_OPEN, THUMB_CLOSED = 0.0, 0.60             # the thumb's swing under the palm (rad): as it is in the model, and facing the fingers
 
-# the hand (metres, in its own frame: palm centre at the origin, fingers along +x, palm facing -z, thumb on +y), sized and
-# jointed as an adult's: fingers flex at the knuckle (MCP) 0-90 deg (10 deg back), the middle joint (PIP) 0-100 deg and
-# the end joint (DIP) 0-70 deg, together as tendons move them; the thumb turns under the palm at its base (CMC, 0-40 deg
-# of opposition), and flexes at its knuckle (MCP, 0-55 deg) and its end joint (IP, 0-80 deg)
-PALM_HALF = (0.046, 0.042, 0.013)
-FINGERS = [  # name, base y, phalanx lengths, radius, splay (rad: the fingers fan out a little)
-    ("index", 0.028, (0.043, 0.025, 0.020), 0.0085, 0.06),
-    ("middle", 0.0095, (0.047, 0.028, 0.021), 0.0088, 0.0),
-    ("ring", -0.009, (0.044, 0.027, 0.020), 0.0085, -0.05),
-    ("little", -0.027, (0.035, 0.020, 0.018), 0.0078, -0.12),
+# the hand: the left hand of the project's rigged model (models/xarm6_left_hand_rigged.glb), its joints where the model
+# has them, scaled with it to the xArm 6's own size (the file is 1.097 times too large); metres, in the hand's frame:
+# palm centre at the origin, fingers along +x, palm facing -z, thumb on -y. Its rest (all joints at 0) is the model's
+# pose: the fingers a little bent. Each phalanx is a capsule from its joint to the next, as thick as the model's
+HAND_PALM = {"centre": (-0.0011, 0.0046, 0.0019), "half": (0.0612, 0.0453, 0.0310)}
+HAND_FINGERS = [  # name, its knuckle (MCP), middle (PIP) and end (DIP) joints, its tip, each joint's axis (+: towards the palm), radii
+    ("index", ((0.0651, -0.0316, -0.0013), (0.1031, -0.0316, -0.0002), (0.1330, -0.0296, -0.0139)), (0.1584, -0.0279, -0.0255), ((0.0239, 0.9980, 0.0587), (-0.0083, 0.9975, 0.0699), (-0.0356, 0.9977, 0.0574)), (0.0122, 0.0098, 0.0081)),
+    ("middle", ((0.0656, -0.0065, 0.0004), (0.1058, -0.0030, -0.0028), (0.1399, 0.0005, -0.0174)), (0.1695, 0.0035, -0.0300), ((-0.1126, 0.9934, -0.0197), (-0.1124, 0.9937, 0.0037), (-0.1126, 0.9935, -0.0196)), (0.0120, 0.0095, 0.0092)),
+    ("ring", ((0.0618, 0.0205, -0.0008), (0.0987, 0.0245, -0.0046), (0.1284, 0.0272, -0.0160)), (0.1552, 0.0297, -0.0262), ((-0.1316, 0.9910, -0.0243), (-0.1167, 0.9920, -0.0474), (-0.1260, 0.9902, -0.0606)), (0.0122, 0.0094, 0.0087)),
+    ("little", ((0.0555, 0.0438, -0.0017), (0.0889, 0.0499, -0.0090), (0.1128, 0.0523, -0.0193)), (0.1356, 0.0546, -0.0291), ((-0.2051, 0.9778, -0.0433), (-0.1828, 0.9782, -0.0987), (-0.1505, 0.9795, -0.1342)), (0.0118, 0.0088, 0.0087)),
 ]
-THUMB = {"base": (-0.024, 0.036, -0.010), "len": (0.048, 0.033, 0.028), "r": 0.0105}
-THUMB_U = np.array([0.62, 0.72, -0.30]); THUMB_U = THUMB_U / np.linalg.norm(THUMB_U)      # the thumb's direction, open (beside the palm)
-THUMB_OPP = np.array([-0.403, -0.034, -0.915]); THUMB_OPP = THUMB_OPP / np.linalg.norm(THUMB_OPP)   # the axis it turns about to oppose
-THUMB_FLEX = np.array([0.0, 0.0, 1.0])            # (set below) its knuckle's and end joint's axis: curls the tip across the palm
-# the hand the xArm carries: the shapes above are a right hand's; a left hand is their mirror image across the hand's y
-# (its thumb on -y; the axes the thumb turns about mirrored, and turning the other way round, so that it still closes)
+HAND_THUMB = (((0.0028, -0.0416, -0.0133), (0.0163, -0.0561, -0.0258), (0.0445, -0.0689, -0.0459)), (0.0678, -0.0795, -0.0624), ((0.4343, -0.3216, 0.8414), (0.3792, -0.3399, 0.8606), (0.4814, -0.3173, 0.8170)), (0.0160, 0.0142, 0.0093))   # its base (CMC), knuckle (MCP) and end joint (IP), tip, axes, radii
+FINGER_NAMES = [f[0] for f in HAND_FINGERS]
 HAND = "left"
-SIDE = -1 if HAND == "left" else 1
-if SIDE < 0:
-    _M = np.array([1.0, -1.0, 1.0])
-    GRASP_PT = (GRASP_PT[0], -GRASP_PT[1], GRASP_PT[2])
-    FINGERS = [(n, -y0, lens, r, -splay) for n, y0, lens, r, splay in FINGERS]
-    THUMB = dict(THUMB, base=tuple(np.array(THUMB["base"]) * _M))
-    THUMB_U = THUMB_U * _M
-    THUMB_OPP = -(THUMB_OPP * _M)
+SIDE = -1 if HAND == "left" else 1              # (the thumb's side: the grasp's turn and offset go with it)
 # what the policy moves: where the hand should be (the arm's six servos take it there) and 6 finger motors: each finger's curl (its three
 # joints together, as tendons do) and the thumb's opposition; the thumb's curl is the 5th
-CURL_MAX = (1.57, 1.75, 1.22)                    # MCP, PIP, DIP at a full fist (rad)
-THUMB_MAX = (0.95, 1.40)                         # the thumb's MCP and IP at full flexion (rad)
+CURL_MAX = (1.40, 1.50, 1.10)                    # MCP, PIP, DIP at a full fist (rad, from the model's rest)
+THUMB_MAX = (0.90, 1.20)                         # the thumb's MCP and IP at full flexion (rad)
 TOUCH_NAMES = ["thumb_tip", "index_tip", "middle_tip", "ring_tip", "little_tip", "palm_1", "palm_2", "palm_3", "palm_4"]
 # and along each digit, its middle and its first phalanx (the thumb: its proximal phalanx and its metacarpal): a hand wrapped
 # round an object holds it with the whole of its fingers, not only their tips (these came after the first nine, so the
@@ -287,69 +276,60 @@ def arm_close_xml():
     return "</body>" + "</body>" * len(XARM6)
 
 
-def thumb_flex_axis():
-    """the thumb's flexion axis (MCP and IP): across the thumb, so that flexing moves its tip towards the palm's middle
-    and its palm side (-z, -y) as a thumb does"""
-    want = np.array([0.0, -0.5 * SIDE, -0.75])          # where flexion takes the tip, with the thumb beside the palm
-    d = want - (want @ THUMB_U) * THUMB_U
-    d = d / np.linalg.norm(d)
-    a = np.cross(THUMB_U, d)                            # (a rotation about a moves THUMB_U towards d)
-    return a / np.linalg.norm(a)
-
-
 def hand_xml():
-    """the xArm, and on its flange the five-fingered hand: its fingers are real joints with real contacts"""
-    px, py, pz = PALM_HALF
+    """the xArm, and on its flange the five-fingered hand: its fingers are real joints with real contacts, where the
+    rigged model has them"""
     hg = 'contype="2" conaffinity="1" condim="%d" friction="1.2 0.02 0.001" solref="%s" solimp="%s"' % (HAND_CONDIM, HAND_SOLREF, HAND_SOLIMP)
     s = [arm_open_xml()]
-    s.append('<geom name="palm" type="box" size="%s" mass="0.35" rgba="0.82 0.84 0.88 1" %s/>' % (_f(PALM_HALF), hg))
-    s.append('<geom name="wrist" type="cylinder" size="0.030 0.022" pos="%s" euler="0 1.5708 0" mass="0.05" rgba="0.25 0.27 0.30 1" contype="0" conaffinity="0"/>' % _f((-px - 0.020, 0, 0.002)))
-    # the adapter from the arm's flange (11.8 cm behind the hand's middle) to the wrist: seen, without contacts or mass
-    s.append('<geom name="adapter" type="cylinder" fromto="%s %s" size="0.032" contype="0" conaffinity="0" group="1" density="0" rgba="0.25 0.27 0.30 1"/>' % (_f((-P_FH[2], 0, 0.002)), _f((-px - 0.020, 0, 0.002))))
+    pc, ph = np.array(HAND_PALM["centre"]), np.array(HAND_PALM["half"])
+    s.append('<geom name="palm" type="box" size="%s" pos="%s" mass="0.45" rgba="0.82 0.84 0.88 1" %s/>' % (_f(ph), _f(pc), hg))
     s.append('<site name="grasp" pos="%s" size="0.006" rgba="1 0 0 0"/>' % _f(GRASP_PT))
-    for k, (cx, cy) in enumerate([(0.022, 0.020), (0.022, -0.020), (-0.022, 0.020), (-0.022, -0.020)]):
-        s.append('<site name="palm_%d" type="box" size="0.023 0.021 0.007" pos="%s" rgba="0 0 0 0"/>' % (k + 1, _f((cx, cy, -pz))))
-    # the four fingers: proximal, middle and distal phalanges, flexing about the hand's y axis (towards -z)
-    for name, y0, lens, r, splay in FINGERS:
-        L1, L2, L3 = lens
-        s.append('<body name="%s_1" pos="%s" euler="0 0 %g">' % (name, _f((px, y0, -0.002)), splay))
-        s.append('<joint name="%s_j1" type="hinge" axis="0 1 0" range="-0.17 %g" damping="0.02" armature="0.002"/>' % (name, CURL_MAX[0]))
-        s.append('<geom type="capsule" fromto="0 0 0 %g 0 0" size="%g" mass="0.012" rgba="0.70 0.72 0.76 1" %s/>' % (L1, r, hg))
-        s.append('<site name="%s_prox" type="capsule" fromto="%g 0 0 %g 0 0" size="%g" rgba="0 0 0 0"/>' % (name, L1 * 0.15, L1 * 0.85, r * 1.45))
-        s.append('<body name="%s_2" pos="%g 0 0"><joint name="%s_j2" type="hinge" axis="0 1 0" range="0 %g" damping="0.015" armature="0.002"/>' % (name, L1, name, CURL_MAX[1]))
-        s.append('<geom type="capsule" fromto="0 0 0 %g 0 0" size="%g" mass="0.008" rgba="0.74 0.76 0.80 1" %s/>' % (L2, r * 0.95, hg))
-        s.append('<site name="%s_mid" type="capsule" fromto="%g 0 0 %g 0 0" size="%g" rgba="0 0 0 0"/>' % (name, L2 * 0.15, L2 * 0.85, r * 1.4))
-        s.append('<body name="%s_3" pos="%g 0 0"><joint name="%s_j3" type="hinge" axis="0 1 0" range="0 %g" damping="0.01" armature="0.002"/>' % (name, L2, name, CURL_MAX[2]))
-        s.append('<geom type="capsule" fromto="0 0 0 %g 0 0" size="%g" mass="0.006" rgba="0.30 0.32 0.36 1" %s/>' % (L3, r * 0.9, hg))
-        s.append('<site name="%s_tip" pos="%g 0 -0.002" size="%g" rgba="0 0 0 0"/>' % (name, L3 * 0.75, r * 1.45))
+    zb = pc[2] - ph[2]                                  # (the palm's face)
+    for k, (sx, sy) in enumerate([(1, -1), (1, 1), (-1, -1), (-1, 1)]):
+        s.append('<site name="palm_%d" type="box" size="%s" pos="%s" rgba="0 0 0 0"/>' % (k + 1, _f((ph[0] * 0.48, ph[1] * 0.48, 0.007)), _f((pc[0] + sx * ph[0] * 0.5, pc[1] + sy * ph[1] * 0.5, zb))))
+    # the four fingers: proximal, middle and distal phalanges; every body keeps the hand's axes (the model's pieces hang on
+    # them as they are), each joint turning about its own axis from the model
+    lims = [(-0.3, CURL_MAX[0] + 0.15), (-0.3, CURL_MAX[1] + 0.15), (-0.3, CURL_MAX[2] + 0.15)]
+    for name, J, tip, A, R in HAND_FINGERS:
+        J, tip = [np.array(p) for p in J], np.array(tip)
+        ends = [J[1], J[2], tip]
+        for k in range(3):
+            seg = ends[k] - J[k]
+            s.append('<body name="%s_%d" pos="%s">' % (name, k + 1, _f(J[0] if k == 0 else J[k] - J[k - 1])))
+            s.append('<joint name="%s_j%d" type="hinge" axis="%s" range="%g %g" damping="0.02" armature="0.002"/>' % (name, k + 1, _f(A[k]), lims[k][0], lims[k][1]))
+            s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="%g" rgba="0.70 0.72 0.76 1" %s/>' % (_f(seg * (0.88 if k == 2 else 1.0)), R[k], (0.015, 0.010, 0.007)[k], hg))
+            if k < 2:
+                s.append('<site name="%s_%s" type="capsule" fromto="%s %s" size="%g" rgba="0 0 0 0"/>' % (name, ("prox", "mid")[k], _f(seg * 0.15), _f(seg * 0.85), R[k] * 1.35))
+            else:
+                s.append('<site name="%s_tip" pos="%s" size="%g" rgba="0 0 0 0"/>' % (name, _f(seg * 0.72), R[k] * 1.45))
         s.append('</body></body></body>')
-    # the thumb: its metacarpal from the base of the palm on the thumb side (CMC), turning under the palm to oppose the
-    # fingers; then its proximal and distal phalanges, flexing about one axis (MCP and IP) to curl the tip across the palm
-    tb, (T1, T2, T3), tr = THUMB["base"], THUMB["len"], THUMB["r"]
-    u, o, a = THUMB_U, THUMB_OPP, thumb_flex_axis()
-    s.append('<body name="thumb_0" pos="%s">' % _f(tb))
-    s.append('<joint name="thumb_rot" type="hinge" axis="%s" range="-0.1 0.8" damping="0.02" armature="0.002"/>' % _f(o))
-    s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.016" rgba="0.70 0.72 0.76 1" %s/>' % (_f(u * T1), tr * 1.15, hg))
-    s.append('<site name="thumb_prox" type="capsule" fromto="%s %s" size="%g" rgba="0 0 0 0"/>' % (_f(u * T1 * 0.2), _f(u * T1 * 0.85), tr * 1.6))
-    s.append('<body name="thumb_1" pos="%s"><joint name="thumb_j1" type="hinge" axis="%s" range="-0.1 %g" damping="0.015" armature="0.002"/>' % (_f(u * T1), _f(a), THUMB_MAX[0]))
-    s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.009" rgba="0.74 0.76 0.80 1" %s/>' % (_f(u * T2), tr * 0.95, hg))
-    s.append('<site name="thumb_mid" type="capsule" fromto="%s %s" size="%g" rgba="0 0 0 0"/>' % (_f(u * T2 * 0.15), _f(u * T2 * 0.85), tr * 1.4))
-    s.append('<body name="thumb_2" pos="%s"><joint name="thumb_j2" type="hinge" axis="%s" range="-0.15 %g" damping="0.01" armature="0.002"/>' % (_f(u * T2), _f(a), THUMB_MAX[1]))
-    s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="0.007" rgba="0.30 0.32 0.36 1" %s/>' % (_f(u * T3), tr * 0.9, hg))
-    s.append('<site name="thumb_tip" pos="%s" size="%g" rgba="0 0 0 0"/>' % (_f(u * T3 * 0.75), tr * 1.45))
+    # the thumb: its metacarpal from the base of the palm (CMC), swinging under the palm to face the fingers; then its
+    # proximal and distal phalanges (MCP and IP)
+    J, tip, A, R = [np.array(p) for p in HAND_THUMB[0]], np.array(HAND_THUMB[1]), HAND_THUMB[2], HAND_THUMB[3]
+    ends = [J[1], J[2], tip]
+    tl = [(-0.3, 1.2), (-0.2, THUMB_MAX[0] + 0.1), (-0.2, THUMB_MAX[1] + 0.1)]
+    for k, jn in enumerate(["thumb_rot", "thumb_j1", "thumb_j2"]):
+        seg = ends[k] - J[k]
+        s.append('<body name="thumb_%d" pos="%s">' % (k, _f(J[0] if k == 0 else J[k] - J[k - 1])))
+        s.append('<joint name="%s" type="hinge" axis="%s" range="%g %g" damping="0.02" armature="0.002"/>' % (jn, _f(A[k]), tl[k][0], tl[k][1]))
+        s.append('<geom type="capsule" fromto="0 0 0 %s" size="%g" mass="%g" rgba="0.70 0.72 0.76 1" %s/>' % (_f(seg * (0.88 if k == 2 else 1.0)), R[k], (0.02, 0.01, 0.008)[k], hg))
+        if k < 2:
+            s.append('<site name="thumb_%s" type="capsule" fromto="%s %s" size="%g" rgba="0 0 0 0"/>' % (("prox", "mid")[k], _f(seg * 0.15), _f(seg * 0.85), R[k] * 1.35))
+        else:
+            s.append('<site name="thumb_tip" pos="%s" size="%g" rgba="0 0 0 0"/>' % (_f(seg * 0.72), R[k] * 1.45))
     s.append('</body></body></body>')
     s.append(arm_close_xml())
     return "\n".join(s)
 
 
 HAND_JOINTS = ["j1", "j2", "j3", "j4", "j5", "j6"]           # (the arm's joints: they place the hand)
-FINGER_JOINTS = ["thumb_rot", "thumb_j1", "thumb_j2"] + ["%s_j%d" % (f[0], k) for f in FINGERS for k in (1, 2, 3)]
+FINGER_JOINTS = ["thumb_rot", "thumb_j1", "thumb_j2"] + ["%s_j%d" % (f, k) for f in FINGER_NAMES for k in (1, 2, 3)]
 
 
 # the fingers' strength and the feel of their contacts (see the README: what a human hand does)
 # a human finger presses with some 10 N at its tip at most in a firm grip (0.35 N m about a knuckle 3-5 cm back); the
 # earlier 0.9 N m let the fingertips squeeze 20-60 N and squirt light objects out of the hand
-FINGER_KP, FINGER_KV, FINGER_FORCE = 0.8, 0.06, 0.35       # each finger joint: stiffness (N m/rad), damping (a finger closing fast on an object squeezes it out), most torque (N m)
+FINGER_KP, FINGER_KV, FINGER_FORCE = 1.0, 0.06, 0.5        # each finger joint: stiffness (N m/rad), damping (a finger closing fast on an object squeezes it out), most torque (N m; the model's fingers are longer)
 HAND_CONDIM, HAND_SOLREF, HAND_SOLIMP = 4, "0.004 1", "0.95 0.99 0.001 0.5 2"
 OBJ_SOLREF = "0.004 1"
 ARM_KP, ARM_KV = (1500, 500), (60, 15)                    # the shoulder and elbow joints, the wrist joints
@@ -364,7 +344,7 @@ def actuators_xml():
         a.append('<position name="a_%s" joint="%s" kp="%g" kv="%g" forcerange="-%g %g" ctrlrange="%g %g"/>'
                  % (j, j, ARM_KP[0] if i < 3 else ARM_KP[1], ARM_KV[0] if i < 3 else ARM_KV[1], ARM_TORQUE[i], ARM_TORQUE[i], math.radians(lo), math.radians(hi)))
     for j in FINGER_JOINTS:
-        a.append('<position name="a_%s" joint="%s" kp="%g" kv="%g" forcerange="-%g %g" ctrlrange="%s"/>' % (j, j, FINGER_KP, FINGER_KV, FINGER_FORCE, FINGER_FORCE, "-0.1 0.8" if j == "thumb_rot" else "-0.2 1.8"))
+        a.append('<position name="a_%s" joint="%s" kp="%g" kv="%g" forcerange="-%g %g" ctrlrange="%s"/>' % (j, j, FINGER_KP, FINGER_KV, FINGER_FORCE, FINGER_FORCE, "-0.3 1.2" if j == "thumb_rot" else "-0.3 1.8"))
     a.append('<velocity name="a_belt" joint="belt" kv="400" ctrlrange="-1 1"/>')
     return "\n".join(a)
 
