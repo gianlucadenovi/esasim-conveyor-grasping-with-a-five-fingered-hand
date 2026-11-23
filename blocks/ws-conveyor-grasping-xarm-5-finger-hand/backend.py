@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 129 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 130 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2515,11 +2515,48 @@ def rig_parts(path, hand_bodies):
     return out
 
 
+def _weld_smooth(v, f, crease=40.0, tol=2e-5):
+    """a part's corners joined where its surface runs on smoothly (the 3D view shades it smooth across them: it takes
+    a vertex's normal from the faces that share it) and kept apart along its edges (faces meeting at more than crease
+    degrees): corners at one place (within tol, m) share a vertex when their faces turn less than crease from the first
+    face of their group"""
+    v, f = np.asarray(v, float), np.asarray(f, np.int64).reshape(-1, 3)
+    tri = v[f]
+    fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+    _, key = np.unique(np.round(tri.reshape(-1, 3) / tol).astype(np.int64), axis=0, return_inverse=True)
+    key = key.reshape(-1)
+    cn = np.repeat(fn, 3, axis=0)
+    cos = math.cos(math.radians(crease))
+    out = np.empty(len(key), np.int64)
+    order = np.argsort(key, kind="stable")
+    nxt = 0
+    for grp in np.split(order, np.flatnonzero(np.diff(key[order])) + 1):
+        reps = []
+        for c in grp:
+            for rn, idx in reps:
+                if cn[c] @ rn > cos:
+                    out[c] = idx
+                    break
+            else:
+                reps.append((cn[c], nxt))
+                out[c] = nxt
+                nxt += 1
+    pos = np.zeros((nxt, 3))
+    pos[out] = tri.reshape(-1, 3)
+    return pos, out.reshape(-1, 3)
+
+
 def _rig_link(parts):
-    """a link drawn from the rigged model's parts, each with its own finish (in the file's units: 0.1 mm)"""
-    return {"parts": [{"v": [int(round(x)) for x in (np.asarray(p["v"]) * 10000.0).reshape(-1)], "f": [int(x) for x in np.asarray(p["f"]).reshape(-1)],
-                       "color": int(p["color"]), "roughness": round(float(p["roughness"]), 3), "metalness": round(float(p["metalness"]), 3),
-                       "clearcoat": round(float(p["clearcoat"]), 3)} for p in parts]}
+    """a link drawn from the rigged model's parts, each with its own finish (in the file's units: 0.1 mm), shaded
+    smooth (see _weld_smooth)"""
+    out = []
+    for p in parts:
+        v, f = _weld_smooth(p["v"], p["f"])
+        out.append({"v": [int(round(x)) for x in (v * 10000.0).reshape(-1)], "f": [int(x) for x in f.reshape(-1)],
+                    "color": int(p["color"]), "roughness": round(float(p["roughness"]), 3), "metalness": round(float(p["metalness"]), 3),
+                    "clearcoat": round(float(p["clearcoat"]), 3)})
+    return {"parts": out}
 
 
 def arm_model(mjm, links, rig=None):
@@ -3320,22 +3357,19 @@ def sound_files(seed=11):
     rng = np.random.default_rng(seed)
     R = SOUND_RATE
     out = {}
-    # the belt: a geared motor's hum (twice the mains frequency and its harmonics), its gears' mesh, rising and falling
-    # a little with each turn, the rotor's faint whine, and the belt rolling over its rollers
+    # the belt: a low, soft motor hum (the mains' 50 Hz and its first harmonics) and the belt rolling over its rollers,
+    # a deep rumble swelling a little with each turn
     n = 4 * R
     t = np.arange(n) / R
-    hum = sum(a * np.sin(2 * np.pi * f * t + p) for f, a, p in ((100, 1.0, 0), (200, 0.45, 1.1), (300, 0.22, 2.3), (400, 0.1, 0.4), (600, 0.05, 1.7)))
-    mesh = (0.25 * np.sin(2 * np.pi * 340 * t) + 0.1 * np.sin(2 * np.pi * 680 * t + 0.5)) * (1 + 0.35 * np.sin(2 * np.pi * 7.25 * t))
-    whine = 0.05 * np.sin(2 * np.pi * 1180 * t) * (1 + 0.5 * np.sin(2 * np.pi * 0.5 * t))
-    roll = 0.5 * _band_noise(rng, n, 40, 700, tilt=4) * (1 + 0.2 * np.sin(2 * np.pi * 1.75 * t))
-    out["belt_hum.wav"] = _wav(_peak(0.5 * hum + mesh + whine + roll, 0.7))
-    # the servos: a harmonic drive's whine with its gears' rasp, the drive's switching high above
+    hum = sum(a * np.sin(2 * np.pi * f * t + p) for f, a, p in ((50, 1.0, 0), (100, 0.35, 1.1), (150, 0.08, 2.3)))
+    roll = 0.6 * _band_noise(rng, n, 25, 220, tilt=6) * (1 + 0.15 * np.sin(2 * np.pi * 1.75 * t))
+    out["belt_hum.wav"] = _wav(_peak(hum + roll, 0.7))
+    # the actuators: gentle electric drives, a soft low hum (no gear rasp, no switching whine) and a faint breath of air
     n = 2 * R
     t = np.arange(n) / R
-    whine = sum(a * np.sin(2 * np.pi * f * t) for f, a in ((520, 1.0), (1040, 0.45), (1560, 0.2), (2080, 0.08)))
-    whine = whine * (1 + 0.15 * np.sin(2 * np.pi * 13 * t))
-    rasp = 0.6 * _band_noise(rng, n, 500, 3000, tilt=3) * (1 + 0.5 * np.sin(2 * np.pi * 26 * t))
-    out["servo.wav"] = _wav(_peak(0.6 * whine + rasp + 0.04 * np.sin(2 * np.pi * 4000 * t), 0.7))
+    hum = sum(a * np.sin(2 * np.pi * f * t) for f, a in ((140, 1.0), (280, 0.25), (420, 0.06)))
+    hum = hum * (1 + 0.08 * np.sin(2 * np.pi * 3 * t))
+    out["servo.wav"] = _wav(_peak(hum + 0.25 * _band_noise(rng, n, 80, 600, tilt=6), 0.7))
     # rubbing: rubber scraping on rubber, stick and slip (bursts of it, unevenly, some forty a second)
     hits = np.zeros(n)
     for k in rng.integers(0, n, 80):
@@ -3354,16 +3388,16 @@ def sound_files(seed=11):
                 + 0.25 * np.sin(2 * np.pi * 410 * tt) * np.exp(-tt / 0.02))
         return a * on * (body + 0.6 * _band_noise(rng, n, 200, 1600, tilt=4) * np.exp(-tt / 0.012))
     out["drop_belt.wav"] = _wav(_peak(thud(0.0, 1.0) + thud(0.085, 0.25), 0.9))
-    # into the bin: a hollow plastic knock (the box's own ringing, a few modes dying fast) with the click of the hit,
-    # then two smaller bounces as the object settles
-    n = int(0.7 * R)
+    # into the bin: a dull knock on thick plastic (low, heavily damped: it does not ring as metal would) with the soft
+    # tap of the hit, then two smaller bounces as the object settles
+    n = int(0.6 * R)
     t = np.arange(n) / R
-    modes = ((300, 0.13, 1.0), (690, 0.09, 0.7), (1320, 0.06, 0.45), (2230, 0.04, 0.3), (3350, 0.03, 0.18))
+    modes = ((150, 0.03, 1.0), (270, 0.02, 0.6), (480, 0.012, 0.3))
 
     def knock(t0, a, shift):
         tt, on = np.clip(t - t0, 0, None), (t >= t0).astype(float)
-        ring = sum(m * np.sin(2 * np.pi * f * shift * tt + rng.uniform(0, 6.3)) * np.exp(-tt / d) for f, d, m in modes)
-        return a * on * (ring + 0.5 * _band_noise(rng, n, 1500, 9000) * np.exp(-tt / 0.003))
+        ring = sum(m * np.sin(2 * np.pi * f * shift * tt) * np.exp(-tt / d) for f, d, m in modes)
+        return a * on * (ring + 0.35 * _band_noise(rng, n, 300, 2000, tilt=6) * np.exp(-tt / 0.004))
     out["drop_bin.wav"] = _wav(_peak(knock(0.0, 1.0, 1.0) + knock(0.075, 0.4, 1.04) + knock(0.135, 0.15, 0.97), 0.9))
     return out
 
@@ -3532,12 +3566,12 @@ def scene_file(mjm, conveyor):
             "models": models,
             # (the sounds: the belt's motor all along; the servos and the fingers rubbing on the belt as loud as the cell
             # says (their missing values silent); a hit each time an object lands on the belt or in the bin)
-            "sounds": [{"id": "belt_motor", "sound": "models/belt_hum.wav", "volume": 0.45},
-                       {"id": "servos", "sound": "models/servo.wav", "volume": {"expr": "clamp((@cell.servo or 0) * 1.3, 0, 1)"},
-                        "pitch": {"expr": "0.8 + 0.45 * (@cell.servo or 0)"}},
-                       {"id": "rub", "sound": "models/rub.wav", "volume": {"expr": "(@cell.rub or 0)"}},
-                       {"id": "drop_belt", "sound": "models/drop_belt.wav", "on": {"expr": "(@cell.drop_belt or 0) > 0"}, "volume": 0.9},
-                       {"id": "drop_bin", "sound": "models/drop_bin.wav", "on": {"expr": "(@cell.drop_bin or 0) > 0"}, "volume": 0.9}],
+            "sounds": [{"id": "belt_motor", "sound": "models/belt_hum.wav", "volume": 0.08},
+                       {"id": "servos", "sound": "models/servo.wav", "volume": {"expr": "clamp((@cell.servo or 0) * 0.35, 0, 0.25)"},
+                        "pitch": {"expr": "0.9 + 0.25 * (@cell.servo or 0)"}},
+                       {"id": "rub", "sound": "models/rub.wav", "volume": {"expr": "0.6 * (@cell.rub or 0)"}},
+                       {"id": "drop_belt", "sound": "models/drop_belt.wav", "on": {"expr": "(@cell.drop_belt or 0) > 0"}, "volume": 0.8},
+                       {"id": "drop_bin", "sound": "models/drop_bin.wav", "on": {"expr": "(@cell.drop_bin or 0) > 0"}, "volume": 0.8}],
             "cameras": [{"id": "cell", "type": "orbit", "position": up((c[0] + 1.6, c[1] - 1.9, 1.1)), "look_at": up(c)}], "start": "cell",
             "overlay": [{"type": "events", "at": "top-right", "count": 4}]}
 
