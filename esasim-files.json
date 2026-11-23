@@ -14,6 +14,13 @@
             "in": "repo"
         },
         {
+            "path": "covers/a70b3fa3-7da0-4067-ae25-e0bcbb39fb19.png",
+            "size": 1294821,
+            "sha256": "50d59c037350a92c1321a7cfa438b23b4e83bbe382f7fdfcee1f7f5c6a5807ad",
+            "zip": "assets/covers/a70b3fa3-7da0-4067-ae25-e0bcbb39fb19.png",
+            "in": "repo"
+        },
+        {
             "path": "grasp-policy/grasp_grasp_20261119_0649_86.pt",
             "size": 5173285,
             "sha256": "b9cc80faed145695e58ce0a4fb440721f297267deeb1e202cfc1b788dfe32fd9",
@@ -203,5 +210,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-23T20:27:10+00:00"
+    "saved": "2026-11-23T20:35:42+00:00"
 }
