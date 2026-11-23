@@ -160,7 +160,10 @@ The files the project's views draw with (3D models, textures, sounds), in [asset
 - [grasp-policy/grasp_see_20261119_2103.pt](assets/grasp-policy/grasp_see_20261119_2103.pt) · 1.4 MB
 - [grasp-policy/grasp_see_20261119_2126.pt](assets/grasp-policy/grasp_see_20261119_2126.pt) · 1.4 MB
 - [grasp-policy/grasp_see_20261121_1813.pt](assets/grasp-policy/grasp_see_20261121_1813.pt) · 1.4 MB
-- [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 535 KB
+- [models/belt_objects.robot.json.gz](assets/models/belt_objects.robot.json.gz) · 149 KB
+- [models/belt_rubber.png](assets/models/belt_rubber.png) · 217 KB
+- [models/cell.scene.json](assets/models/cell.scene.json) · 3.0 KB
+- [models/conveyor_belt.glb](assets/models/conveyor_belt.glb) · 7.4 KB
 - [models/simple_rubber_conveyor.glb](assets/models/simple_rubber_conveyor.glb) · 2.9 MB
 - [models/xarm6_left_hand_rigged.glb](assets/models/xarm6_left_hand_rigged.glb) · 16 MB
 - [models/xarm_hand.robot.json.gz](assets/models/xarm_hand.robot.json.gz) · 549 KB
