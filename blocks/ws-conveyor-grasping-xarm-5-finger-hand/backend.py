@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 125 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 126 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1854,6 +1854,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
     noise) while (what the policy senses, what the controller does) pairs are kept, and the policy's network is fitted
     to them; then, for a few rounds (DAgger), the policy itself drives and the controller says what it would do in the
     places the policy gets to, so that it learns to get back on track from its own mistakes"""
+    import collections
     import time
     torch = env.t
     t0 = time.time()
