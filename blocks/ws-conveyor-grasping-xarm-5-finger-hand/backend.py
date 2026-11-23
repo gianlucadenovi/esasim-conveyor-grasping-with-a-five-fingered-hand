@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 102 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 104 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -89,16 +89,18 @@ CAM_W, CAM_H = 96, 72
 BASE_YAW = math.pi / 2                           # the xArm's base turned a quarter: its front (+x) towards the belt, its
                                                  # cable connector (at its back) away from it
 HOME = np.array([0.12, 0.22, 0.30]) + BASE_POS   # the hand's rest pose (palm down, fingers along +x)
-# the UFACTORY xArm 6 (its kinematics, mm and rad: each joint's place and turn in the frame of the one before; every
-# joint turns about its own z), standing on its pedestal at the origin; the hand is screwed onto its flange
-XARM6 = [((0.0, 0.0, 267.0), (0.0, 0.0, 0.0)), ((0.0, 0.0, 0.0), (-1.5708, 0.0, 0.0)), ((53.5, -284.5, 0.0), (0.0, 0.0, 0.0)),
-         ((77.5, 342.5, 0.0), (-1.5708, 0.0, 0.0)), ((0.0, 0.0, 0.0), (1.5708, 0.0, 0.0)), ((76.0, 97.0, 0.0), (-1.5708, 0.0, 0.0))]
+# the arm's kinematics (mm and rad: each joint's place and turn in the frame of the one before; every joint turns about
+# its own z), measured on the project's rigged model (models/xarm6_left_hand_rigged.glb, at the xArm 6's size): each
+# joint on the axis its rig control turns about, so the model's parts turn where the simulated joints do. Its base on
+# the pedestal at the origin (the first joint's axis); the hand is screwed onto its flange
+XARM6 = [((0.0, 0.0, 267.0), (0.0, 0.0, 0.0)), ((0.15, 0.0, 0.09), (-1.5708, 0.0, 0.0)), ((52.27, -278.02, 0.0), (0.0, 0.0, 0.0)),
+         ((76.38, 336.11, 0.1), (-1.5708, 0.0, 0.0)), ((-0.53, 0.1, -1.81), (1.5708, 0.0, 0.0)), ((74.57, 98.81, 0.0), (-1.5708, 0.0, 0.0))]
 XARM6_LIM = [(-178.2, 178.2), (-118.0, 120.0), (-178.2, 11.0), (-178.2, 178.2), (-97.0, 178.2), (-178.2, 178.2)]   # degrees
 ARM_MASS = (2.38, 2.30, 1.98, 1.32, 1.19, 0.17)                  # kg (UFACTORY's figures, rounded)
 ARM_TORQUE = (50.0, 50.0, 32.0, 32.0, 32.0, 20.0)                # N m: what each joint's motor can give
 ARM_R = (0.062, 0.056, 0.052, 0.046, 0.044, 0.038)               # the links' collision capsules (m)
 R_FH = np.array([[0.0100, 0.0137, 0.9999], [0.1106, -0.9938, 0.0126], [0.9938, 0.1104, -0.0115]])   # the hand in the flange's frame
-P_FH = np.array([0.0050, -0.0028, 0.0581])        # (the rigged model's hand on the xArm's flange, as in its 3D file)
+P_FH = np.array([-0.0004, 0.0008, 0.0581])        # (the rigged model's hand on the xArm's flange, as in its 3D file)
 GRASP_PT = (0.085, -0.020, -0.060)                # between the thumb and the fingertips, in the hand's frame
 THUMB_OPEN, THUMB_CLOSED = 0.0, 0.60             # the thumb's swing under the palm (rad): as it is in the model, and facing the fingers
 
@@ -1959,9 +1961,7 @@ import scene as S
 ARM = "xarm_hand"
 OBJS = "belt_objects"
 PARK_MM = -3000.0                 # where the objects not in play wait (under the floor)
-XARM6 = [((0.0, 0.0, 267.0), (0.0, 0.0, 0.0)), ((0.0, 0.0, 0.0), (-1.5708, 0.0, 0.0)), ((53.5, -284.5, 0.0), (0.0, 0.0, 0.0)),
-         ((77.5, 342.5, 0.0), (-1.5708, 0.0, 0.0)), ((0.0, 0.0, 0.0), (1.5708, 0.0, 0.0)), ((76.0, 97.0, 0.0), (-1.5708, 0.0, 0.0))]
-XARM6_LIM = [(-178.2, 178.2), (-118.0, 120.0), (-178.2, 11.0), (-178.2, 178.2), (-97.0, 178.2), (-178.2, 178.2)]
+XARM6, XARM6_LIM = S.XARM6, S.XARM6_LIM     # (the arm's kinematics, as the simulation has them)
 MESH_URL = "https://raw.githubusercontent.com/xArm-Developer/xarm_ros/master/xarm_description/meshes/xarm6/visual/%s.stl"
 R_FH, P_FH = S.R_FH, S.P_FH       # the hand in the flange's frame (as the simulation has it)
 
@@ -2380,6 +2380,10 @@ def rig_parts(path, hand_bodies):
     G2Z = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float)
     RZ = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]], float)
     links = xarm_links_at_zero()
+    # (the arm's base at the origin: its first joint's axis, as XARM6 was measured)
+    c1 = [i for i in name if name[i] == "ctrl_1"][0]
+    base_at = (RZ @ G2Z @ W0[c1][:3, 3]) * RIG_SCALE
+    base_at[2] = 0.0
     # the hand's frame in the file (from the L_wrist node)
     wi = [i for i in name if name[i] == "L_wrist"][0]
     Rw = Wf[wi][:3, :3] / np.linalg.norm(Wf[wi][:3, 0]); pw = Wf[wi][:3, 3]
@@ -2419,7 +2423,7 @@ def rig_parts(path, hand_bodies):
             if isinstance(own, int):                 # an arm link: the rig at its zero, z up, turned half round, to size
                 T = W0[i]
                 vw = (T[:3, :3] @ v.T).T + T[:3, 3]
-                vw = (RZ @ G2Z @ vw.T).T * RIG_SCALE
+                vw = (RZ @ G2Z @ vw.T).T * RIG_SCALE - base_at
                 L = links[own]
                 vl = (vw - L[:3, 3]) @ L[:3, :3]
             else:                                    # the hand: in its own frame, then in its body's
@@ -2441,7 +2445,6 @@ def _rig_link(parts):
     return {"parts": [{"v": [int(round(x)) for x in (np.asarray(p["v"]) * 10000.0).reshape(-1)], "f": [int(x) for x in np.asarray(p["f"]).reshape(-1)],
                        "color": int(p["color"]), "roughness": round(float(p["roughness"]), 3), "metalness": round(float(p["metalness"]), 3),
                        "clearcoat": round(float(p["clearcoat"]), 3)} for p in parts]}
-N_PADS = 16                       # (the hand's parts with pressure sensors: the palm and the 15 phalanges; see arm_model)
 
 
 def arm_model(mjm, links, rig=None):
@@ -2496,33 +2499,6 @@ def arm_model(mjm, links, rig=None):
                 m.add(v, f, quat_R(mjm.geom_quat[g]), mjm.geom_pos[g])
                 col = hexcol(mjm.geom_rgba[g])
         out_links.append(m.link(col))
-    # the 19 pressure sensors, drawn where they are, on the palm's side of the palm and of each phalanx (orange pads):
-    # the palm is never taken for the back of the hand. Each body's pads are a part fixed to it, after all the joints
-    pads = {}
-    for nm in S.TOUCH_NAMES:
-        sid = mjm.site(nm).id
-        b = int(mjm.site_bodyid[sid])
-        p = np.array(mjm.site_pos[sid], float)
-        sz = np.array(mjm.site_size[sid], float)
-        if nm.startswith("palm"):
-            n, along, hl, hw, off = np.array([0.0, 0.0, -1.0]), np.array([1.0, 0.0, 0.0]), sz[0] * 0.9, sz[1] * 0.9, 0.0012
-        else:
-            if int(mjm.site_type[sid]) == 3:            # (along a phalanx: the site's own axis)
-                along, r, hl = quat_R(mjm.site_quat[sid])[:, 2], sz[0] / 1.35, sz[1]
-            else:                                       # (a fingertip: along from its joint)
-                along, r, hl = p / max(1e-9, np.linalg.norm(p)), sz[0] / 1.45, 0.006
-            # the pad faces the palm's side: the fingers' -z; the thumb's, towards the fingers (+y on a left hand)
-            want = np.array([0.0, -0.6 * S.SIDE, -0.8]) if nm.startswith("thumb") else np.array([0.0, 0.0, -1.0])
-            n = want - (want @ along) * along
-            n = n / max(1e-9, np.linalg.norm(n))
-            hw, off = r * 0.75, r + 0.0008
-        Rp = np.stack([along, np.cross(n, along), n], 1)
-        v, f = prim("box", [hl, hw, 0.0012])
-        pads.setdefault(b, Mesh()).add(v, f, Rp, p + n * off)
-    for b, m in pads.items():
-        parent = "hand" if b == hb else names[b]
-        joints.append({"name": "pads_%s" % parent, "type": "fixed", "parent": parent, "xyz": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0], "axis": [0, 0, 1]})
-        out_links.append(m.link(0xff7a1a))
     lic = "xArm meshes and kinematics: xarm_ros by UFACTORY (github.com/xArm-Developer/xarm_ros), BSD 3-Clause."
     if rig:
         lic = "The robot's model: the project's xarm6_left_hand_rigged.glb. xArm kinematics: xarm_ros by UFACTORY (BSD 3-Clause)."
@@ -2799,10 +2775,7 @@ def write_models(ctx, port, mjm, info, cache, conveyor_file=None, robot_file=Non
             rig = None
     arm, _ = arm_model(mjm, links, rig)
     conv = None
-    if conveyor_file and CONVEYOR["mode"] == "textured":
-        conveyor_mesh(conveyor_file, ctx.log)
-        ctx.log("The conveyor is drawn by the 3D view from its own file, with its materials: not baked into the objects model.")
-    elif conveyor_file:
+    if conveyor_file:
         try:
             conv = conveyor_mesh(conveyor_file, ctx.log)
         except Exception as e:      # noqa: BLE001
@@ -2906,10 +2879,6 @@ def cell_objects(mjm):
     if not CONVEYOR_DRAWN["value"]:
         objs.append({"id": "belt", "kind": "box", "center": [round(S.BELT_X0 * 1000, 1), round(S.BELT_CY * 1000, 1), -12.0],
                      "size": [round(CONVEYOR_LEN * 1000, 1), round(S.BELT_W * 1000, 1), 24.0], "color": 0x1d1f23, "roughness": 0.95})
-    if CONVEYOR["mode"] == "textured" and CONVEYOR["fit"]:
-        fit = dict(CONVEYOR["fit"])
-        fit["asset"] = CONVEYOR.get("asset") or fit["asset"]
-        objs.append(fit)
     objs.append({"id": "pedestal", "kind": "box", "center": [round(1000 * S.BASE_POS[0], 1), round(1000 * S.BASE_POS[1], 1), -375.0], "size": [180.0, 180.0, 750.0], "color": 0x3a3f47})
     cam = mjm.camera("cam").id
     R = d.cam_xmat[cam].reshape(3, 3)
@@ -2970,7 +2939,7 @@ class Pose3D:
 
     def items(self, sn):
         q, _, fq, o, op, oq, belt = sn            # (the arm's angles are the simulated arm's own)
-        arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq] + [0.0] * N_PADS
+        arm = [round(float(a), 4) for a in q] + [0.0] + [round(float(x), 4) for x in fq]
         if o != self.last_obj:
             self.last_eul = None
         self.last_obj = o
@@ -3612,9 +3581,7 @@ def overlay_lines(env, cells):
     E = env.est_e[cells].float().cpu().numpy()
     Y = env.est_y[cells].float().cpu().numpy()
     SX = env.sim.site_xpos[cells].float().cpu().numpy()
-    SM = env.sim.site_xmat[cells].float().cpu().numpy()
-    F = env.touches()[cells].float().cpu().numpy()
-    return [_cell_lines(env, C[k], E[k], Y[k], SX[k]) + _touch_dots(env, SX[k], SM[k], F[k]) for k in range(len(cells))]
+    return [_cell_lines(env, C[k], E[k], Y[k], SX[k]) for k in range(len(cells))]
 
 
 def _touch_dots(env, sx, sm, f):
