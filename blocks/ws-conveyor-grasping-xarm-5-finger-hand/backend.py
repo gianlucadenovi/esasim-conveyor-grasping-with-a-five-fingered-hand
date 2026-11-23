@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 96 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 97 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -4287,6 +4287,9 @@ def test_run(ctx):
                 break
         placed = result == "in the bin"
         rows.append((o["key"], grasped, placed))
+        op_ = sim.xpos[0, env.ob].float().cpu().tolist()
+        ctx.log("Trial %d, %s: %s; it ended at x %.0f cm, %.0f cm from the belt's middle, %.1f cm above the belt (%.1f s)" % (
+            trial, o["label"], result, op_[0] * 100, (op_[1] - S.BELT_CY) * 100, op_[2] * 100, ts))
         viz.settle(ctx)
         ctx.telemetry(ch_ev, {"text": "Trial %d, %s: %s%s (%.1f s, grip up to %.1f N)" % (trial, o["label"], result, "" if placed or not grasped else ", it had grasped it", ts, maxf)})
         ctx.telemetry("test", {"trials": len(rows), "grasped": sum(r[1] for r in rows), "placed": sum(r[2] for r in rows),
