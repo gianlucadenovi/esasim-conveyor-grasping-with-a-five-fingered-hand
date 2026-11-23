@@ -99,22 +99,15 @@
         },
         {
             "path": "models/belt_objects.robot.json.gz",
-            "size": 152877,
-            "sha256": "1f20e3669d6455bbe9a16adeb558f89bc20a04c662647e821a4f9c3a087db586",
+            "size": 104645,
+            "sha256": "eec238428415ab15392767e6c8037008757675ab2f65fe2b0d79d19ab17a63f0",
             "zip": "assets/models/belt_objects.robot.json.gz",
             "in": "repo"
         },
         {
-            "path": "models/belt_rubber.png",
-            "size": 244241,
-            "sha256": "aafd276a548c50d5c9bdade7c68eddba4b472533cdd4419a7301079ceca17144",
-            "zip": "assets/models/belt_rubber.png",
-            "in": "repo"
-        },
-        {
             "path": "models/cell.scene.json",
-            "size": 3046,
-            "sha256": "9c9106db3a2ac2081ba036965928edde82ae24fa892236f5dda94de780ae3740",
+            "size": 3096,
+            "sha256": "8b4be8f3ec53580e822cb32648e69a49f290fd743918c95a92bdf57cab26a99d",
             "zip": "assets/models/cell.scene.json",
             "in": "repo"
         },
@@ -161,5 +154,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-23T16:11:48+00:00"
+    "saved": "2026-11-23T16:22:06+00:00"
 }

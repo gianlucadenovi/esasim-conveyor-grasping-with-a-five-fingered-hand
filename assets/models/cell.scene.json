@@ -54,17 +54,24 @@
    ],
    "materials": {
     "belt": {
-     "texture": "models/belt_rubber.png",
      "scroll": [
       {
        "expr": "@cell.travel / 0.397365"
       },
       0
-     ],
-     "roughness": 1.0,
-     "metalness": 0.0
+     ]
     }
    }
+  },
+  {
+   "id": "frame",
+   "model": "models/conveyor_frame.glb",
+   "up": "z",
+   "position": [
+    0.0,
+    0.0,
+    0.75
+   ]
   },
   {
    "id": "bin_floor",
