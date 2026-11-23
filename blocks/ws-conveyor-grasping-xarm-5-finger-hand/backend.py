@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 138 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 139 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1806,6 +1806,9 @@ class Demo:
         sp = torch.where(phase >= 3, 0.6, 1.0)
         sp = torch.where((phase == 3) & (timer < 15), 0.25, sp)              # (the first centimetres of the lift slowly: the grip settles)
         a[:, :3] = ((tgt - env.tgt_p) / 0.018).clamp(-1, 1) * sp[:, None]   # (carrying: steadier)
+        # (the first moments of the lift: the hand keeps going with the belt, while the object's underside still touches
+        # it; standing still, it let the belt drag the object out of the fingers)
+        a[:, 0] = torch.where((phase == 3) & (timer < 20), a[:, 0] - env.belt_v * CTRL_DT / 0.018, a[:, 0])
         a[:, 3] = ((want - env.tgt_e[:, 0]) / 0.10).clamp(-1, 1) * torch.where(phase >= 4, 0.35, 1.0)     # (turning gently with it in hand)
         # fingers tilted down to grasp (the arm reaches low on the belt far better so), level to carry
         want_e = torch.zeros(n, 2, device=dev)          # (the palm level: on the hand alone, tilting it lost a third of the grasps)
@@ -1826,7 +1829,7 @@ class Demo:
         stuck = (phase == 1) & ~nxt & (timer > 30)
         go = nxt & (phase == 0)
         self.plan_yaw = torch.where(go, want_g, self.plan_yaw)
-        self.plan_z = torch.where(go, z_g, self.plan_z)
+        self.plan_z = torch.where(go, (z_g - 0.008 * (self.n_lost - self.n_false).clamp(0, 2)).clamp(min=0.004), self.plan_z)   # (after a slip: deeper)
         self.plan_dy = torch.where(go, dy_g, self.plan_dy)
         # what the hand feels (the same test as the reward's): the thumb or the palm, and a finger, pressing
         f = env.touches()
