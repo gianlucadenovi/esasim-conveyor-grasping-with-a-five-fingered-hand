@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 105 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 106 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -4040,7 +4040,8 @@ def learn_run(ctx, stage):
     torch.manual_seed(seed)
     lib, sim, label, env = build(ctx, n, stage, seed=seed)
     n, dev = sim.n, sim.tdev
-    env.progress = ctx.progress           # (long steps before the first update, such as learning from demonstrations, report as they go)
+    t_start = time.time()                 # (long steps before the first update, such as learning from demonstrations, report as they go:
+    env.progress = lambda _p, msg: ctx.progress(min(99, 100 * (time.time() - t_start) / (minutes * 60 + 1)), msg)   # the time spent)
     see, sp = load_see(ctx, dev)
     if see is not None:
         env.see = see
