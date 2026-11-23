@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 94 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 95 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -292,6 +292,8 @@ def hand_xml():
     s = [arm_open_xml()]
     s.append('<geom name="palm" type="box" size="%s" mass="0.35" rgba="0.82 0.84 0.88 1" %s/>' % (_f(PALM_HALF), hg))
     s.append('<geom name="wrist" type="cylinder" size="0.030 0.022" pos="%s" euler="0 1.5708 0" mass="0.05" rgba="0.25 0.27 0.30 1" contype="0" conaffinity="0"/>' % _f((-px - 0.020, 0, 0.002)))
+    # the adapter from the arm's flange (11.8 cm behind the hand's middle) to the wrist: seen, without contacts or mass
+    s.append('<geom name="adapter" type="cylinder" fromto="%s %s" size="0.032" contype="0" conaffinity="0" group="1" density="0" rgba="0.25 0.27 0.30 1"/>' % (_f((-P_FH[2], 0, 0.002)), _f((-px - 0.020, 0, 0.002))))
     s.append('<site name="grasp" pos="%s" size="0.006" rgba="1 0 0 0"/>' % _f(GRASP_PT))
     for k, (cx, cy) in enumerate([(0.022, 0.020), (0.022, -0.020), (-0.022, 0.020), (-0.022, -0.020)]):
         s.append('<site name="palm_%d" type="box" size="0.023 0.021 0.007" pos="%s" rgba="0 0 0 0"/>' % (k + 1, _f((cx, cy, -pz))))
@@ -3357,7 +3359,29 @@ def overlay_lines(env, cells):
     E = env.est_e[cells].float().cpu().numpy()
     Y = env.est_y[cells].float().cpu().numpy()
     SX = env.sim.site_xpos[cells].float().cpu().numpy()
-    return [_cell_lines(env, C[k], E[k], Y[k], SX[k]) for k in range(len(cells))]
+    SM = env.sim.site_xmat[cells].float().cpu().numpy()
+    F = env.touches()[cells].float().cpu().numpy()
+    return [_cell_lines(env, C[k], E[k], Y[k], SX[k]) + _touch_dots(env, SX[k], SM[k], F[k]) for k in range(len(cells))]
+
+
+def _touch_dots(env, sx, sm, f):
+    """the hand's pressure sensors as dots, grey when they feel nothing, yellow to red up to 10 N: drawn only when the
+    palm's side of the hand faces the camera (so the palm is never taken for the back of the hand)"""
+    pos, _, _, _ = _cam_geometry(env)
+    if getattr(env, "_touch_sites", None) is None:
+        env._touch_sites = [env.mjm.site(nm).id for nm in S.TOUCH_NAMES]
+    ids = env._touch_sites
+    p0 = env.mjm.site("palm_1").id
+    normal = -sm[p0].reshape(3, 3)[:, 2]                 # (the palm's side: the hand's -z)
+    if float(normal @ (pos - sx[p0])) <= 0:
+        return []
+    out = []
+    for k, sid in enumerate(ids):
+        px = _to_pixel(env, sx[sid])
+        x = min(float(f[k]), 10.0) / 10.0
+        col = (150, 150, 150) if f[k] < 0.3 else (255, int(220 * (1 - x)), 0)
+        out.append((px, px, col, 3))
+    return out
 
 
 def _cell_lines(env, c, e, y, sx):
