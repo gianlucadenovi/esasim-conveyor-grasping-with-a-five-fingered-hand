@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 111 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 112 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2685,6 +2685,30 @@ def _pieces(v, f):
         lab = new
 
 
+def frame_pieces(v, f, lo, hi):
+    """the frame's triangles by what they are ({finish key: which triangles}): the motor (the only part below the
+    frame, with its gearbox out at the side), the bearing plates at the belt's four corners (with their bearings and
+    bolts), and the rest of the frame. In the file's metres, the belt along x (lo, hi: the whole conveyor's box)"""
+    lab = _pieces(v, f)
+    ids, idx = np.unique(lab, return_inverse=True)
+    tv = np.asarray(v)[np.asarray(f)]
+    a = np.array([tv[idx == k].reshape(-1, 3).min(0) for k in range(len(ids))])
+    b = np.array([tv[idx == k].reshape(-1, 3).max(0) for k in range(len(ids))])
+    out = np.where(a[:, 1] * b[:, 1] > 0, np.minimum(np.abs(a[:, 1]), np.abs(b[:, 1])), 0.0)   # (how far out at the side)
+    motor = a[:, 2] < FRAME_LOW
+    if motor.any():
+        side = np.sign((a[motor, 1] + b[motor, 1]).sum())
+        x0, x1 = a[motor, 0].min() - 0.05, b[motor, 0].max() + 0.05
+        motor |= (a[:, 0] >= x0) & (b[:, 0] <= x1) & (np.sign(a[:, 1] + b[:, 1]) == side) & (out >= PLATE_FACE)
+    plates = ~motor & (out >= RAIL_OUT) & ((a[:, 0] >= hi[0] - CORNER) | (b[:, 0] <= lo[0] + CORNER))
+    return {("motor",): motor[idx], ("plates",): plates[idx], ("frame",): ~(motor | plates)[idx]}
+
+
+# (m, in the conveyor's file) the frame's pieces below FRAME_LOW are the motor's; the bearing plates are out beyond the
+# side rails (RAIL_OUT) within CORNER of the belt's ends; the gearbox stands out beyond the plates' face (PLATE_FACE)
+FRAME_LOW, RAIL_OUT, PLATE_FACE, CORNER = 0.55, 0.385, 0.405, 0.15
+
+
 def conveyor_mesh(path, log):
     """the conveyor's 3D file at its own proportions: scaled alike in every direction so that its belt's top is on the
     simulated belt (its feet then on the floor), its long side along the belt, its belt centred on the simulated one.
@@ -2729,14 +2753,9 @@ def conveyor_mesh(path, log):
         vs = v * sc + shift
         if "belt" in nm:            # (the belt apart: it carries the moving texture)
             by_col.setdefault(("belt",), []).append((vs, f, part_colour(c, nm)))
-        elif "frame" in nm:
-            by_col.setdefault(("frame",), []).append((vs, f, CONVEYOR_FINISH[("frame",)]["color"]))
-            lab = _pieces(v, f)
-            for p_ in np.unique(lab):
-                pv = v[f[lab == p_]].reshape(-1, 3)
-                a_, b_ = pv.min(0), pv.max(0)
-                if min(a_[0] - lo[0], hi[0] - b_[0]) < 0.25:
-                    log("DIAG %s piece %d: %d tri, x %.3f..%.3f y %.3f..%.3f z %.3f..%.3f" % (nm.split()[0], p_, int((lab == p_).sum()), a_[0], b_[0], a_[1], b_[1], a_[2], b_[2]))
+        elif "frame" in nm:          # (the frame, the bearing plates at its corners, the motor)
+            for key, sel in frame_pieces(v, f, lo, hi).items():
+                by_col.setdefault(key, []).append((vs, f[sel], CONVEYOR_FINISH[key]["color"]))
         elif "leg" in nm:           # (the feet: the legs' triangles down at the floor)
             low = v[f][:, :, 2].max(1) < lo[2] + FEET_H
             by_col.setdefault(("feet",), []).append((vs, f[low], CONVEYOR_FINISH[("feet",)]["color"]))
@@ -2767,9 +2786,12 @@ def conveyor_mesh(path, log):
     return links
 
 
-# the conveyor's look: its frame glossy blue, its feet metal (the legs keep the file's colour)
-CONVEYOR_FINISH = {("frame",): {"color": 0x1f5fc4, "roughness": 0.18, "metalness": 0.1, "clearcoat": 1.0},
-                   ("feet",): {"color": 0xc9cdd3, "roughness": 0.22, "metalness": 1.0, "clearcoat": 0.0}}
+# the conveyor's look: its frame and feet glossy blue, the bearing plates at its corners metal, the motor black metal
+# (the legs keep the file's colour)
+_GLOSSY_BLUE = {"color": 0x1f5fc4, "roughness": 0.18, "metalness": 0.1, "clearcoat": 1.0}
+CONVEYOR_FINISH = {("frame",): _GLOSSY_BLUE, ("feet",): _GLOSSY_BLUE,
+                   ("plates",): {"color": 0xc9cdd3, "roughness": 0.22, "metalness": 1.0, "clearcoat": 0.0},
+                   ("motor",): {"color": 0x1c1d20, "roughness": 0.32, "metalness": 0.85, "clearcoat": 0.3}}
 FEET_H = 0.05                     # (m, in the file) the feet: the legs up to this height above the floor
 
 
