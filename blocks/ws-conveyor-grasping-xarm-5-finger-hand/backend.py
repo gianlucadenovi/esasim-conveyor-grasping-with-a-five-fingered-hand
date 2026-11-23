@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 106 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 107 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -1819,6 +1819,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
     torch = env.t
     t0 = time.time()
     prog = getattr(env, "progress", None) or (lambda *a: None)
+    watch = getattr(env, "watch", None) or (lambda *a: None)     # (the block's telemetry: the 3D view and the curve go on)
     actor = algo.ac.actor
     opt = torch.optim.Adam(actor.parameters(), lr=1e-3)
     O, A = [], []
@@ -1841,6 +1842,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
             else:
                 u = a + 0.15 * torch.randn_like(a)
             r, done, info = env.step(u.clamp(-1, 1))
+            watch(done, info, "the scripted controller drives" if not drive_policy else "round %d of %d: the policy drives, the controller corrects" % (r_, rounds))
             if bool(done.any()):
                 idx = done.nonzero().flatten()
                 ok += int(info["success"][idx].sum())
@@ -1861,6 +1863,7 @@ def imitate(env, algo, log, steps=700, epochs=3000, rounds=3):
             loss = ((actor(algo.on(Oc[j].to(env.dev).float())) - Ac[j].to(env.dev).float()) ** 2).mean()
             if ep % 200 == 0:
                 prog(0, "Learning from demonstrations: fitting the policy (%d of %d)" % (ep, n_epochs))
+                watch(None, None, "fitting the policy to the demonstrations")
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
@@ -4154,6 +4157,47 @@ def learn_run(ctx, stage):
             row.pop("failed", None)
         return row
 
+    imi = {"t": 0.0, "scene": 0.0, "hist": collections.deque(maxlen=300), "fresh": []}
+
+    def watch(done, info, doing):
+        """while the policy learns from the demonstrations (within the first update, many minutes): the 3D view goes on
+        replaying the shown cells' episodes, and the curve gets a row every 10 s (imitation_success: the episodes
+        that ended, the controller or the policy driving)"""
+        nonlocal rec_ep
+        for i in imi["fresh"]:
+            rec_objs[i] = object_item(env, i)
+        imi["fresh"] = []
+        if done is not None:
+            if lead and show:
+                sn = pose.snap_many(show)
+                pics = camera_pics(env, len(show)) if env.k % PIC_EVERY == 0 else None
+                par = (env.steps[:len(show)] % 2 == 0).tolist()
+                for i in show:
+                    if par[i] or pics is not None:
+                        recs[i].append((sn[i], pics[i]) if pics is not None else sn[i])
+            if bool(done.any()):
+                idx = done.nonzero(as_tuple=False).flatten()
+                imi["hist"].extend(info["success"][idx].float().tolist())
+                for i in done[:len(show)].nonzero(as_tuple=False).flatten().tolist() if show else []:
+                    if lead and len(recs[i]) > 10 and player.waiting() < REPLAY_QUEUE:
+                        rec_ep += 1
+                        ok_, fl_ = bool(info["success"][i]), bool(info["fail"][i])
+                        player.play(recs[i], "Episode %d (learning from demonstrations, %s; cell %d): %s, %s after %.1f s" % (
+                            rec_ep, doing, i + 1, rec_objs[i]["label"], results_text(stage, ok_, fl_), float(env.steps[i]) * CTRL_DT))
+                    recs[i] = []
+                    imi["fresh"].append(i)
+        if time.time() - imi["t"] > 10.0:
+            imi["t"] = time.time()
+            h = imi["hist"]
+            row = {"minutes": round((time.time() - t0) / 60, 2), "iteration": 0, "steps_m": round(steps_done / 1e6, 2), "learning": "from demonstrations: " + doing}
+            if len(h) >= 20:
+                row["imitation_success"] = round(100.0 * sum(h) / len(h), 1)
+            ctx.telemetry(ch_train, row)
+            if lead and time.time() - imi["scene"] > 8:
+                imi["scene"] = time.time()
+                ctx.telemetry("scene", pose.scene)
+
+    env.watch = watch
     try:
         while time.time() - t0 < minutes * 60:
             if finish_asked(ctx, ch_ctl):
