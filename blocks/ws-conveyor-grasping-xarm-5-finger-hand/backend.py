@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 127 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 128 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -3602,6 +3602,7 @@ class Pose3D:
         """what the cell sounds like at this frame, from it and the one before: servo, how fast the arm and the fingers
         move (0 to 1); rub, how hard the fingertips press on the moving belt (0 to 1); drop_belt and drop_bin, 1 at the
         frame an object lands on the belt or in the bin (it was falling and has stopped)"""
+        from sims import CTRL_DT
         out = {"servo": 0.0, "rub": 0.0, "drop_belt": 0, "drop_bin": 0}
         if len(sn) < 11:
             return out
