@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 118 · worker block, Python: def run(ctx)
+# Conveyor grasping (xArm + 5-finger hand) (ws-conveyor-grasping-xarm-5-finger-hand) · version 119 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with collisions) learns to see objects dropped on a moving conveyor, reach, grasp with real contact forces and place them in a bin
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-23
@@ -2742,11 +2742,9 @@ CONVEYOR_FINISH = {("frame",): _GLOSSY_BLUE, ("feet",): _GLOSSY_BLUE,
 FEET_H = 0.05                     # (m, in the file) the feet: the legs up to this height above the floor
 
 
-# the belt's rubber and the frame's paint: pictures baked into their own 3D files (colour, gloss, relief), repeated
-# as their texture coordinates go. The belt's: one every BELT_TEX_ALONG along it (a whole number of them round its
-# loop) and BELT_TEX_ACROSS across; the frame's: one every FRAME_TEX m on each of its faces
+# the belt's rubber: pictures baked into its own 3D file (colour, gloss, relief), one every BELT_TEX_ALONG along it
+# (a whole number of them round its loop) and BELT_TEX_ACROSS across
 BELT_TEX_ALONG, BELT_TEX_ACROSS = 0.40, 0.34          # (m)
-FRAME_TEX = 0.6                                      # (m)
 
 
 def _noise(rng, h, w, beta):
@@ -2804,40 +2802,6 @@ def belt_maps(w=512, h=448, lines=2, seed=7):
     rough = 0.86 - 0.42 * lanes + 0.05 * _noise(rng, h, w, 1.2) + 0.03 * grain + 0.35 * groove[None, :] - 0.3 * edge[None, :]
     height = -groove[None, :] * wob + 0.12 * grain + 0.25 * bumps
     return base, _mr_png(np.clip(rough, 0.2, 1.0)), _normal_png(height, 2.5)
-
-
-def paint_maps(color, size=512, seed=3):
-    """the frame's paint, three pictures that repeat without a seam: colour (the paint, a faint mottle, scuffs that
-    show the grey primer, a few chips to the bare metal, grime), gloss (the paint shiny, the scuffs and grime dull,
-    the chips metal) and relief (the scuffs and chips a little below the paint)"""
-    rng = np.random.default_rng(seed)
-    paint = np.array([(int(color) >> s) & 255 for s in (16, 8, 0)], float) / 255
-    mott = 0.03 * _noise(rng, size, size, 1.4)
-    scuff, chip = np.zeros((size, size)), np.zeros((size, size))
-    for _ in range(22):                                  # (scuffs: short scrapes here and there, a little curved)
-        y, x, a = rng.random() * size, rng.random() * size, rng.random() * np.pi
-        bend, n, wd = rng.normal(0, 0.02), rng.integers(10, 55), rng.uniform(0.5, 1.2)
-        for t in range(n):
-            a += bend
-            y, x = y + np.sin(a), x + np.cos(a)
-            iy, ix = np.arange(int(y - wd), int(y + wd) + 1) % size, np.arange(int(x - wd), int(x + wd) + 1) % size
-            scuff[np.ix_(iy, ix)] = np.maximum(scuff[np.ix_(iy, ix)], rng.uniform(0.35, 0.75))
-    for _ in range(6):                                   # (chips: small flakes of paint gone)
-        y, x, r = rng.integers(0, size), rng.integers(0, size), rng.uniform(1.5, 4.0)
-        yy, xx = np.ogrid[:size, :size]
-        dd = np.hypot((yy - y + size / 2) % size - size / 2, (xx - x + size / 2) % size - size / 2)
-        chip = np.maximum(chip, (dd < r * (1 + 0.3 * rng.standard_normal())).astype(float))
-    grime = np.clip(_noise(rng, size, size, 1.8) - 1.6, 0, None) * 0.25
-    primer, metal = np.array([0.62, 0.66, 0.70]), np.array([0.55, 0.56, 0.58])
-    rgb = (paint[None, None] * (1 + mott[..., None])) * (1 - 0.8 * scuff[..., None]) + primer * 0.8 * scuff[..., None]
-    rgb = rgb * (1 - chip[..., None]) + metal * chip[..., None]
-    rgb = rgb * (1 - grime[..., None])
-    base = _png((np.clip(rgb, 0, 1) * 255).astype(np.uint8))
-    rough = 0.2 + 0.3 * scuff + 0.4 * grime + 0.02 * _noise(rng, size, size, 0.5)
-    rough = rough * (1 - chip) + 0.35 * chip
-    mr = np.zeros((size, size, 3), np.uint8)
-    mr[..., 0], mr[..., 1], mr[..., 2] = 255, (np.clip(rough, 0, 1) * 255).astype(np.uint8), (chip * 255).astype(np.uint8)
-    return base, _png(mr), _normal_png(-0.6 * scuff - 1.0 * chip + 0.05 * mott / 0.03, 1.5)
 
 
 def _png(rgb):
@@ -2898,20 +2862,191 @@ def belt_glb(items, log):
     return glb_bytes(p, _smooth_normals(p, fn, 60.0), uv, "belt", {"base": base, "mr": mr, "normal": nm}, roughness=1.0), period
 
 
+WEAR_ATLAS = 2048                 # (px) the frame's wear is baked into one picture this size, each flat face its own place in it
+
+
+def _edges(tri, fn):
+    """the mesh's edges between faces: for each edge with two faces, its faces and whether it is smooth (the faces turn
+    less than 25 degrees), a convex edge (an outer edge, worn by knocks) or a concave one (an inner corner, where grime
+    gathers); an edge with one face is an open, outer edge"""
+    _, key = np.unique(np.round(tri.reshape(-1, 3) / 1e-4).astype(np.int64), axis=0, return_inverse=True)
+    vid = key.reshape(-1, 3)
+    pairs = {}
+    for t in range(len(tri)):
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            k = (min(vid[t, a], vid[t, b]), max(vid[t, a], vid[t, b]))
+            pairs.setdefault(k, []).append((t, a, b))
+    cent = tri.mean(1)
+    kind = {}                     # (triangle, corner a, corner b) -> "smooth", "convex", "concave", "flat" (inside a face)
+    link = []                     # triangle pairs in one flat face
+    for k, lst in pairs.items():
+        if len(lst) != 2:
+            for t, a, b in lst:
+                kind[(t, a, b)] = "convex"
+            continue
+        (t1, a1, b1), (t2, a2, b2) = lst
+        c = float(fn[t1] @ fn[t2])
+        if c > 0.999:
+            link.append((t1, t2))
+            kind[(t1, a1, b1)] = kind[(t2, a2, b2)] = "flat"
+        elif c > math.cos(math.radians(25)):
+            kind[(t1, a1, b1)] = kind[(t2, a2, b2)] = "smooth"
+        else:
+            convex = float((cent[t2] - cent[t1]) @ fn[t1]) < 0
+            kind[(t1, a1, b1)] = kind[(t2, a2, b2)] = "convex" if convex else "concave"
+    return kind, link
+
+
+def _charts(n, link):
+    """the flat faces: groups of triangles joined across flat edges"""
+    par = list(range(n))
+
+    def find(a):
+        while par[a] != a:
+            par[a] = par[par[a]]
+            a = par[a]
+        return a
+    for a, b in link:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            par[ra] = rb
+    groups = {}
+    for t in range(n):
+        groups.setdefault(find(t), []).append(t)
+    return list(groups.values())
+
+
 def frame_glb(items, finish, log):
-    """the conveyor's frame (and its feet) as a 3D file of its own, in its paint with scuffs: each face takes the paint's
-    pictures from the side it faces most (x, y or z), one every FRAME_TEX m"""
-    tri = np.concatenate([v[f] for v, f, _ in items])
+    """the conveyor's frame (and its feet) as a 3D file of its own, in its paint worn as equipment wears: each flat face
+    unwrapped to its own place in one picture (at the same scale everywhere), and on it, from the frame's own shape,
+    the paint chipped along the outer edges and corners (to the primer, and at the sharpest of them to bare metal),
+    more on some edges than others, and grime gathered in the inner corners; the faces in between clean paint"""
+    tri = np.concatenate([v[f] for v, f, _ in items]).astype(float)
     p = tri.reshape(-1, 3)
     fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    area = np.linalg.norm(fn, axis=1) / 2
     fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
-    ax = np.repeat(np.argmax(np.abs(fn), 1), 3)
-    other = np.array([[1, 2], [0, 2], [0, 1]])[ax]
-    uv = np.take_along_axis(p, other, 1) / FRAME_TEX
-    base, mr, nm = paint_maps(finish["color"])
-    log("The conveyor's frame: %d triangles in its paint, with scuffs, chips and grime." % len(tri))
-    return glb_bytes(p, _smooth_normals(p, fn), uv, "frame", {"base": base, "mr": mr, "normal": nm}, roughness=1.0, metalness=1.0,
-                     clearcoat=finish.get("clearcoat", 0.0))
+    kind, link = _edges(tri, fn)
+    charts = _charts(len(tri), link)
+    # each flat face in its own plane, in metres
+    flat = []
+    for ch in charts:
+        nrm = fn[ch[0]]
+        pts = tri[ch].reshape(-1, 3)
+        e = tri[ch[int(np.argmax(area[ch]))]]
+        u = e[1] - e[0]
+        u -= (u @ nrm) * nrm
+        u /= max(np.linalg.norm(u), 1e-12)
+        v = np.cross(nrm, u)
+        loc = np.stack([pts @ u, pts @ v], 1)
+        lo = loc.min(0)
+        flat.append((ch, loc - lo, (loc - lo).max(0)))
+    # packed in shelves, the tallest first, at the largest scale that fits
+    S, pad = WEAR_ATLAS, 3
+    order = sorted(range(len(flat)), key=lambda i: -flat[i][2][1])
+    dens = 1000.0
+    while True:
+        x = y = shelf = 0
+        place = {}
+        for i in order:
+            w, h = (np.ceil(flat[i][2] * dens) + 2 * pad).astype(int)
+            if x + w > S:
+                x, y, shelf = 0, y + shelf, 0
+            place[i] = (x + pad, y + pad)
+            x, shelf = x + w, max(shelf, h)
+        if y + shelf <= S and max(f[2][0] for f in flat) * dens + 2 * pad <= S:
+            break
+        dens *= 0.9
+    uv = np.zeros((len(p), 2))
+    rng = np.random.default_rng(5)
+    conv_d = np.full((S, S), 1e9)
+    conc_d = np.full((S, S), 1e9)
+    corner_d = np.full((S, S), 1e9)
+    inside = np.zeros((S, S), bool)
+    for i, (ch, loc, size) in enumerate(flat):
+        ox, oy = place[i]
+        loc3 = loc.reshape(-1, 3, 2)
+        for k, t in enumerate(ch):
+            uv[3 * t:3 * t + 3] = (np.array([ox, oy]) + loc3[k] * dens) / S
+        w, h = (np.ceil(size * dens) + 2).astype(int)
+        gx, gy = np.meshgrid(np.arange(w) - 1 + 0.5, np.arange(h) - 1 + 0.5)
+        P = np.stack([gx.ravel(), gy.ravel()], 1) / dens                       # (pixel centres, in metres on the face)
+        ins = np.zeros(len(P), bool)
+        segs = {"convex": [], "concave": []}
+        for k, t in enumerate(ch):
+            A, B, C = loc3[k]
+            d = (B[1] - C[1]) * (A[0] - C[0]) + (C[0] - B[0]) * (A[1] - C[1])
+            if abs(d) < 1e-14:
+                continue
+            l1 = ((B[1] - C[1]) * (P[:, 0] - C[0]) + (C[0] - B[0]) * (P[:, 1] - C[1])) / d
+            l2 = ((C[1] - A[1]) * (P[:, 0] - C[0]) + (A[0] - C[0]) * (P[:, 1] - C[1])) / d
+            ins |= (l1 >= -0.02) & (l2 >= -0.02) & (1 - l1 - l2 >= -0.02)
+            for a, b in ((0, 1), (1, 2), (2, 0)):
+                kd = kind.get((t, a, b))
+                if kd in segs:
+                    segs[kd].append((loc3[k][a], loc3[k][b]))
+        out = {}
+        for kd, ss in segs.items():
+            if not ss:
+                out[kd] = np.full(len(P), 1e9)
+                continue
+            a = np.array([s[0] for s in ss])
+            b = np.array([s[1] for s in ss])
+            ab = b - a
+            tt = np.clip(((P[:, None] - a[None]) * ab[None]).sum(-1) / np.maximum((ab ** 2).sum(-1), 1e-12)[None], 0, 1)
+            out[kd] = np.linalg.norm(P[:, None] - (a[None] + tt[..., None] * ab[None]), axis=-1).min(1)
+        if segs["convex"]:        # (corners: where two outer edges meet)
+            ends = np.array([q for s in segs["convex"] for q in s])
+            _, cnt = np.unique(np.round(ends / 1e-4), axis=0, return_counts=True)
+            uq = np.unique(np.round(ends / 1e-4), axis=0)[cnt >= 2] * 1e-4
+            cd = np.linalg.norm(P[:, None] - uq[None], axis=-1).min(1) if len(uq) else np.full(len(P), 1e9)
+        else:
+            cd = np.full(len(P), 1e9)
+        ys, xs = (gy.ravel() - 0.5 + oy).astype(int), (gx.ravel() - 0.5 + ox).astype(int)
+        ok = ins & (xs >= 0) & (ys >= 0) & (xs < S) & (ys < S)
+        inside[ys[ok], xs[ok]] = True
+        conv_d[ys[ok], xs[ok]] = out["convex"][ok]
+        conc_d[ys[ok], xs[ok]] = out["concave"][ok]
+        corner_d[ys[ok], xs[ok]] = cd[ok]
+    # the wear, from the shape: chips along the outer edges and at the corners, in patches (some lengths of an edge
+    # knocked, others untouched) with ragged outlines; grime in the inner corners, heavier in places
+    def blobs(size_m):        # (noise whose features are about size_m across, on the faces as unwrapped)
+        sig = max(0.5, size_m * dens)
+        ky, kx = np.fft.fftfreq(S)[:, None], np.fft.fftfreq(S)[None, :]
+        n = np.real(np.fft.ifft2(np.fft.fft2(rng.standard_normal((S, S))) * np.exp(-2 * (np.pi * sig) ** 2 * (kx ** 2 + ky ** 2))))
+        return (n - n.mean()) / n.std()
+    patches = np.clip(0.75 * blobs(0.03) + 0.35, 0, 1.6)
+    ragged = blobs(0.0015)
+    wear = (np.exp(-conv_d / 0.004) + 0.8 * np.exp(-corner_d / 0.01)) * patches * (1 + 0.45 * ragged)
+    primer = np.clip((wear - 0.5) / 0.08, 0, 1)
+    metal = np.clip((wear - 1.05) / 0.08, 0, 1)
+    grime = np.clip(np.exp(-conc_d / 0.012) * (0.45 + 0.3 * blobs(0.05)), 0, 0.75)
+    fine = blobs(0.002)
+    paint = np.array([(int(finish["color"]) >> s) & 255 for s in (16, 8, 0)], float) / 255
+    mott = 0.025 * blobs(0.06)
+    rgb = paint[None, None] * (1 + mott[..., None])
+    rgb = rgb * (1 - primer[..., None]) + np.array([0.60, 0.63, 0.66]) * primer[..., None]
+    rgb = rgb * (1 - metal[..., None]) + np.array([0.56, 0.57, 0.59]) * metal[..., None]
+    rgb = rgb * (1 - 0.6 * grime[..., None]) + np.array([0.10, 0.09, 0.08]) * 0.6 * grime[..., None]
+    rough = 0.2 + 0.3 * primer - 0.15 * metal + 0.5 * grime
+    height = -0.5 * primer - 0.6 * metal + 0.02 * fine
+    # the pictures spread a few pixels past each face, so its edges take no colour from its neighbours in the picture
+    for _ in range(4):
+        grown = inside.copy()
+        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+            nb = np.roll(np.roll(inside, dy, 0), dx, 1)
+            take = nb & ~grown
+            for arr in (rgb, rough, metal, height):
+                arr[take] = np.roll(np.roll(arr, dy, 0), dx, 1)[take]
+            grown |= nb
+        inside = grown
+    base = _png((np.clip(rgb, 0, 1) * 255).astype(np.uint8))
+    mr = np.zeros((S, S, 3), np.uint8)
+    mr[..., 0], mr[..., 1], mr[..., 2] = 255, (np.clip(rough, 0, 1) * 255).astype(np.uint8), (np.clip(metal, 0, 1) * 255).astype(np.uint8)
+    log("The conveyor's frame: %d triangles, %d flat faces unwrapped at %.1f mm a pixel; its paint worn at its outer edges and "
+        "corners, grime in its inner ones." % (len(tri), len(flat), 1000 / dens))
+    return glb_bytes(p, _smooth_normals(p, fn), uv, "frame", {"base": base, "mr": _png(mr), "normal": _normal_png(height, 3.0)},
+                     roughness=1.0, metalness=1.0, clearcoat=finish.get("clearcoat", 0.0))
 
 
 def glb_bytes(pos, nrm, uv, material, maps, roughness=1.0, metalness=0.0, clearcoat=0.0):
