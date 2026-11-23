@@ -6,7 +6,7 @@
     "name": "5 · Test with new objects",
     "description": "You choose an object it never learned on and how it lies on the belt; the robot sees it, grasps it and puts it in the bin, live.",
     "published_version": 16,
-    "updated": "2026-11-23 06:07:45",
+    "updated": "2026-11-23 06:09:56",
     "graph": {
         "nodes": [
             {
@@ -20,6 +20,16 @@
                     "pattern": "*.pt"
                 },
                 "title": "Networks learned"
+            },
+            {
+                "id": "robot",
+                "type": "project-assets",
+                "x": -640,
+                "y": 330,
+                "params": {
+                    "files": "models/xarm6_left_hand_rigged.glb"
+                },
+                "title": "Your robot model (what the camera sees)"
             },
             {
                 "id": "belt",
@@ -149,6 +159,17 @@
                 "id": "nets.files>test.policy",
                 "from": {
                     "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "test",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "robot.files>test.policy",
+                "from": {
+                    "node": "robot",
                     "port": "files"
                 },
                 "to": {

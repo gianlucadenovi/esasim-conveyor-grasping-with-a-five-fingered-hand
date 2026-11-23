@@ -39,7 +39,7 @@
             "name": "5 · Test with new objects",
             "file": "blueprints/5-test-with-new-objects.json",
             "published_version": 16,
-            "nodes": 10
+            "nodes": 11
         },
         {
             "name": "Learn on all my machines (a round)",
