@@ -1,0 +1,28 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 98
+    },
+    "name": "tmp copy models",
+    "description": "An empty grid: drag blocks from the menu.",
+    "published_version": 0,
+    "updated": "2026-11-24 17:48:19",
+    "graph": {
+        "nodes": [
+            {
+                "id": "m",
+                "type": "project-assets",
+                "x": 40,
+                "y": 40,
+                "params": {
+                    "files": "models/xarm6_left_hand_rigged.glb, models/game-ready_security_camera.glb"
+                }
+            }
+        ],
+        "edges": [],
+        "notes": [],
+        "dash": {
+            "items": []
+        }
+    }
+}
