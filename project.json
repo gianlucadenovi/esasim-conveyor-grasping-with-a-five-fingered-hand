@@ -56,7 +56,7 @@
         {
             "name": "tmp copy models",
             "file": "blueprints/tmp-copy-models.json",
-            "published_version": 1,
+            "published_version": 2,
             "nodes": 3
         }
     ],
@@ -75,6 +75,11 @@
             "id": "ws-hand-pressure-map",
             "version": 2,
             "name": "Hand pressure map"
+        },
+        {
+            "id": "ws-lab-tube-handling-xarm-5-finger-hand",
+            "version": 12,
+            "name": "Lab tube handling (xArm + 5-finger hand)"
         }
     ]
 }

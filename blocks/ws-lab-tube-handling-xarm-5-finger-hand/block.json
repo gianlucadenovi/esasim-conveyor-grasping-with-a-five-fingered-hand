@@ -1,0 +1,193 @@
+{
+    "id": "ws-lab-tube-handling-xarm-5-finger-hand",
+    "version": "1",
+    "name": "Lab tube handling (xArm + 5-finger hand)",
+    "category": "My blocks",
+    "icon": "robot-arm",
+    "side": "backend",
+    "customizable": true,
+    "summary": "A five-fingered hand on an xArm (in the physics, with touch sensors) learns to see lab tubes and vials standing in a rack, lift each one out of its slot and set it upright in its slot of a second rack",
+    "help": "Learn to see: the camera beside the robot learns to find the tube (where it is, how big). Learn to place: the policy first imitates the scripted controller (over the tube, down, close, lift it clear of the fences, carry it over its destination slot, lower it in, let go, rise), then PPO improves on it; success is the tube standing upright in its slot, let go and still. Test with new tubes: tubes and vials it never learned on, one at a time, live. Make the 3D models: the arm, the tubes and the cell for the project's assets (wire the rigged robot model and the camera model to Policies).",
+    "inputs": [
+        {
+            "id": "policy",
+            "label": "Networks and models",
+            "type": "files",
+            "many": true,
+            "optional": true,
+            "formats": [
+                "pt",
+                "py",
+                "glb"
+            ],
+            "help": "Camera networks (grasp_see_*.pt) and policies (grasp_place_*.pt) to carry on from or test (those left on this machine by earlier runs are found by themselves); for Make the 3D models, the rigged robot"
+        }
+    ],
+    "outputs": [
+        {
+            "id": "policy",
+            "label": "Network",
+            "type": "files",
+            "formats": [
+                "pt"
+            ],
+            "help": "grasp_see_<date>.pt (Learn to see) or grasp_place_<date>_<success>.pt with the camera network it used"
+        },
+        {
+            "id": "curve",
+            "label": "Learning curve",
+            "type": "table",
+            "formats": [
+                "csv"
+            ],
+            "help": "see.csv, place.csv or test.csv (one row per trial)"
+        },
+        {
+            "id": "models",
+            "label": "3D models",
+            "type": "files",
+            "formats": [
+                "gz",
+                "glb",
+                "json",
+                "wav"
+            ],
+            "help": "Make the 3D models: the arm with the hand, the tubes, the cell's scene and its sounds, for the project's assets"
+        }
+    ],
+    "params": [
+        {
+            "key": "mode",
+            "label": "What to do",
+            "type": "select",
+            "default": "Learn to place",
+            "options": [
+                "Learn to see",
+                "Learn to place",
+                "Test with new tubes",
+                "Make the 3D models"
+            ]
+        },
+        {
+            "key": "accelerator",
+            "label": "Run on",
+            "type": "select",
+            "default": "auto",
+            "options": [
+                "auto",
+                "NVIDIA GPU",
+                "CPU"
+            ],
+            "help": "auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU. NVIDIA GPU: only workers that have one"
+        },
+        {
+            "key": "worlds",
+            "label": "Cells learning at once",
+            "type": "number",
+            "default": 1024,
+            "min": 1,
+            "max": 16384,
+            "help": "Each cell is the bench with its two racks, a tube, the arm with the hand and the camera. On an 8 GB GPU 1024 learn faster than 2048 (CPU: at most 256)"
+        },
+        {
+            "key": "minutes",
+            "label": "Minutes",
+            "type": "number",
+            "default": 60,
+            "min": 1,
+            "max": 1440
+        },
+        {
+            "key": "training",
+            "label": "Training",
+            "type": "select",
+            "default": "Continue",
+            "options": [
+                "Continue",
+                "Start over"
+            ],
+            "help": "Continue carries on from the best policy learned in this same cell; Start over learns from the scripted controller again"
+        },
+        {
+            "key": "live_cell",
+            "label": "Live cell while learning",
+            "type": "select",
+            "default": "No",
+            "options": [
+                "No",
+                "Yes"
+            ],
+            "help": "Yes: one extra cell plays the policy in real time for the 3D view (slows the learning down several times); No: the 3D view replays episodes of the learning cells"
+        },
+        {
+            "key": "replay_every",
+            "label": "Replay every (s)",
+            "type": "number",
+            "default": 20
+        },
+        {
+            "key": "driver",
+            "label": "Test: who drives",
+            "type": "select",
+            "default": "The learned policy",
+            "options": [
+                "The learned policy",
+                "The scripted controller"
+            ],
+            "help": "The scripted controller: the teacher the policy learns from (the same camera network and touch sensors, its steps written by hand)"
+        },
+        {
+            "key": "pace",
+            "label": "Test pace (1 = real time)",
+            "type": "number",
+            "default": 1,
+            "help": "0: as fast as it can"
+        },
+        {
+            "key": "autoplay",
+            "label": "Test: pick tubes when idle",
+            "type": "select",
+            "default": "Yes",
+            "options": [
+                "Yes",
+                "No"
+            ]
+        },
+        {
+            "key": "idle",
+            "label": "Test: idle before it picks (s)",
+            "type": "number",
+            "default": 3
+        },
+        {
+            "key": "objects",
+            "label": "Test tubes",
+            "type": "select",
+            "default": "New objects only",
+            "options": [
+                "New objects only",
+                "All objects"
+            ]
+        },
+        {
+            "key": "seed",
+            "label": "Seed",
+            "type": "number",
+            "default": 1
+        }
+    ],
+    "hardware": [
+        "cpu",
+        "nvidia"
+    ],
+    "packages": [
+        "torch",
+        "mujoco>=3.3",
+        "mujoco-warp",
+        "warp-lang",
+        "numpy"
+    ],
+    "esasim": {
+        "version": 12
+    }
+}

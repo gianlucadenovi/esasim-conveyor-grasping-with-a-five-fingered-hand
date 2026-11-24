@@ -5,8 +5,8 @@
     },
     "name": "tmp copy models",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 1,
-    "updated": "2026-11-24 17:48:29",
+    "published_version": 2,
+    "updated": "2026-11-24 17:49:54",
     "graph": {
         "nodes": [
             {
@@ -30,44 +30,47 @@
                 }
             },
             {
-                "id": "cp",
-                "type": "python-script",
+                "id": "models",
+                "type": "ws-lab-tube-handling-xarm-5-finger-hand",
                 "x": 380,
                 "y": 40,
-                "params": [],
+                "params": {
+                    "mode": "Make the 3D models",
+                    "accelerator": "CPU"
+                },
                 "dest": {
                     "location": 9,
-                    "name": "lab-tube-source-models",
+                    "name": "tube-3d-models-1",
                     "folder": "",
                     "live": false,
                     "move": false,
                     "ports": [
-                        "files"
+                        "models"
                     ]
                 }
             }
         ],
         "edges": [
             {
-                "id": "m.files>cp.in",
+                "id": "m.files>models.policy",
                 "from": {
                     "node": "m",
                     "port": "files"
                 },
                 "to": {
-                    "node": "cp",
-                    "port": "in"
+                    "node": "models",
+                    "port": "policy"
                 }
             },
             {
-                "id": "nets.files>cp.in",
+                "id": "nets.files>models.policy",
                 "from": {
                     "node": "nets",
                     "port": "files"
                 },
                 "to": {
-                    "node": "cp",
-                    "port": "in"
+                    "node": "models",
+                    "port": "policy"
                 }
             }
         ],
