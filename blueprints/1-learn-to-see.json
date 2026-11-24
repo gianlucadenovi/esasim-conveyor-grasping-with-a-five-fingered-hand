@@ -6,14 +6,14 @@
     "name": "1 · Learn to see",
     "description": "The camera next to the robot learns to find the object on the belt: where it is, how big, which way it lies; checked on objects it never saw.",
     "published_version": 10,
-    "updated": "2026-11-24 02:55:16",
+    "updated": "2026-11-24 02:55:57",
     "graph": {
         "nodes": [
             {
                 "id": "nets",
                 "type": "dataset",
                 "x": -460,
-                "y": 40,
+                "y": -140,
                 "params": {
                     "dataset": "36",
                     "version": "latest",
@@ -25,7 +25,7 @@
                 "id": "robot",
                 "type": "project-assets",
                 "x": -460,
-                "y": 200,
+                "y": 60,
                 "params": {
                     "files": "models/xarm6_left_hand_rigged.glb"
                 },
@@ -35,7 +35,7 @@
                 "id": "learn",
                 "type": "ws-conveyor-grasping-xarm-5-finger-hand",
                 "x": -140,
-                "y": 20,
+                "y": -40,
                 "params": {
                     "mode": "Learn to see",
                     "accelerator": "auto",
