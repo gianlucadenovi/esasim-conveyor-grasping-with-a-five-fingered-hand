@@ -52,12 +52,6 @@
             "file": "blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json",
             "published_version": 34,
             "nodes": 5
-        },
-        {
-            "name": "tmp copy models",
-            "file": "blueprints/tmp-copy-models.json",
-            "published_version": 3,
-            "nodes": 3
         }
     ],
     "blocks": [
@@ -75,11 +69,6 @@
             "id": "ws-hand-pressure-map",
             "version": 2,
             "name": "Hand pressure map"
-        },
-        {
-            "id": "ws-lab-tube-handling-xarm-5-finger-hand",
-            "version": 13,
-            "name": "Lab tube handling (xArm + 5-finger hand)"
         }
     ]
 }

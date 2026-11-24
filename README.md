@@ -157,14 +157,12 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 - [5 · Test with new objects](blueprints/5-test-with-new-objects.json) · 11 blocks · version 19
 - [Learn on all my machines (a round)](blueprints/learn-on-all-my-machines-a-round.json) · 14 blocks
 - [Maintenance · Rebuild the 3D models (after the hand, objects or conveyor change)](blueprints/maintenance-rebuild-the-3d-models-after-the-hand-objects-or-.json) · 5 blocks · version 34
-- [tmp copy models](blueprints/tmp-copy-models.json) · 3 blocks · version 3
 
 ### Workspace blocks it uses
 
 - [Conveyor grasping (xArm + 5-finger hand)](blocks/ws-conveyor-grasping-xarm-5-finger-hand) · version 142
 - [Camera picture](blocks/ws-camera-picture) · version 1
 - [Hand pressure map](blocks/ws-hand-pressure-map) · version 2
-- [Lab tube handling (xArm + 5-finger hand)](blocks/ws-lab-tube-handling-xarm-5-finger-hand) · version 13
 
 ### Assets
 
