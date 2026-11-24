@@ -56,8 +56,8 @@
         {
             "name": "tmp copy models",
             "file": "blueprints/tmp-copy-models.json",
-            "published_version": 0,
-            "nodes": 1
+            "published_version": 1,
+            "nodes": 3
         }
     ],
     "blocks": [

@@ -5,8 +5,8 @@
     },
     "name": "tmp copy models",
     "description": "An empty grid: drag blocks from the menu.",
-    "published_version": 0,
-    "updated": "2026-11-24 17:48:19",
+    "published_version": 1,
+    "updated": "2026-11-24 17:48:29",
     "graph": {
         "nodes": [
             {
@@ -17,9 +17,60 @@
                 "params": {
                     "files": "models/xarm6_left_hand_rigged.glb, models/game-ready_security_camera.glb"
                 }
+            },
+            {
+                "id": "nets",
+                "type": "dataset",
+                "x": 40,
+                "y": 300,
+                "params": {
+                    "dataset": "35",
+                    "version": "latest",
+                    "pattern": "README*"
+                }
+            },
+            {
+                "id": "cp",
+                "type": "python-script",
+                "x": 380,
+                "y": 40,
+                "params": [],
+                "dest": {
+                    "location": 9,
+                    "name": "lab-tube-source-models",
+                    "folder": "",
+                    "live": false,
+                    "move": false,
+                    "ports": [
+                        "files"
+                    ]
+                }
             }
         ],
-        "edges": [],
+        "edges": [
+            {
+                "id": "m.files>cp.in",
+                "from": {
+                    "node": "m",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "cp",
+                    "port": "in"
+                }
+            },
+            {
+                "id": "nets.files>cp.in",
+                "from": {
+                    "node": "nets",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "cp",
+                    "port": "in"
+                }
+            }
+        ],
         "notes": [],
         "dash": {
             "items": []
