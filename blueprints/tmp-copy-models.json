@@ -6,7 +6,7 @@
     "name": "tmp copy models",
     "description": "An empty grid: drag blocks from the menu.",
     "published_version": 2,
-    "updated": "2026-11-24 17:49:54",
+    "updated": "2026-11-24 17:50:31",
     "graph": {
         "nodes": [
             {
@@ -40,7 +40,7 @@
                 },
                 "dest": {
                     "location": 9,
-                    "name": "tube-3d-models-1",
+                    "name": "tube-3d-models-2",
                     "folder": "",
                     "live": false,
                     "move": false,
