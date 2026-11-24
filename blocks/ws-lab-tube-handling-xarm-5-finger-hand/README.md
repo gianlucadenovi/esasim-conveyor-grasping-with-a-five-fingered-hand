@@ -8,7 +8,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Pytho
 
 | | |
 |---|---|
-| Block | `ws-lab-tube-handling-xarm-5-finger-hand` · version 12 |
+| Block | `ws-lab-tube-handling-xarm-5-finger-hand` · version 13 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any worker, NVIDIA GPU |

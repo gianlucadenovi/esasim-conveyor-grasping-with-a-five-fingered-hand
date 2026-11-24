@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Lab tube handling (xArm + 5-finger hand) (ws-lab-tube-handling-xarm-5-finger-hand) · version 12 · worker block, Python: def run(ctx)
+# Lab tube handling (xArm + 5-finger hand) (ws-lab-tube-handling-xarm-5-finger-hand) · version 13 · worker block, Python: def run(ctx)
 # A five-fingered hand on an xArm (in the physics, with touch sensors) learns to see lab tubes and vials standing in a rack, lift each one out of its slot and set it upright in its slot of a second rack
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-24
@@ -5360,7 +5360,7 @@ def test_run(ctx):
                 pick["yaw"] = float(v)
             elif c in ("belt speed", "speed"):
                 pick["speed"] = float(v) / 100.0 if float(v) > 1 else float(v)
-            elif c in ("put it on the belt", "drop", "pick", "test"):
+            elif c in ("move it", "pick", "test"):
                 w = v if isinstance(v, dict) else {}
                 k = obj_index(w.get("object")) if w.get("object") else pick["object"]
                 if k is None:
