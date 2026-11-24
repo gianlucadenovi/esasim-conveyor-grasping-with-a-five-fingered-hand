@@ -6,7 +6,7 @@
     "name": "4 · Learn to place",
     "description": "From the grasp it learned: carry the object to the bin and let it go there.",
     "published_version": 16,
-    "updated": "2026-11-23 22:11:16",
+    "updated": "2026-11-24 17:24:08",
     "graph": {
         "nodes": [
             {
@@ -148,7 +148,7 @@
                     "channel": "train",
                     "ymin": "0",
                     "ymax": "100",
-                    "title": "Put in the bin (%): learning from demonstrations; checked without exploration; then all, from rest, from the hand over it; dropped (%)"
+                    "title": "Put in the bin (%): learning from demonstrations; checked on every cell; then all, from rest, from the hand over it; dropped (%)"
                 },
                 "title": "Success"
             },
